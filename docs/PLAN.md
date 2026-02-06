@@ -8,34 +8,34 @@
 ## Phase 0: プロジェクト初期化
 
 ### 0-1. Next.js プロジェクト作成
-- [ ] `npx create-next-app@latest` で初期化（TypeScript, App Router, Tailwind CSS, ESLint 有効）
-- [ ] 不要なボイラープレート削除（デフォルトページの中身等）
-- [ ] `tsconfig.json` の path alias 確認（`@/` → `src/`）
+- [x] `npx create-next-app@latest` で初期化（TypeScript, App Router, Tailwind CSS, ESLint 有効）
+- [x] 不要なボイラープレート削除（デフォルトページの中身等）
+- [x] `tsconfig.json` の path alias 確認（`@/` → `src/`）
 
 ### 0-2. 依存パッケージ追加
-- [ ] `pdf-lib` — PDF編集（結合・並び替え・抽出・削除・しおり）
-- [ ] `pdfjs-dist` — PDFレンダリング（サムネイル生成用）
-- [ ] `@dnd-kit/core` `@dnd-kit/sortable` `@dnd-kit/utilities` — ドラッグ&ドロップ
-- [ ] `uuid` または `nanoid` — 一意ID生成（しおり・ページ管理用）
-- [ ] 開発用: `prettier`, `eslint-config-prettier`
+- [x] `pdf-lib` — PDF編集（結合・並び替え・抽出・削除・しおり）
+- [x] `pdfjs-dist` — PDFレンダリング（サムネイル生成用）
+- [x] `@dnd-kit/core` `@dnd-kit/sortable` `@dnd-kit/utilities` — ドラッグ&ドロップ
+- [x] `uuid` または `nanoid` — 一意ID生成（しおり・ページ管理用）
+- [x] 開発用: `prettier`, `eslint-config-prettier`
 
 ### 0-3. ディレクトリ構成の作成
-- [ ] `src/app/` — ページ・レイアウト・API Routes
-- [ ] `src/components/` — UIコンポーネント
-- [ ] `src/lib/pdf/` — PDF操作ロジック
-- [ ] `src/lib/utils/` — 汎用ユーティリティ
-- [ ] `src/types/` — 型定義
-- [ ] `src/hooks/` — カスタムフック
+- [x] `src/app/` — ページ・レイアウト・API Routes
+- [x] `src/components/` — UIコンポーネント
+- [x] `src/lib/pdf/` — PDF操作ロジック
+- [x] `src/lib/utils/` — 汎用ユーティリティ
+- [x] `src/types/` — 型定義
+- [x] `src/hooks/` — カスタムフック
 
 ### 0-4. 型定義の設計
-- [ ] `src/types/pdf.ts` に以下を定義:
+- [x] `src/types/pdf.ts` に以下を定義:
   - `PdfFileInfo` — アップロードされたPDFファイルのメタ情報（名前、ページ数、サイズ）
   - `PageInfo` — 個別ページ情報（ID、ページ番号、サムネイルURL、元ファイル参照）
   - `BookmarkNode` — しおりツリーノード（ID、タイトル、ページ番号、children）
   - `PdfOperation` — 実行する操作の種別と引数
 
 ### 0-5. 初回コミット
-- [ ] `feat: initialize Next.js project with dependencies`
+- [x] `feat: initialize Next.js project with dependencies`
 
 ---
 
@@ -44,38 +44,38 @@
 > 全機能の土台。ここが動かないと後続が進まない。
 
 ### 1-1. ファイルアップロードコンポーネント
-- [ ] `src/components/file-uploader/FileUploader.tsx` 作成
-- [ ] ドラッグ&ドロップでファイルを受け付けるドロップゾーン
-- [ ] クリックでファイル選択ダイアログも開ける
-- [ ] `.pdf` のみ受付、バリデーション実装
-- [ ] 複数ファイル対応（結合機能で必要）
-- [ ] アップロード中のローディング表示
+- [x] `src/components/file-uploader/FileUploader.tsx` 作成
+- [x] ドラッグ&ドロップでファイルを受け付けるドロップゾーン
+- [x] クリックでファイル選択ダイアログも開ける
+- [x] `.pdf` のみ受付、バリデーション実装
+- [x] 複数ファイル対応（結合機能で必要）
+- [x] アップロード中のローディング表示
 
 ### 1-2. PDFサムネイル生成
-- [ ] `src/lib/pdf/thumbnail.ts` — pdfjs-dist を使ったサムネイル生成ロジック
-- [ ] PDFの各ページを Canvas にレンダリングし、Data URL（または Blob URL）に変換
-- [ ] ワーカー設定（`pdfjs-dist/build/pdf.worker.min.mjs`）
-- [ ] 大容量PDF対策: ページ単位の遅延レンダリング（表示領域のみ生成）
+- [x] `src/lib/pdf/thumbnail.ts` — pdfjs-dist を使ったサムネイル生成ロジック
+- [x] PDFの各ページを Canvas にレンダリングし、Data URL（または Blob URL）に変換
+- [x] ワーカー設定（`pdfjs-dist/build/pdf.worker.min.mjs`）
+- [x] 大容量PDF対策: ページ単位の遅延レンダリング（表示領域のみ生成）
 
 ### 1-3. ページ一覧グリッド表示
-- [ ] `src/components/pdf-viewer/PageGrid.tsx` — サムネイルのグリッド表示
-- [ ] 各サムネイルにページ番号を表示
-- [ ] 選択状態の視覚フィードバック（ハイライト / チェックマーク）
+- [x] `src/components/pdf-viewer/PageGrid.tsx` — サムネイルのグリッド表示
+- [x] 各サムネイルにページ番号を表示
+- [x] 選択状態の視覚フィードバック（ハイライト / チェックマーク）
 
 ### 1-4. メインページレイアウト
-- [ ] `src/app/page.tsx` — 機能選択タブ or サイドバーナビゲーション
-- [ ] 6機能（並び替え / 結合 / 削除 / 抽出 / 回転 / しおり）の切り替えUI
-- [ ] `src/app/layout.tsx` — 共通ヘッダー・フッター
+- [x] `src/app/page.tsx` — 機能選択タブ or サイドバーナビゲーション
+- [x] 6機能（並び替え / 結合 / 削除 / 抽出 / 回転 / しおり）の切り替えUI
+- [x] `src/app/layout.tsx` — 共通ヘッダー・フッター
 
 ### 1-5. 状態管理の設計
-- [ ] `src/hooks/use-pdf.ts` — PDF状態管理フック
+- [x] `src/hooks/use-pdf.ts` — PDF状態管理フック
   - 読み込み済みPDFデータ（ArrayBuffer）
   - ページ一覧（`PageInfo[]`）
   - 選択中ページ
   - 操作履歴（Undo対応の検討）
 
 ### 1-6. コミット
-- [ ] `feat: add PDF upload and thumbnail preview`
+- [x] `feat: add PDF upload and thumbnail preview`
 
 ---
 
