@@ -258,21 +258,21 @@
 ## Phase 8: テスト & ドキュメント
 
 ### 8-1. 動作テスト
-- [ ] 各機能の手動テスト（小規模PDF: 1〜5ページ）
-- [ ] 中規模PDF（50〜100ページ、数十MB）での動作確認
-- [ ] エッジケース: 1ページPDFの削除、パスワード付きPDF、画像のみPDF
+- [x] 各機能の手動テスト（小規模PDF: 1〜5ページ）
+- [x] 中規模PDF（50〜100ページ、数十MB）での動作確認
+- [x] エッジケース: 1ページPDFの削除、パスワード付きPDF、画像のみPDF
 
 ### 8-2. ドキュメント
-- [ ] README.md 更新（セットアップ手順、使い方）
-- [ ] `docs/CHANGELOG.md` 作成
-- [ ] `docs/SESSION_SUMMARY.md` 作成
+- [x] README.md 更新（セットアップ手順、使い方）
+- [x] `docs/CHANGELOG.md` 作成
+- [x] `docs/SESSION_SUMMARY.md` 作成
 
 ### 8-3. ローカル配布準備
-- [ ] 起動スクリプト（`npm start` で完結するよう確認）
-- [ ] テスター向け手順書（インストール → 起動 → ブラウザでアクセス）
+- [x] 起動スクリプト（`npm start` で完結するよう確認）
+- [x] テスター向け手順書（インストール → 起動 → ブラウザでアクセス）
 
 ### 8-4. コミット
-- [ ] `docs: add documentation and test results`
+- [x] `docs: add documentation and test results`
 
 ---
 
