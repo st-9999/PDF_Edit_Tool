@@ -4,8 +4,10 @@ import { useState, useCallback } from "react";
 import { FileUploader } from "@/components/file-uploader/FileUploader";
 import { PageGrid } from "@/components/pdf-viewer/PageGrid";
 import { PageSorter } from "@/components/page-sorter/PageSorter";
+import { MergeFileList } from "@/components/file-uploader/MergeFileList";
 import { usePdf } from "@/hooks/use-pdf";
 import { reorderPdfPages } from "@/lib/pdf/reorder";
+import { mergePdfs } from "@/lib/pdf/merge";
 import { downloadPdf, addFilenameSuffix } from "@/lib/utils/download";
 
 const TABS = [
@@ -51,6 +53,21 @@ export default function Home() {
       setProcessing(false);
     }
   }, [pdf.files, pdf.pages]);
+
+  const handleMergeDownload = useCallback(async () => {
+    if (pdf.files.length < 2) return;
+
+    setProcessing(true);
+    try {
+      const sources = pdf.files.map((f) => ({ data: f.data }));
+      const result = await mergePdfs(sources);
+      downloadPdf(result, "merged.pdf");
+    } catch {
+      alert("PDFの結合に失敗しました");
+    } finally {
+      setProcessing(false);
+    }
+  }, [pdf.files]);
 
   const hasPages = pdf.pages.length > 0;
   const selectedCount = pdf.pages.filter((p) => p.selected).length;
@@ -161,6 +178,32 @@ export default function Home() {
             </>
           )}
 
+          {/* 結合タブ */}
+          {hasPages && activeTab === "merge" && (
+            <>
+              <MergeFileList
+                files={pdf.files}
+                pages={pdf.pages}
+                onRemoveFile={pdf.removeFile}
+                onMoveFile={pdf.moveFile}
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleMergeDownload}
+                  disabled={processing || pdf.files.length < 2}
+                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {processing ? "処理中..." : "結合したPDFをダウンロード"}
+                </button>
+              </div>
+              {pdf.files.length < 2 && (
+                <p className="text-center text-sm text-zinc-400">
+                  結合するには2つ以上のPDFファイルをアップロードしてください
+                </p>
+              )}
+            </>
+          )}
+
           {/* 他のタブ: 選択可能グリッド表示 */}
           {hasPages && isSelectable && (
             <PageGrid
@@ -173,6 +216,7 @@ export default function Home() {
           {/* 未実装タブのプレースホルダー */}
           {hasPages &&
             activeTab !== "reorder" &&
+            activeTab !== "merge" &&
             !isSelectable && (
               <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
                 <p className="text-sm text-zinc-400">

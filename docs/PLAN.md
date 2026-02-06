@@ -111,24 +111,24 @@
 > 依存: Phase 1 完了（Phase 2 と並行可能）
 
 ### 3-1. 複数ファイル管理UI
-- [ ] FileUploader を拡張し、複数PDFのリスト管理
-- [ ] ファイル単位の順序変更（ドラッグ&ドロップ）
-- [ ] ファイル単位の削除（リストから除外）
-- [ ] 各ファイルを展開してページ単位のサムネイル表示
+- [x] FileUploader を拡張し、複数PDFのリスト管理
+- [x] ファイル単位の順序変更（ドラッグ&ドロップ）
+- [x] ファイル単位の削除（リストから除外）
+- [x] 各ファイルを展開してページ単位のサムネイル表示
 
 ### 3-2. 結合ロジック
-- [ ] `src/lib/pdf/merge.ts` — pdf-lib で複数PDFを結合
-- [ ] 入力: 複数PDF（ArrayBuffer[]）+ ページ順序指定
-- [ ] 出力: 結合済みPDF（Uint8Array）
+- [x] `src/lib/pdf/merge.ts` — pdf-lib で複数PDFを結合
+- [x] 入力: 複数PDF（ArrayBuffer[]）+ ページ順序指定
+- [x] 出力: 結合済みPDF（Uint8Array）
 
 ### 3-3. 結合結果のプレビュー
-- [ ] 結合後のページ順序をサムネイルで確認できるプレビュー
+- [x] 結合後のページ順序をサムネイルで確認できるプレビュー
 
 ### 3-4. ダウンロード
-- [ ] ファイル名: `merged.pdf` or ユーザー指定
+- [x] ファイル名: `merged.pdf` or ユーザー指定
 
 ### 3-5. コミット
-- [ ] `feat: add multiple PDF merge`
+- [x] `feat: add multiple PDF merge`
 
 ---
 

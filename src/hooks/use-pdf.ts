@@ -20,6 +20,8 @@ export interface UsePdfReturn {
   addFiles: (fileList: File[]) => Promise<void>;
   /** ファイルを削除 */
   removeFile: (fileId: string) => void;
+  /** ファイルの順序を移動（結合用） */
+  moveFile: (fileId: string, direction: "up" | "down") => void;
   /** 全ファイルをクリア */
   clearAll: () => void;
   /** ページの選択状態をトグル */
@@ -101,6 +103,21 @@ export function usePdf(): UsePdfReturn {
     setPages((prev) => prev.filter((p) => p.fileId !== fileId));
   }, []);
 
+  const moveFile = useCallback(
+    (fileId: string, direction: "up" | "down") => {
+      setFiles((prev) => {
+        const idx = prev.findIndex((f) => f.id === fileId);
+        if (idx === -1) return prev;
+        const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+        if (targetIdx < 0 || targetIdx >= prev.length) return prev;
+        const newFiles = [...prev];
+        [newFiles[idx], newFiles[targetIdx]] = [newFiles[targetIdx], newFiles[idx]];
+        return newFiles;
+      });
+    },
+    []
+  );
+
   const clearAll = useCallback(() => {
     setFiles([]);
     setPages([]);
@@ -135,6 +152,7 @@ export function usePdf(): UsePdfReturn {
     error,
     addFiles,
     removeFile,
+    moveFile,
     clearAll,
     togglePageSelection,
     selectAllPages,
