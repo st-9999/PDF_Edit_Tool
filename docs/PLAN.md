@@ -137,29 +137,29 @@
 > 依存: Phase 1 完了（Phase 2, 3 と並行可能）
 
 ### 4-1. ページ選択UI
-- [ ] `src/components/page-selector/PageSelector.tsx` 作成
-- [ ] サムネイルクリックで選択 / 解除（複数選択可）
-- [ ] 全選択 / 全解除ボタン
-- [ ] ページ範囲テキスト入力（例: `1-5, 8, 12-15`）
-- [ ] 範囲入力のパースロジック: `src/lib/utils/page-range.ts`
+- [x] `src/components/page-selector/PageSelector.tsx` 作成
+- [x] サムネイルクリックで選択 / 解除（複数選択可）
+- [x] 全選択 / 全解除ボタン
+- [x] ページ範囲テキスト入力（例: `1-5, 8, 12-15`）
+- [x] 範囲入力のパースロジック: `src/lib/utils/page-range.ts`
 
 ### 4-2. 削除ロジック
-- [ ] `src/lib/pdf/delete.ts` — 選択ページを除外したPDFを生成
-- [ ] 入力: 元PDF + 削除するページ番号配列
-- [ ] 出力: 削除後PDF（Uint8Array）
+- [x] `src/lib/pdf/delete.ts` — 選択ページを除外したPDFを生成
+- [x] 入力: 元PDF + 削除するページ番号配列
+- [x] 出力: 削除後PDF（Uint8Array）
 
 ### 4-3. 抽出ロジック
-- [ ] `src/lib/pdf/extract.ts` — 選択ページだけで新規PDFを生成
-- [ ] 入力: 元PDF + 抽出するページ番号配列
-- [ ] 出力: 抽出PDF（Uint8Array）
-- [ ] ※ 削除と抽出は「選択ページを残す or 除く」の裏表 → 共通ユーティリティ `copyPages` を検討
+- [x] `src/lib/pdf/extract.ts` — 選択ページだけで新規PDFを生成
+- [x] 入力: 元PDF + 抽出するページ番号配列
+- [x] 出力: 抽出PDF（Uint8Array）
+- [x] ※ 削除と抽出は「選択ページを残す or 除く」の裏表 → 共通ユーティリティ `copyPages` を検討
 
 ### 4-4. ダウンロード
-- [ ] 削除: `{元ファイル名}_deleted.pdf`
-- [ ] 抽出: `{元ファイル名}_extracted.pdf`
+- [x] 削除: `{元ファイル名}_deleted.pdf`
+- [x] 抽出: `{元ファイル名}_extracted.pdf`
 
 ### 4-5. コミット
-- [ ] `feat: add page delete and extract`
+- [x] `feat: add page delete and extract`
 
 ---
 

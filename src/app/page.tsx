@@ -5,9 +5,12 @@ import { FileUploader } from "@/components/file-uploader/FileUploader";
 import { PageGrid } from "@/components/pdf-viewer/PageGrid";
 import { PageSorter } from "@/components/page-sorter/PageSorter";
 import { MergeFileList } from "@/components/file-uploader/MergeFileList";
+import { PageSelector } from "@/components/page-selector/PageSelector";
 import { usePdf } from "@/hooks/use-pdf";
 import { reorderPdfPages } from "@/lib/pdf/reorder";
 import { mergePdfs } from "@/lib/pdf/merge";
+import { deletePages } from "@/lib/pdf/delete";
+import { extractPages } from "@/lib/pdf/extract";
 import { downloadPdf, addFilenameSuffix } from "@/lib/utils/download";
 
 const TABS = [
@@ -33,7 +36,7 @@ export default function Home() {
     [pdf]
   );
 
-  const isSelectable =
+  const isPageSelectTab =
     activeTab === "delete" || activeTab === "extract" || activeTab === "rotate";
 
   const handleReorderDownload = useCallback(async () => {
@@ -68,6 +71,46 @@ export default function Home() {
       setProcessing(false);
     }
   }, [pdf.files]);
+
+  const handleDeleteDownload = useCallback(async () => {
+    const selected = pdf.pages.filter((p) => p.selected);
+    if (selected.length === 0 || pdf.files.length === 0) return;
+    if (selected.length === pdf.pages.length) {
+      alert("すべてのページを削除することはできません");
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const file = pdf.files[0];
+      const deletePageNumbers = selected.map((p) => p.pageNumber);
+      const result = await deletePages(file.data, deletePageNumbers);
+      const filename = addFilenameSuffix(file.name, "_deleted");
+      downloadPdf(result, filename);
+    } catch {
+      alert("ページの削除に失敗しました");
+    } finally {
+      setProcessing(false);
+    }
+  }, [pdf.files, pdf.pages]);
+
+  const handleExtractDownload = useCallback(async () => {
+    const selected = pdf.pages.filter((p) => p.selected);
+    if (selected.length === 0 || pdf.files.length === 0) return;
+
+    setProcessing(true);
+    try {
+      const file = pdf.files[0];
+      const extractPageNumbers = selected.map((p) => p.pageNumber);
+      const result = await extractPages(file.data, extractPageNumbers);
+      const filename = addFilenameSuffix(file.name, "_extracted");
+      downloadPdf(result, filename);
+    } catch {
+      alert("ページの抽出に失敗しました");
+    } finally {
+      setProcessing(false);
+    }
+  }, [pdf.files, pdf.pages]);
 
   const hasPages = pdf.pages.length > 0;
   const selectedCount = pdf.pages.filter((p) => p.selected).length;
@@ -129,14 +172,14 @@ export default function Home() {
                 <span className="text-sm text-zinc-600 dark:text-zinc-400">
                   {pdf.files.length} ファイル / {pdf.pages.length} ページ
                 </span>
-                {isSelectable && (
+                {isPageSelectTab && (
                   <span className="text-sm text-zinc-500">
                     {selectedCount} 件選択中
                   </span>
                 )}
               </div>
               <div className="flex gap-2">
-                {isSelectable && (
+                {isPageSelectTab && (
                   <>
                     <button
                       onClick={pdf.selectAllPages}
@@ -204,20 +247,77 @@ export default function Home() {
             </>
           )}
 
-          {/* 他のタブ: 選択可能グリッド表示 */}
-          {hasPages && isSelectable && (
-            <PageGrid
-              pages={pdf.pages}
-              selectable
-              onPageClick={pdf.togglePageSelection}
-            />
+          {/* 削除タブ */}
+          {hasPages && activeTab === "delete" && (
+            <>
+              <PageSelector
+                pages={pdf.pages}
+                onToggleSelection={pdf.togglePageSelection}
+                onSelectAll={pdf.selectAllPages}
+                onDeselectAll={pdf.deselectAllPages}
+                onSelectByRange={pdf.selectByPageNumbers}
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleDeleteDownload}
+                  disabled={processing || selectedCount === 0}
+                  className="rounded-lg bg-red-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {processing
+                    ? "処理中..."
+                    : `選択した ${selectedCount} ページを削除してダウンロード`}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* 抽出タブ */}
+          {hasPages && activeTab === "extract" && (
+            <>
+              <PageSelector
+                pages={pdf.pages}
+                onToggleSelection={pdf.togglePageSelection}
+                onSelectAll={pdf.selectAllPages}
+                onDeselectAll={pdf.deselectAllPages}
+                onSelectByRange={pdf.selectByPageNumbers}
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleExtractDownload}
+                  disabled={processing || selectedCount === 0}
+                  className="rounded-lg bg-green-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+                >
+                  {processing
+                    ? "処理中..."
+                    : `選択した ${selectedCount} ページを抽出してダウンロード`}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* 回転タブ: 選択可能グリッド表示（Phase 5で実装） */}
+          {hasPages && activeTab === "rotate" && (
+            <>
+              <PageGrid
+                pages={pdf.pages}
+                selectable
+                onPageClick={pdf.togglePageSelection}
+              />
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
+                <p className="text-sm text-zinc-400">
+                  「回転」の操作パネルは次のフェーズで実装されます
+                </p>
+              </div>
+            </>
           )}
 
           {/* 未実装タブのプレースホルダー */}
           {hasPages &&
             activeTab !== "reorder" &&
             activeTab !== "merge" &&
-            !isSelectable && (
+            activeTab !== "delete" &&
+            activeTab !== "extract" &&
+            activeTab !== "rotate" && (
               <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
                 <p className="text-sm text-zinc-400">
                   「{TABS.find((t) => t.id === activeTab)?.label}
@@ -225,16 +325,6 @@ export default function Home() {
                 </p>
               </div>
             )}
-
-          {/* 選択タブのプレースホルダー操作パネル */}
-          {hasPages && isSelectable && (
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
-              <p className="text-sm text-zinc-400">
-                「{TABS.find((t) => t.id === activeTab)?.label}
-                」の操作パネルは次のフェーズで実装されます
-              </p>
-            </div>
-          )}
         </div>
       </main>
     </div>

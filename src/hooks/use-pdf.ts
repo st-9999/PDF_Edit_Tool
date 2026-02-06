@@ -30,6 +30,8 @@ export interface UsePdfReturn {
   selectAllPages: () => void;
   /** 全ページの選択を解除 */
   deselectAllPages: () => void;
+  /** ページ番号配列で選択する（範囲選択用） */
+  selectByPageNumbers: (pageNumbers: number[]) => void;
   /** ページの順序を更新 */
   reorderPages: (newPages: PageInfo[]) => void;
 }
@@ -140,6 +142,13 @@ export function usePdf(): UsePdfReturn {
     setPages((prev) => prev.map((p) => ({ ...p, selected: false })));
   }, []);
 
+  const selectByPageNumbers = useCallback((pageNumbers: number[]) => {
+    const numSet = new Set(pageNumbers);
+    setPages((prev) =>
+      prev.map((p) => ({ ...p, selected: numSet.has(p.pageNumber) }))
+    );
+  }, []);
+
   const reorderPages = useCallback((newPages: PageInfo[]) => {
     setPages(newPages);
   }, []);
@@ -157,6 +166,7 @@ export function usePdf(): UsePdfReturn {
     togglePageSelection,
     selectAllPages,
     deselectAllPages,
+    selectByPageNumbers,
     reorderPages,
   };
 }
