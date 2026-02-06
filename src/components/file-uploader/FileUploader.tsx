@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { useToast } from "@/components/ui/Toast";
+
+const MAX_FILE_SIZE_MB = 100;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 interface FileUploaderProps {
   onFilesSelected: (files: File[]) => void;
@@ -17,6 +21,7 @@ export function FileUploader({
 }: FileUploaderProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useToast();
 
   const handleFiles = useCallback(
     (fileList: FileList | null) => {
@@ -24,19 +29,29 @@ export function FileUploader({
 
       const pdfFiles: File[] = [];
       const invalidFiles: string[] = [];
+      const oversizedFiles: string[] = [];
 
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i];
-        if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
-          pdfFiles.push(file);
-        } else {
+        if (!(file.type === "application/pdf" || file.name.endsWith(".pdf"))) {
           invalidFiles.push(file.name);
+        } else if (file.size > MAX_FILE_SIZE_BYTES) {
+          oversizedFiles.push(file.name);
+        } else {
+          pdfFiles.push(file);
         }
       }
 
       if (invalidFiles.length > 0) {
-        alert(
-          `以下のファイルはPDFではないためスキップされました:\n${invalidFiles.join("\n")}`
+        showToast(
+          `PDFではないためスキップ: ${invalidFiles.join(", ")}`,
+          "error"
+        );
+      }
+      if (oversizedFiles.length > 0) {
+        showToast(
+          `${MAX_FILE_SIZE_MB}MBを超えるためスキップ: ${oversizedFiles.join(", ")}`,
+          "error"
         );
       }
 
@@ -44,7 +59,7 @@ export function FileUploader({
         onFilesSelected(pdfFiles);
       }
     },
-    [onFilesSelected]
+    [onFilesSelected, showToast]
   );
 
   const handleDrop = useCallback(
@@ -88,6 +103,10 @@ export function FileUploader({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(); } }}
+        aria-label={`PDFファイルをアップロード${multiple ? "（複数可）" : ""}`}
         className={`
           flex cursor-pointer flex-col items-center justify-center
           rounded-lg border-2 border-dashed p-8 transition-colors

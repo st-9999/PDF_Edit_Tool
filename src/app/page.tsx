@@ -15,6 +15,8 @@ import { rotatePages } from "@/lib/pdf/rotate";
 import { addBookmarks, readBookmarks } from "@/lib/pdf/bookmark";
 import { BookmarkEditor } from "@/components/bookmark-editor/BookmarkEditor";
 import { downloadPdf, addFilenameSuffix } from "@/lib/utils/download";
+import { useToast } from "@/components/ui/Toast";
+import { ProcessingOverlay } from "@/components/ui/ProcessingOverlay";
 import type { PageRotation, BookmarkNode } from "@/types/pdf";
 
 const TABS = [
@@ -35,6 +37,7 @@ export default function Home() {
   const [activeBookmarkNodeId, setActiveBookmarkNodeId] = useState<string | null>(null);
   const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
   const pdf = usePdf();
+  const { showToast } = useToast();
 
   const handleFilesSelected = useCallback(
     (files: File[]) => {
@@ -57,12 +60,13 @@ export default function Home() {
       const result = await reorderPdfPages(file.data, newOrder);
       const filename = addFilenameSuffix(file.name, "_reordered");
       downloadPdf(result, filename);
+      showToast(`${filename} をダウンロードしました`, "success");
     } catch {
-      alert("PDFの並び替えに失敗しました");
+      showToast("PDFの並び替えに失敗しました", "error");
     } finally {
       setProcessing(false);
     }
-  }, [pdf.files, pdf.pages]);
+  }, [pdf.files, pdf.pages, showToast]);
 
   const handleMergeDownload = useCallback(async () => {
     if (pdf.files.length < 2) return;
@@ -72,18 +76,19 @@ export default function Home() {
       const sources = pdf.files.map((f) => ({ data: f.data }));
       const result = await mergePdfs(sources);
       downloadPdf(result, "merged.pdf");
+      showToast("merged.pdf をダウンロードしました", "success");
     } catch {
-      alert("PDFの結合に失敗しました");
+      showToast("PDFの結合に失敗しました", "error");
     } finally {
       setProcessing(false);
     }
-  }, [pdf.files]);
+  }, [pdf.files, showToast]);
 
   const handleDeleteDownload = useCallback(async () => {
     const selected = pdf.pages.filter((p) => p.selected);
     if (selected.length === 0 || pdf.files.length === 0) return;
     if (selected.length === pdf.pages.length) {
-      alert("すべてのページを削除することはできません");
+      showToast("すべてのページを削除することはできません", "error");
       return;
     }
 
@@ -94,12 +99,13 @@ export default function Home() {
       const result = await deletePages(file.data, deletePageNumbers);
       const filename = addFilenameSuffix(file.name, "_deleted");
       downloadPdf(result, filename);
+      showToast(`${filename} をダウンロードしました`, "success");
     } catch {
-      alert("ページの削除に失敗しました");
+      showToast("ページの削除に失敗しました", "error");
     } finally {
       setProcessing(false);
     }
-  }, [pdf.files, pdf.pages]);
+  }, [pdf.files, pdf.pages, showToast]);
 
   const handleExtractDownload = useCallback(async () => {
     const selected = pdf.pages.filter((p) => p.selected);
@@ -112,12 +118,13 @@ export default function Home() {
       const result = await extractPages(file.data, extractPageNumbers);
       const filename = addFilenameSuffix(file.name, "_extracted");
       downloadPdf(result, filename);
+      showToast(`${filename} をダウンロードしました`, "success");
     } catch {
-      alert("ページの抽出に失敗しました");
+      showToast("ページの抽出に失敗しました", "error");
     } finally {
       setProcessing(false);
     }
-  }, [pdf.files, pdf.pages]);
+  }, [pdf.files, pdf.pages, showToast]);
 
   const handleRotateDownload = useCallback(async () => {
     if (pdf.files.length === 0) return;
@@ -134,12 +141,13 @@ export default function Home() {
       const result = await rotatePages(file.data, rotations);
       const filename = addFilenameSuffix(file.name, "_rotated");
       downloadPdf(result, filename);
+      showToast(`${filename} をダウンロードしました`, "success");
     } catch {
-      alert("ページの回転に失敗しました");
+      showToast("ページの回転に失敗しました", "error");
     } finally {
       setProcessing(false);
     }
-  }, [pdf.files, pdf.pages]);
+  }, [pdf.files, pdf.pages, showToast]);
 
   const handleLoadBookmarks = useCallback(async () => {
     if (pdf.files.length === 0 || bookmarksLoaded) return;
@@ -164,12 +172,13 @@ export default function Home() {
       const result = await addBookmarks(file.data, bookmarks);
       const filename = addFilenameSuffix(file.name, "_bookmarked");
       downloadPdf(result, filename);
+      showToast(`${filename} をダウンロードしました`, "success");
     } catch {
-      alert("しおりの書き込みに失敗しました");
+      showToast("しおりの書き込みに失敗しました", "error");
     } finally {
       setProcessing(false);
     }
-  }, [pdf.files, bookmarks]);
+  }, [pdf.files, bookmarks, showToast]);
 
   const hasPages = pdf.pages.length > 0;
   const selectedCount = pdf.pages.filter((p) => p.selected).length;
@@ -177,6 +186,8 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col">
+      <ProcessingOverlay visible={processing} message="PDFを処理中..." />
+
       {/* ヘッダー */}
       <header className="border-b border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950">
         <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
@@ -185,11 +196,14 @@ export default function Home() {
       </header>
 
       {/* タブナビゲーション */}
-      <nav className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="flex gap-0 px-6">
+      <nav className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950" aria-label="機能メニュー">
+        <div className="flex gap-0 overflow-x-auto px-6" role="tablist">
           {TABS.map((tab) => (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={`panel-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
               className={`
                 px-4 py-3 text-sm font-medium transition-colors
@@ -208,7 +222,7 @@ export default function Home() {
       </nav>
 
       {/* メインコンテンツ */}
-      <main className="flex-1 bg-zinc-50 px-6 py-6 dark:bg-zinc-900">
+      <main className="flex-1 bg-zinc-50 px-6 py-6 dark:bg-zinc-900" role="tabpanel" id={`panel-${activeTab}`} aria-label={TABS.find((t) => t.id === activeTab)?.label}>
         <div className="mx-auto max-w-6xl space-y-6">
           {/* ファイルアップロード */}
           <FileUploader
