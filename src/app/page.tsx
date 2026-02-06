@@ -12,8 +12,10 @@ import { mergePdfs } from "@/lib/pdf/merge";
 import { deletePages } from "@/lib/pdf/delete";
 import { extractPages } from "@/lib/pdf/extract";
 import { rotatePages } from "@/lib/pdf/rotate";
+import { addBookmarks, readBookmarks } from "@/lib/pdf/bookmark";
+import { BookmarkEditor } from "@/components/bookmark-editor/BookmarkEditor";
 import { downloadPdf, addFilenameSuffix } from "@/lib/utils/download";
-import type { PageRotation } from "@/types/pdf";
+import type { PageRotation, BookmarkNode } from "@/types/pdf";
 
 const TABS = [
   { id: "reorder", label: "並び替え" },
@@ -29,6 +31,9 @@ type TabId = (typeof TABS)[number]["id"];
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("reorder");
   const [processing, setProcessing] = useState(false);
+  const [bookmarks, setBookmarks] = useState<BookmarkNode[]>([]);
+  const [activeBookmarkNodeId, setActiveBookmarkNodeId] = useState<string | null>(null);
+  const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
   const pdf = usePdf();
 
   const handleFilesSelected = useCallback(
@@ -135,6 +140,36 @@ export default function Home() {
       setProcessing(false);
     }
   }, [pdf.files, pdf.pages]);
+
+  const handleLoadBookmarks = useCallback(async () => {
+    if (pdf.files.length === 0 || bookmarksLoaded) return;
+    try {
+      const file = pdf.files[0];
+      const existing = await readBookmarks(file.data);
+      if (existing.length > 0) {
+        setBookmarks(existing);
+      }
+    } catch {
+      // 読み取り失敗は無視（空のエディタで開始）
+    }
+    setBookmarksLoaded(true);
+  }, [pdf.files, bookmarksLoaded]);
+
+  const handleBookmarkDownload = useCallback(async () => {
+    if (pdf.files.length === 0) return;
+
+    setProcessing(true);
+    try {
+      const file = pdf.files[0];
+      const result = await addBookmarks(file.data, bookmarks);
+      const filename = addFilenameSuffix(file.name, "_bookmarked");
+      downloadPdf(result, filename);
+    } catch {
+      alert("しおりの書き込みに失敗しました");
+    } finally {
+      setProcessing(false);
+    }
+  }, [pdf.files, bookmarks]);
 
   const hasPages = pdf.pages.length > 0;
   const selectedCount = pdf.pages.filter((p) => p.selected).length;
@@ -453,20 +488,40 @@ export default function Home() {
             </>
           )}
 
-          {/* 未実装タブのプレースホルダー */}
-          {hasPages &&
-            activeTab !== "reorder" &&
-            activeTab !== "merge" &&
-            activeTab !== "delete" &&
-            activeTab !== "extract" &&
-            activeTab !== "rotate" && (
-              <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
-                <p className="text-sm text-zinc-400">
-                  「{TABS.find((t) => t.id === activeTab)?.label}
-                  」機能は次のフェーズで実装されます
-                </p>
+          {/* しおりタブ */}
+          {hasPages && activeTab === "bookmark" && (
+            <>
+              {!bookmarksLoaded && (
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleLoadBookmarks}
+                    className="rounded-lg border border-zinc-300 px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                  >
+                    既存のしおりを読み込む
+                  </button>
+                </div>
+              )}
+              <BookmarkEditor
+                bookmarks={bookmarks}
+                onBookmarksChange={setBookmarks}
+                totalPages={pdf.pages.length}
+                pages={pdf.pages}
+                activeNodeId={activeBookmarkNodeId}
+                onActiveNodeChange={setActiveBookmarkNodeId}
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleBookmarkDownload}
+                  disabled={processing || bookmarks.length === 0}
+                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {processing
+                    ? "処理中..."
+                    : `しおり付きPDFをダウンロード (${bookmarks.length}件)`}
+                </button>
               </div>
-            )}
+            </>
+          )}
         </div>
       </main>
     </div>

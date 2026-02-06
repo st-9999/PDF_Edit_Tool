@@ -193,35 +193,35 @@
 > 依存: Phase 1 完了
 
 ### 6-1. しおりデータモデル
-- [ ] `BookmarkNode` 型の確定（Phase 0 で定義済み）
-- [ ] ツリー構造の操作ユーティリティ: `src/lib/utils/bookmark-tree.ts`
+- [x] `BookmarkNode` 型の確定（Phase 0 で定義済み）
+- [x] ツリー構造の操作ユーティリティ: `src/lib/utils/bookmark-tree.ts`
   - ノード追加（子として / 兄弟として）
   - ノード削除
-  - ノード移動（ドラッグ&ドロップ）
+  - ノード移動（上下ボタン）
   - ノード編集（タイトル・ページ番号）
 
 ### 6-2. しおりエディタUI
-- [ ] `src/components/bookmark-editor/BookmarkEditor.tsx` 作成
-- [ ] ツリー表示（インデントで階層を表現）
-- [ ] 各ノードの編集フォーム（タイトル入力、ページ番号選択）
-- [ ] ノード追加ボタン（子 / 兄弟）
-- [ ] ノード削除ボタン
-- [ ] ドラッグ&ドロップでノードの並び替え・階層変更
+- [x] `src/components/bookmark-editor/BookmarkEditor.tsx` 作成
+- [x] ツリー表示（インデントで階層を表現）
+- [x] 各ノードの編集フォーム（タイトル入力、ページ番号選択）
+- [x] ノード追加ボタン（子 / 兄弟）
+- [x] ノード削除ボタン
+- [x] ノードの並び替え（上下ボタン）
 
 ### 6-3. 既存しおりの読み取り
-- [ ] pdf-lib でPDFから既存のしおり（Outline）を読み取り
-- [ ] 読み取ったしおりをエディタに反映
+- [x] pdf-lib でPDFから既存のしおり（Outline）を読み取り
+- [x] 読み取ったしおりをエディタに反映
 
 ### 6-4. しおり書き込みロジック
-- [ ] `src/lib/pdf/bookmark.ts` — pdf-lib でPDFにしおりを埋め込み
-- [ ] 入力: 元PDF + BookmarkNode ツリー
-- [ ] 出力: しおり付きPDF（Uint8Array）
+- [x] `src/lib/pdf/bookmark.ts` — pdf-lib でPDFにしおりを埋め込み
+- [x] 入力: 元PDF + BookmarkNode ツリー
+- [x] 出力: しおり付きPDF（Uint8Array）
 
 ### 6-5. ページプレビューとの連携
-- [ ] しおり編集中にページサムネイルをクリックしてページ番号を設定
+- [x] しおり編集中にページサムネイルをクリックしてページ番号を設定
 
 ### 6-6. コミット
-- [ ] `feat: add bookmark editor with tree structure`
+- [x] `feat: add bookmark editor with tree structure`
 
 ---
 
