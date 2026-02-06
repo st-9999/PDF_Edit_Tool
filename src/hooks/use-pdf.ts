@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { nanoid } from "nanoid";
-import type { PdfFileInfo, PageInfo } from "@/types/pdf";
+import type { PdfFileInfo, PageInfo, PageRotation } from "@/types/pdf";
 import { loadPdfDocument, renderAllThumbnails } from "@/lib/pdf/thumbnail";
 
 export interface UsePdfReturn {
@@ -32,6 +32,10 @@ export interface UsePdfReturn {
   deselectAllPages: () => void;
   /** ページ番号配列で選択する（範囲選択用） */
   selectByPageNumbers: (pageNumbers: number[]) => void;
+  /** 個別ページを回転（CSSプレビュー用） */
+  rotatePage: (pageId: string, angle: PageRotation) => void;
+  /** 選択中ページを一括回転（CSSプレビュー用） */
+  rotateSelectedPages: (angle: PageRotation) => void;
   /** ページの順序を更新 */
   reorderPages: (newPages: PageInfo[]) => void;
 }
@@ -149,6 +153,29 @@ export function usePdf(): UsePdfReturn {
     );
   }, []);
 
+  const nextRotation = (current: PageRotation, add: PageRotation): PageRotation =>
+    ((current + add) % 360) as PageRotation;
+
+  const rotatePage = useCallback((pageId: string, angle: PageRotation) => {
+    setPages((prev) =>
+      prev.map((p) =>
+        p.id === pageId
+          ? { ...p, rotation: nextRotation(p.rotation, angle) }
+          : p
+      )
+    );
+  }, []);
+
+  const rotateSelectedPages = useCallback((angle: PageRotation) => {
+    setPages((prev) =>
+      prev.map((p) =>
+        p.selected
+          ? { ...p, rotation: nextRotation(p.rotation, angle) }
+          : p
+      )
+    );
+  }, []);
+
   const reorderPages = useCallback((newPages: PageInfo[]) => {
     setPages(newPages);
   }, []);
@@ -167,6 +194,8 @@ export function usePdf(): UsePdfReturn {
     selectAllPages,
     deselectAllPages,
     selectByPageNumbers,
+    rotatePage,
+    rotateSelectedPages,
     reorderPages,
   };
 }

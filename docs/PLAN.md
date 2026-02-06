@@ -169,22 +169,22 @@
 > ページ選択UIは Phase 4 の PageSelector を再利用
 
 ### 5-1. 回転UI
-- [ ] PageSelector を再利用し、回転対象ページを選択
-- [ ] 回転角度の選択UI（90°/ 180°/ 270° ボタン、時計回り）
-- [ ] サムネイル上に回転プレビューを表示（CSS transform で即時反映）
-- [ ] 個別ページの回転ボタン（サムネイル上にオーバーレイ）
+- [x] PageSelector を再利用し、回転対象ページを選択
+- [x] 回転角度の選択UI（90°/ 180°/ 270° ボタン、時計回り）
+- [x] サムネイル上に回転プレビューを表示（CSS transform で即時反映）
+- [x] 個別ページの回転ボタン（サムネイル上にオーバーレイ）
 
 ### 5-2. 回転ロジック
-- [ ] `src/lib/pdf/rotate.ts` — pdf-lib でページを回転
-- [ ] 入力: 元PDF + 回転指定（ページ番号→角度のマップ）
-- [ ] 出力: 回転済みPDF（Uint8Array）
-- [ ] pdf-lib の `page.setRotation(degrees(...))` を使用
+- [x] `src/lib/pdf/rotate.ts` — pdf-lib でページを回転
+- [x] 入力: 元PDF + 回転指定（ページ番号→角度のマップ）
+- [x] 出力: 回転済みPDF（Uint8Array）
+- [x] pdf-lib の `page.setRotation(degrees(...))` を使用
 
 ### 5-3. ダウンロード
-- [ ] ファイル名: `{元ファイル名}_rotated.pdf`
+- [x] ファイル名: `{元ファイル名}_rotated.pdf`
 
 ### 5-4. コミット
-- [ ] `feat: add page rotation`
+- [x] `feat: add page rotation`
 
 ---
 
