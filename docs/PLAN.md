@@ -84,26 +84,25 @@
 > 依存: Phase 1 完了
 
 ### 2-1. ドラッグ&ドロップ並び替えUI
-- [ ] `src/components/page-sorter/PageSorter.tsx` 作成
-- [ ] dnd-kit の `SortableContext` + `useSortable` でサムネイルを並び替え可能に
-- [ ] ドラッグ中のプレビュー表示（DragOverlay）
-- [ ] 並び替え後のページ順序を state に反映
+- [x] `src/components/page-sorter/PageSorter.tsx` 作成
+- [x] dnd-kit の `SortableContext` + `useSortable` でサムネイルを並び替え可能に
+- [x] ドラッグ中のプレビュー表示（DragOverlay）
+- [x] 並び替え後のページ順序を state に反映
 
 ### 2-2. 並び替えロジック
-- [ ] `src/lib/pdf/reorder.ts` — pdf-lib でページ順序を変更したPDFを生成
-- [ ] 入力: 元PDF（ArrayBuffer）+ 新しいページ順序配列
-- [ ] 出力: 並び替え済みPDF（Uint8Array）
+- [x] `src/lib/pdf/reorder.ts` — pdf-lib でページ順序を変更したPDFを生成
+- [x] 入力: 元PDF（ArrayBuffer）+ 新しいページ順序配列
+- [x] 出力: 並び替え済みPDF（Uint8Array）
 
 ### 2-3. ダウンロード機能
-- [ ] `src/lib/utils/download.ts` — Blob → ダウンロードリンク生成のユーティリティ
-- [ ] ファイル名: `{元ファイル名}_reordered.pdf`
+- [x] `src/lib/utils/download.ts` — Blob → ダウンロードリンク生成のユーティリティ
+- [x] ファイル名: `{元ファイル名}_reordered.pdf`
 
 ### 2-4. API Route（任意）
-- [ ] `src/app/api/pdf/reorder/route.ts`
-- [ ] クライアントサイドで完結する場合は不要 → 判断して実装
+- [x] クライアントサイドで完結 → API Route不要と判断（pdf-libはブラウザで動作）
 
 ### 2-5. コミット
-- [ ] `feat: add page reorder with drag and drop`
+- [x] `feat: add page reorder with drag and drop`
 
 ---
 

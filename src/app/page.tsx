@@ -3,7 +3,10 @@
 import { useState, useCallback } from "react";
 import { FileUploader } from "@/components/file-uploader/FileUploader";
 import { PageGrid } from "@/components/pdf-viewer/PageGrid";
+import { PageSorter } from "@/components/page-sorter/PageSorter";
 import { usePdf } from "@/hooks/use-pdf";
+import { reorderPdfPages } from "@/lib/pdf/reorder";
+import { downloadPdf, addFilenameSuffix } from "@/lib/utils/download";
 
 const TABS = [
   { id: "reorder", label: "並び替え" },
@@ -18,6 +21,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("reorder");
+  const [processing, setProcessing] = useState(false);
   const pdf = usePdf();
 
   const handleFilesSelected = useCallback(
@@ -27,7 +31,29 @@ export default function Home() {
     [pdf]
   );
 
-  const isSelectable = activeTab === "delete" || activeTab === "extract" || activeTab === "rotate";
+  const isSelectable =
+    activeTab === "delete" || activeTab === "extract" || activeTab === "rotate";
+
+  const handleReorderDownload = useCallback(async () => {
+    if (pdf.files.length === 0 || pdf.pages.length === 0) return;
+
+    setProcessing(true);
+    try {
+      const file = pdf.files[0];
+      // pages の現在の順序から 0始まりインデックスの配列を生成
+      const newOrder = pdf.pages.map((p) => p.pageNumber - 1);
+      const result = await reorderPdfPages(file.data, newOrder);
+      const filename = addFilenameSuffix(file.name, "_reordered");
+      downloadPdf(result, filename);
+    } catch {
+      alert("PDFの並び替えに失敗しました");
+    } finally {
+      setProcessing(false);
+    }
+  }, [pdf.files, pdf.pages]);
+
+  const hasPages = pdf.pages.length > 0;
+  const selectedCount = pdf.pages.filter((p) => p.selected).length;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -79,8 +105,8 @@ export default function Home() {
             </div>
           )}
 
-          {/* ファイル情報 */}
-          {pdf.files.length > 0 && (
+          {/* ファイル情報バー */}
+          {hasPages && (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <span className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -88,7 +114,7 @@ export default function Home() {
                 </span>
                 {isSelectable && (
                   <span className="text-sm text-zinc-500">
-                    {pdf.pages.filter((p) => p.selected).length} 件選択中
+                    {selectedCount} 件選択中
                   </span>
                 )}
               </div>
@@ -119,20 +145,49 @@ export default function Home() {
             </div>
           )}
 
-          {/* ページグリッド */}
-          {pdf.pages.length > 0 && (
+          {/* タブ別コンテンツ */}
+          {hasPages && activeTab === "reorder" && (
+            <>
+              <PageSorter pages={pdf.pages} onReorder={pdf.reorderPages} />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleReorderDownload}
+                  disabled={processing}
+                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {processing ? "処理中..." : "並び替えたPDFをダウンロード"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* 他のタブ: 選択可能グリッド表示 */}
+          {hasPages && isSelectable && (
             <PageGrid
               pages={pdf.pages}
-              selectable={isSelectable}
-              onPageClick={isSelectable ? pdf.togglePageSelection : undefined}
+              selectable
+              onPageClick={pdf.togglePageSelection}
             />
           )}
 
-          {/* タブ別の操作パネル（Phase 2以降で実装） */}
-          {pdf.pages.length > 0 && (
+          {/* 未実装タブのプレースホルダー */}
+          {hasPages &&
+            activeTab !== "reorder" &&
+            !isSelectable && (
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
+                <p className="text-sm text-zinc-400">
+                  「{TABS.find((t) => t.id === activeTab)?.label}
+                  」機能は次のフェーズで実装されます
+                </p>
+              </div>
+            )}
+
+          {/* 選択タブのプレースホルダー操作パネル */}
+          {hasPages && isSelectable && (
             <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
               <p className="text-sm text-zinc-400">
-                「{TABS.find((t) => t.id === activeTab)?.label}」機能は次のフェーズで実装されます
+                「{TABS.find((t) => t.id === activeTab)?.label}
+                」の操作パネルは次のフェーズで実装されます
               </p>
             </div>
           )}
