@@ -30,7 +30,7 @@ export function ThumbnailStrip({
   useEffect(() => {
     const el = itemRefs.current.get(selectedPageNumber);
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      el.scrollIntoView({ behavior: "instant", block: "nearest" });
     }
   }, [selectedPageNumber]);
 

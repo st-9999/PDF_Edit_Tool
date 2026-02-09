@@ -123,32 +123,95 @@ export async function readBookmarks(
     const firstRef = outlinesDict.get(PDFName.of("First"));
     if (!firstRef) return [];
 
+    // Destination配列からページ番号を解決するヘルパー
+    function resolvePageNumber(destArray: PDFArray): number {
+      if (destArray.size() === 0) return 1;
+      let pageRef = destArray.get(0);
+      // 間接参照の場合はlookupで解決
+      if (pageRef instanceof PDFRef) {
+        const resolved = context.lookup(pageRef);
+        // lookupしてもPDFRefのまま → toString()でマップ検索
+        // lookupした結果がPDFDictならそのrefで検索
+        const key = pageRef.toString();
+        const pn = pageRefMap.get(key);
+        if (pn !== undefined) return pn;
+        // resolvedがページオブジェクトの場合、ref文字列が異なることがある
+        if (resolved) {
+          const resolvedKey = resolved.toString();
+          const pn2 = pageRefMap.get(resolvedKey);
+          if (pn2 !== undefined) return pn2;
+        }
+      }
+      if (pageRef) {
+        const pn = pageRefMap.get(pageRef.toString());
+        if (pn !== undefined) return pn;
+      }
+      return 1;
+    }
+
+    // Outline itemからDestination配列を取得するヘルパー
+    function getDestArray(dict: PDFDict): PDFArray | null {
+      // パターン1: /Dest に直接配列
+      const destObj = dict.get(PDFName.of("Dest"));
+      if (destObj) {
+        // 直接PDFArrayの場合
+        if (destObj instanceof PDFArray) return destObj;
+        // 間接参照の場合 → lookupして配列を得る
+        if (destObj instanceof PDFRef) {
+          const resolved = context.lookup(destObj);
+          if (resolved instanceof PDFArray) return resolved;
+        }
+      }
+
+      // パターン2: /A (Action辞書) → /S が /GoTo → /D にDestination
+      const actionObj = dict.get(PDFName.of("A"));
+      if (actionObj) {
+        const actionDict = (actionObj instanceof PDFRef
+          ? context.lookup(actionObj)
+          : actionObj) as PDFDict;
+        if (actionDict && typeof actionDict.get === "function") {
+          const sObj = actionDict.get(PDFName.of("S"));
+          if (sObj instanceof PDFName && sObj.decodeText() === "GoTo") {
+            const dObj = actionDict.get(PDFName.of("D"));
+            if (dObj instanceof PDFArray) return dObj;
+            if (dObj instanceof PDFRef) {
+              const resolved = context.lookup(dObj);
+              if (resolved instanceof PDFArray) return resolved;
+            }
+          }
+        }
+      }
+
+      return null;
+    }
+
+    let nodeCounter = 0;
+
     function readItems(ref: PDFRef | undefined): BookmarkNode[] {
       const result: BookmarkNode[] = [];
       let currentRef = ref;
 
       while (currentRef) {
         const dict = context.lookup(currentRef) as PDFDict;
-        if (!dict) break;
+        if (!dict || typeof dict.get !== "function") break;
 
         // タイトル読み取り
-        const titleObj = dict.get(PDFName.of("Title"));
+        let titleRaw = dict.get(PDFName.of("Title"));
+        if (titleRaw instanceof PDFRef) {
+          titleRaw = context.lookup(titleRaw);
+        }
         let title = "無題";
-        if (titleObj instanceof PDFHexString) {
-          title = titleObj.decodeText();
-        } else if (titleObj instanceof PDFString) {
-          title = titleObj.decodeText();
+        if (titleRaw instanceof PDFHexString) {
+          title = titleRaw.decodeText();
+        } else if (titleRaw instanceof PDFString) {
+          title = titleRaw.decodeText();
         }
 
         // ページ番号読み取り
         let pageNumber = 1;
-        const destObj = dict.get(PDFName.of("Dest"));
-        if (destObj instanceof PDFArray && destObj.size() > 0) {
-          const pageRef = destObj.get(0);
-          if (pageRef) {
-            const pn = pageRefMap.get(pageRef.toString());
-            if (pn !== undefined) pageNumber = pn;
-          }
+        const destArray = getDestArray(dict);
+        if (destArray) {
+          pageNumber = resolvePageNumber(destArray);
         }
 
         // 子ノード読み取り
@@ -157,8 +220,9 @@ export async function readBookmarks(
           ? readItems(childFirstRef as PDFRef)
           : [];
 
+        nodeCounter++;
         result.push({
-          id: `bm-${result.length}-${Date.now()}`,
+          id: `bm-${nodeCounter}-${Date.now()}`,
           title,
           pageNumber,
           children,

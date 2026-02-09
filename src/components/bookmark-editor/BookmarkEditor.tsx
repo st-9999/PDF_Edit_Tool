@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { BookmarkNode } from "@/types/pdf";
 import {
   createBookmarkNode,
-  addSibling,
   addChild,
   removeNode,
   updateTitle,
   updatePageNumber,
-  moveNode,
   countNodes,
 } from "@/lib/utils/bookmark-tree";
 
@@ -39,42 +37,40 @@ export function BookmarkEditor({
   }, [bookmarks, onBookmarksChange]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        <h3 className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
           しおり一覧（{nodeCount} 件）
         </h3>
         <button
           onClick={handleAddRoot}
-          className="rounded bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-950/50"
+          className="rounded bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-950/50"
         >
-          + ルートしおりを追加
+          + 追加
         </button>
       </div>
 
       {activeNodeId && (
-        <p className="text-xs text-amber-600 dark:text-amber-400">
+        <p className="text-[11px] text-amber-600 dark:text-amber-400">
           右側のサムネイルをクリックするとページ番号が設定されます
         </p>
       )}
 
       {/* ツリー表示 */}
       {bookmarks.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-zinc-300 p-8 text-center dark:border-zinc-600">
-          <p className="text-sm text-zinc-400">
-            しおりがありません。「ルートしおりを追加」で作成してください。
+        <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-600">
+          <p className="text-xs text-zinc-400">
+            しおりがありません。「+ 追加」で作成してください。
           </p>
         </div>
       ) : (
-        <div className="space-y-1">
-          {bookmarks.map((node, index) => (
+        <div className="space-y-0.5">
+          {bookmarks.map((node) => (
             <BookmarkTreeNode
               key={node.id}
               node={node}
               depth={0}
-              index={index}
-              siblingCount={bookmarks.length}
               bookmarks={bookmarks}
               onBookmarksChange={onBookmarksChange}
               totalPages={totalPages}
@@ -85,7 +81,6 @@ export function BookmarkEditor({
           ))}
         </div>
       )}
-
     </div>
   );
 }
@@ -93,8 +88,6 @@ export function BookmarkEditor({
 interface BookmarkTreeNodeProps {
   node: BookmarkNode;
   depth: number;
-  index: number;
-  siblingCount: number;
   bookmarks: BookmarkNode[];
   onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
   totalPages: number;
@@ -106,8 +99,6 @@ interface BookmarkTreeNodeProps {
 function BookmarkTreeNode({
   node,
   depth,
-  index,
-  siblingCount,
   bookmarks,
   onBookmarksChange,
   totalPages,
@@ -116,56 +107,112 @@ function BookmarkTreeNode({
   onPageNavigate,
 }: BookmarkTreeNodeProps) {
   const [expanded, setExpanded] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(node.title);
+  const inputRef = useRef<HTMLInputElement>(null);
   const isActive = activeNodeId === node.id;
 
+  // Focus input when entering edit mode
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  // Sync editValue when title changes externally
+  useEffect(() => {
+    if (!editing) {
+      setEditValue(node.title);
+    }
+  }, [node.title, editing]);
+
+  const commitEdit = useCallback(() => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== node.title) {
+      onBookmarksChange(updateTitle(bookmarks, node.id, trimmed));
+    } else {
+      setEditValue(node.title);
+    }
+    setEditing(false);
+  }, [editValue, node.title, node.id, bookmarks, onBookmarksChange]);
+
+  const handleClick = useCallback(() => {
+    if (editing) return;
+    onPageNavigate?.(node.pageNumber);
+  }, [editing, node.pageNumber, onPageNavigate]);
+
+  const handleDoubleClick = useCallback(() => {
+    setEditValue(node.title);
+    setEditing(true);
+  }, [node.title]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") {
+        commitEdit();
+      } else if (e.key === "Escape") {
+        setEditValue(node.title);
+        setEditing(false);
+      }
+    },
+    [commitEdit, node.title]
+  );
+
   return (
-    <div style={{ marginLeft: depth * 20 }}>
+    <div style={{ marginLeft: depth * 16 }}>
       <div
         className={`
-          flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors
+          group flex items-center gap-1.5 rounded px-2 py-1.5 transition-colors
           ${isActive
-            ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/30"
-            : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800"}
+            ? "bg-amber-50 dark:bg-amber-950/30"
+            : "hover:bg-zinc-100 dark:hover:bg-zinc-700/50"}
         `}
       >
         {/* 展開/折りたたみ */}
         {node.children.length > 0 ? (
           <button
             onClick={() => setExpanded(!expanded)}
-            className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+            className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
           >
             <svg
-              className={`h-3 w-3 transition-transform ${expanded ? "rotate-90" : ""}`}
+              className={`h-2.5 w-2.5 transition-transform ${expanded ? "rotate-90" : ""}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5l7 7-7 7"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
         ) : (
-          <div className="h-5 w-5 flex-shrink-0" />
+          <div className="h-4 w-4 flex-shrink-0" />
         )}
 
-        {/* タイトル入力 */}
-        <input
-          type="text"
-          value={node.title}
-          onChange={(e) =>
-            onBookmarksChange(updateTitle(bookmarks, node.id, e.target.value))
-          }
-          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm text-zinc-800 focus:border-blue-400 focus:outline-none dark:text-zinc-200"
-          placeholder="しおりのタイトル"
-        />
+        {/* タイトル（クリックでページジャンプ / ダブルクリックで編集） */}
+        {editing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={handleKeyDown}
+            className="min-w-0 flex-1 rounded border border-blue-400 bg-white px-1.5 py-0.5 text-xs text-zinc-800 outline-none dark:bg-zinc-700 dark:text-zinc-200"
+          />
+        ) : (
+          <span
+            onClick={handleClick}
+            onDoubleClick={handleDoubleClick}
+            className="min-w-0 flex-1 cursor-pointer truncate text-xs text-zinc-700 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-400"
+            title={`${node.title}（ダブルクリックで名称変更）`}
+          >
+            {node.title}
+          </span>
+        )}
 
         {/* ページ番号 */}
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-zinc-400">p.</span>
+        <div className="flex items-center gap-0.5">
+          <span className="text-[10px] text-zinc-400">p.</span>
           <input
             type="number"
             min={1}
@@ -179,66 +226,27 @@ function BookmarkTreeNode({
                 );
               }
             }}
-            className="w-12 rounded border border-zinc-200 bg-transparent px-1 py-0.5 text-center text-xs text-zinc-700 focus:border-blue-400 focus:outline-none dark:border-zinc-600 dark:text-zinc-300"
+            className="w-10 rounded border border-zinc-200 bg-transparent px-1 py-0.5 text-center text-[11px] text-zinc-600 focus:border-blue-400 focus:outline-none dark:border-zinc-600 dark:text-zinc-400"
           />
           <button
             onClick={() =>
               onActiveNodeChange(isActive ? null : node.id)
             }
-            className={`rounded p-1 text-xs transition-colors ${
+            className={`rounded p-0.5 transition-colors ${
               isActive
                 ? "bg-amber-200 text-amber-700 dark:bg-amber-800 dark:text-amber-200"
-                : "text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                : "text-zinc-400 hover:text-amber-500 opacity-0 group-hover:opacity-100"
             }`}
             title="サムネイルからページを選択"
           >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
             </svg>
           </button>
-          {onPageNavigate && (
-            <button
-              onClick={() => onPageNavigate(node.pageNumber)}
-              className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-blue-500 dark:hover:bg-zinc-700"
-              title="このページを表示"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </button>
-          )}
         </div>
 
-        {/* 操作ボタン群 */}
-        <div className="flex items-center gap-0.5">
-          {/* 上移動 */}
-          <button
-            onClick={() =>
-              onBookmarksChange(moveNode(bookmarks, node.id, "up"))
-            }
-            disabled={index === 0}
-            className="rounded p-1 text-zinc-400 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-zinc-700"
-            title="上に移動"
-          >
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-            </svg>
-          </button>
-          {/* 下移動 */}
-          <button
-            onClick={() =>
-              onBookmarksChange(moveNode(bookmarks, node.id, "down"))
-            }
-            disabled={index === siblingCount - 1}
-            className="rounded p-1 text-zinc-400 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-zinc-700"
-            title="下に移動"
-          >
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {/* 子を追加 */}
+        {/* 操作ボタン: 子追加・削除のみ */}
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             onClick={() => {
               onBookmarksChange(addChild(bookmarks, node.id));
@@ -251,19 +259,6 @@ function BookmarkTreeNode({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
           </button>
-          {/* 兄弟を追加 */}
-          <button
-            onClick={() =>
-              onBookmarksChange(addSibling(bookmarks, node.id))
-            }
-            className="rounded p-1 text-zinc-400 hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-950/30"
-            title="兄弟しおりを追加"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z" />
-            </svg>
-          </button>
-          {/* 削除 */}
           <button
             onClick={() =>
               onBookmarksChange(removeNode(bookmarks, node.id))
@@ -280,13 +275,11 @@ function BookmarkTreeNode({
 
       {/* 子ノード */}
       {expanded &&
-        node.children.map((child, childIndex) => (
+        node.children.map((child) => (
           <BookmarkTreeNode
             key={child.id}
             node={child}
             depth={depth + 1}
-            index={childIndex}
-            siblingCount={node.children.length}
             bookmarks={bookmarks}
             onBookmarksChange={onBookmarksChange}
             totalPages={totalPages}

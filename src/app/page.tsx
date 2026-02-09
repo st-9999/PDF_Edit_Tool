@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { FileUploader } from "@/components/file-uploader/FileUploader";
 import { PageSorter } from "@/components/page-sorter/PageSorter";
 import { MergeFileList } from "@/components/file-uploader/MergeFileList";
@@ -140,20 +140,47 @@ export default function Home() {
     );
   }, [pdf.files, pdf.pages, performSave]);
 
-  const handleLoadBookmarks = useCallback(async () => {
-    if (pdf.files.length === 0 || bookmarksLoaded) return;
-    try {
-      const file = pdf.files[0];
-      const data = await file.sourceFile.arrayBuffer();
-      const existing = await readBookmarks(data);
-      if (existing.length > 0) {
-        setBookmarks(existing);
-      }
-    } catch {
-      // 読み取り失敗は無視（空のエディタで開始）
+  // PDFファイル変更時にしおりを自動読み込み
+  const prevFileIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentFileId = pdf.files.length > 0 ? pdf.files[0].id : null;
+
+    // ファイルが変わっていない場合はスキップ
+    if (currentFileId === prevFileIdRef.current) return;
+    prevFileIdRef.current = currentFileId;
+
+    // ファイルがクリアされた場合
+    if (!currentFileId) {
+      setBookmarks([]);
+      setActiveBookmarkNodeId(null);
+      setBookmarksLoaded(false);
+      return;
     }
-    setBookmarksLoaded(true);
-  }, [pdf.files, bookmarksLoaded]);
+
+    // 新しいファイルのしおりを読み込み
+    let cancelled = false;
+    (async () => {
+      try {
+        const file = pdf.files[0];
+        const data = await file.sourceFile.arrayBuffer();
+        const existing = await readBookmarks(data);
+        if (!cancelled) {
+          setBookmarks(existing);
+          setActiveBookmarkNodeId(null);
+          setBookmarksLoaded(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setBookmarks([]);
+          setBookmarksLoaded(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pdf.files]);
 
   const handleBookmarkSave = useCallback(async () => {
     if (pdf.files.length === 0) return;
@@ -226,14 +253,6 @@ export default function Home() {
               <span className="text-xs text-zinc-500 dark:text-zinc-400">
                 {pdf.files[0]?.name} — {pdf.pages.length}ページ
               </span>
-              {!bookmarksLoaded && (
-                <button
-                  onClick={handleLoadBookmarks}
-                  className="rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                >
-                  既存しおり読込
-                </button>
-              )}
               <button
                 onClick={pdf.clearAll}
                 className="rounded px-3 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
