@@ -10,7 +10,7 @@ export async function deletePages(
   pdfData: ArrayBuffer,
   deletePageNumbers: number[]
 ): Promise<Uint8Array> {
-  const srcDoc = await PDFDocument.load(pdfData);
+  const srcDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
   const totalPages = srcDoc.getPageCount();
   const deleteSet = new Set(deletePageNumbers);
 

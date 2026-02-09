@@ -36,6 +36,8 @@ export interface UsePdfReturn {
   rotatePage: (pageId: string, angle: PageRotation) => void;
   /** 選択中ページを一括回転（CSSプレビュー用） */
   rotateSelectedPages: (angle: PageRotation) => void;
+  /** ページを削除（UI上から即時削除） */
+  deletePage: (pageId: string) => void;
   /** ページの順序を更新 */
   reorderPages: (newPages: PageInfo[]) => void;
 }
@@ -71,7 +73,7 @@ export function usePdf(): UsePdfReturn {
           name: file.name,
           size: file.size,
           pageCount,
-          data: arrayBuffer,
+          sourceFile: file,
         };
 
         const newPages: PageInfo[] = [];
@@ -176,6 +178,13 @@ export function usePdf(): UsePdfReturn {
     );
   }, []);
 
+  const deletePage = useCallback((pageId: string) => {
+    setPages((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((p) => p.id !== pageId);
+    });
+  }, []);
+
   const reorderPages = useCallback((newPages: PageInfo[]) => {
     setPages(newPages);
   }, []);
@@ -196,6 +205,7 @@ export function usePdf(): UsePdfReturn {
     selectByPageNumbers,
     rotatePage,
     rotateSelectedPages,
+    deletePage,
     reorderPages,
   };
 }

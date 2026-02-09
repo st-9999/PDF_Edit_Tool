@@ -10,7 +10,7 @@ export async function reorderPdfPages(
   pdfData: ArrayBuffer,
   newOrder: number[]
 ): Promise<Uint8Array> {
-  const srcDoc = await PDFDocument.load(pdfData);
+  const srcDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
   const newDoc = await PDFDocument.create();
 
   const copiedPages = await newDoc.copyPages(srcDoc, newOrder);

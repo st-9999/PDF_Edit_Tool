@@ -14,7 +14,7 @@ export async function extractPages(
     throw new Error("抽出するページが選択されていません");
   }
 
-  const srcDoc = await PDFDocument.load(pdfData);
+  const srcDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
 
   // 1始まりのページ番号を0始まりインデックスに変換
   const indices = extractPageNumbers.map((n) => n - 1);
@@ -25,5 +25,5 @@ export async function extractPages(
     newDoc.addPage(page);
   }
 
-  return newDoc.save();
+  return newDoc.save({ updateFieldAppearances: false });
 }

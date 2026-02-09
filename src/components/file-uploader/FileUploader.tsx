@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useToast } from "@/components/ui/Toast";
 
-const MAX_FILE_SIZE_MB = 100;
+const MAX_FILE_SIZE_MB = 500;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 interface FileUploaderProps {
@@ -56,7 +56,7 @@ export function FileUploader({
       }
 
       if (pdfFiles.length > 0) {
-        onFilesSelected(pdfFiles);
+        onFilesSelected(multiple ? pdfFiles : pdfFiles.slice(0, 1));
       }
     },
     [onFilesSelected, showToast]

@@ -11,11 +11,11 @@ export async function addBookmarks(
   pdfData: ArrayBuffer,
   bookmarks: BookmarkNode[]
 ): Promise<Uint8Array> {
-  const pdfDoc = await PDFDocument.load(pdfData);
+  const pdfDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
   const context = pdfDoc.context;
 
   if (bookmarks.length === 0) {
-    return pdfDoc.save();
+    return pdfDoc.save({ updateFieldAppearances: false });
   }
 
   const pages = pdfDoc.getPages();
@@ -92,7 +92,7 @@ export async function addBookmarks(
   // CatalogにOutlinesを設定
   pdfDoc.catalog.set(PDFName.of("Outlines"), outlinesRef);
 
-  return pdfDoc.save();
+  return pdfDoc.save({ updateFieldAppearances: false });
 }
 
 /**
@@ -104,7 +104,7 @@ export async function readBookmarks(
   pdfData: ArrayBuffer
 ): Promise<BookmarkNode[]> {
   try {
-    const pdfDoc = await PDFDocument.load(pdfData);
+    const pdfDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
     const context = pdfDoc.context;
     const pages = pdfDoc.getPages();
 

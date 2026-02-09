@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { BookmarkNode, PageInfo } from "@/types/pdf";
+import type { BookmarkNode } from "@/types/pdf";
 import {
   createBookmarkNode,
   addSibling,
@@ -17,19 +17,20 @@ interface BookmarkEditorProps {
   bookmarks: BookmarkNode[];
   onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
   totalPages: number;
-  pages: PageInfo[];
   /** ページサムネイルクリックでページ番号を設定するためのアクティブノードID */
   activeNodeId: string | null;
   onActiveNodeChange: (nodeId: string | null) => void;
+  /** しおりノードからページビュアーへナビゲート */
+  onPageNavigate?: (pageNumber: number) => void;
 }
 
 export function BookmarkEditor({
   bookmarks,
   onBookmarksChange,
   totalPages,
-  pages,
   activeNodeId,
   onActiveNodeChange,
+  onPageNavigate,
 }: BookmarkEditorProps) {
   const nodeCount = countNodes(bookmarks);
 
@@ -79,56 +80,12 @@ export function BookmarkEditor({
               totalPages={totalPages}
               activeNodeId={activeNodeId}
               onActiveNodeChange={onActiveNodeChange}
+              onPageNavigate={onPageNavigate}
             />
           ))}
         </div>
       )}
 
-      {/* ページサムネイル（しおりページ番号設定用） */}
-      {pages.length > 0 && (
-        <div>
-          <h4 className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            ページサムネイル（クリックでページ番号を設定）
-          </h4>
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            {pages.map((page) => (
-              <button
-                key={page.id}
-                type="button"
-                onClick={() => {
-                  if (activeNodeId) {
-                    onBookmarksChange(
-                      updatePageNumber(bookmarks, activeNodeId, page.pageNumber)
-                    );
-                    onActiveNodeChange(null);
-                  }
-                }}
-                disabled={!activeNodeId}
-                className={`
-                  flex flex-shrink-0 flex-col items-center gap-0.5 rounded p-1 transition-all
-                  ${activeNodeId
-                    ? "cursor-pointer hover:bg-amber-50 hover:ring-2 hover:ring-amber-400 dark:hover:bg-amber-950/30"
-                    : "cursor-default opacity-60"}
-                `}
-              >
-                <div className="h-16 w-12 overflow-hidden rounded border border-zinc-200 dark:border-zinc-600">
-                  {page.thumbnailUrl && (
-                    <img
-                      src={page.thumbnailUrl}
-                      alt={`Page ${page.pageNumber}`}
-                      className="h-full w-full object-cover"
-                      draggable={false}
-                    />
-                  )}
-                </div>
-                <span className="text-[10px] text-zinc-400">
-                  {page.pageNumber}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -143,6 +100,7 @@ interface BookmarkTreeNodeProps {
   totalPages: number;
   activeNodeId: string | null;
   onActiveNodeChange: (nodeId: string | null) => void;
+  onPageNavigate?: (pageNumber: number) => void;
 }
 
 function BookmarkTreeNode({
@@ -155,6 +113,7 @@ function BookmarkTreeNode({
   totalPages,
   activeNodeId,
   onActiveNodeChange,
+  onPageNavigate,
 }: BookmarkTreeNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const isActive = activeNodeId === node.id;
@@ -237,6 +196,18 @@ function BookmarkTreeNode({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
             </svg>
           </button>
+          {onPageNavigate && (
+            <button
+              onClick={() => onPageNavigate(node.pageNumber)}
+              className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-blue-500 dark:hover:bg-zinc-700"
+              title="このページを表示"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* 操作ボタン群 */}
@@ -321,6 +292,7 @@ function BookmarkTreeNode({
             totalPages={totalPages}
             activeNodeId={activeNodeId}
             onActiveNodeChange={onActiveNodeChange}
+            onPageNavigate={onPageNavigate}
           />
         ))}
     </div>

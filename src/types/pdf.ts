@@ -8,8 +8,8 @@ export interface PdfFileInfo {
   size: number;
   /** 総ページ数 */
   pageCount: number;
-  /** PDFデータ（ArrayBuffer） */
-  data: ArrayBuffer;
+  /** 元のFileオブジェクト（オンデマンドでarrayBuffer()を呼ぶ） */
+  sourceFile: File;
 }
 
 /** 個別ページの情報 */

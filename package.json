@@ -17,7 +17,8 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.624",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "react-resizable-panels": "^4.6.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

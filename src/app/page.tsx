@@ -2,29 +2,30 @@
 
 import { useState, useCallback } from "react";
 import { FileUploader } from "@/components/file-uploader/FileUploader";
-import { PageGrid } from "@/components/pdf-viewer/PageGrid";
 import { PageSorter } from "@/components/page-sorter/PageSorter";
 import { MergeFileList } from "@/components/file-uploader/MergeFileList";
 import { PageSelector } from "@/components/page-selector/PageSelector";
 import { usePdf } from "@/hooks/use-pdf";
-import { reorderPdfPages } from "@/lib/pdf/reorder";
-import { mergePdfs } from "@/lib/pdf/merge";
-import { deletePages } from "@/lib/pdf/delete";
+import { mergePdfs, mergePdfsViaServer } from "@/lib/pdf/merge";
 import { extractPages } from "@/lib/pdf/extract";
-import { rotatePages } from "@/lib/pdf/rotate";
+import { editPdfPages } from "@/lib/pdf/edit";
 import { addBookmarks, readBookmarks } from "@/lib/pdf/bookmark";
-import { BookmarkEditor } from "@/components/bookmark-editor/BookmarkEditor";
-import { downloadPdf, addFilenameSuffix } from "@/lib/utils/download";
+import { BookmarkLayout } from "@/components/bookmark-editor/BookmarkLayout";
+import {
+  hasFileSystemAccess,
+  openSaveDialog,
+  writePdfToHandle,
+  downloadPdfFallback,
+  addFilenameSuffix,
+} from "@/lib/utils/download";
 import { useToast } from "@/components/ui/Toast";
 import { ProcessingOverlay } from "@/components/ui/ProcessingOverlay";
-import type { PageRotation, BookmarkNode } from "@/types/pdf";
+import type { BookmarkNode } from "@/types/pdf";
 
 const TABS = [
   { id: "reorder", label: "並び替え" },
   { id: "merge", label: "結合" },
-  { id: "delete", label: "削除" },
   { id: "extract", label: "抽出" },
-  { id: "rotate", label: "回転" },
   { id: "bookmark", label: "しおり" },
 ] as const;
 
@@ -46,114 +47,113 @@ export default function Home() {
     [pdf]
   );
 
-  const isPageSelectTab =
-    activeTab === "delete" || activeTab === "extract" || activeTab === "rotate";
+  const isPageSelectTab = activeTab === "extract";
 
-  const handleReorderDownload = useCallback(async () => {
+  // --- 2フェーズ保存ヘルパー ---
+  // showSaveFilePicker はユーザージェスチャ直後にしか呼べないため、
+  // (1) ダイアログを開く → (2) 重い処理 → (3) 結果を書き込む の順で実行する
+  const performSave = useCallback(
+    async (
+      filename: string,
+      process: () => Promise<Uint8Array>,
+      errorLabel?: string
+    ) => {
+      // Phase 1: ダイアログを開く（ユーザージェスチャ中 = クリック直後）
+      let handle: FileSystemFileHandle | null = null;
+      if (hasFileSystemAccess()) {
+        handle = await openSaveDialog(filename);
+        if (!handle) return; // キャンセル
+      }
+
+      setProcessing(true);
+      try {
+        // Phase 2: PDF処理（大容量ファイルでは数秒〜十数秒かかる）
+        const result = await process();
+
+        // Phase 3: 結果を書き込み
+        if (handle) {
+          await writePdfToHandle(handle, result);
+        } else {
+          downloadPdfFallback(result, filename);
+        }
+        showToast(`${filename} を保存しました`, "success");
+      } catch (err) {
+        const label = errorLabel || "PDFの保存";
+        const detail = err instanceof Error ? err.message : "";
+        showToast(
+          `${label}に失敗しました${detail ? `: ${detail}` : ""}`,
+          "error"
+        );
+      } finally {
+        setProcessing(false);
+      }
+    },
+    [showToast]
+  );
+
+  // --- 保存ハンドラ（タブごと） ---
+
+  const handleEditSave = useCallback(async () => {
     if (pdf.files.length === 0 || pdf.pages.length === 0) return;
+    const file = pdf.files[0];
+    const filePages = pdf.pages.filter((p) => p.fileId === file.id);
+    if (filePages.length === 0) return;
+    const filename = addFilenameSuffix(file.name, "_edited");
+    await performSave(
+      filename,
+      async () => {
+        const data = await file.sourceFile.arrayBuffer();
+        return editPdfPages(data, filePages);
+      },
+      "PDFの編集"
+    );
+  }, [pdf.files, pdf.pages, performSave]);
 
-    setProcessing(true);
-    try {
-      const file = pdf.files[0];
-      // pages の現在の順序から 0始まりインデックスの配列を生成
-      const newOrder = pdf.pages.map((p) => p.pageNumber - 1);
-      const result = await reorderPdfPages(file.data, newOrder);
-      const filename = addFilenameSuffix(file.name, "_reordered");
-      downloadPdf(result, filename);
-      showToast(`${filename} をダウンロードしました`, "success");
-    } catch {
-      showToast("PDFの並び替えに失敗しました", "error");
-    } finally {
-      setProcessing(false);
-    }
-  }, [pdf.files, pdf.pages, showToast]);
-
-  const handleMergeDownload = useCallback(async () => {
+  const handleMergeSave = useCallback(async () => {
     if (pdf.files.length < 2) return;
 
-    setProcessing(true);
-    try {
-      const sources = pdf.files.map((f) => ({ data: f.data }));
-      const result = await mergePdfs(sources);
-      downloadPdf(result, "merged.pdf");
-      showToast("merged.pdf をダウンロードしました", "success");
-    } catch {
-      showToast("PDFの結合に失敗しました", "error");
-    } finally {
-      setProcessing(false);
-    }
-  }, [pdf.files, showToast]);
+    const MERGE_SERVER_THRESHOLD = 100 * 1024 * 1024; // 100MB
 
-  const handleDeleteDownload = useCallback(async () => {
+    await performSave(
+      "merged.pdf",
+      async () => {
+        const totalSize = pdf.files.reduce((sum, f) => sum + f.size, 0);
+
+        if (totalSize >= MERGE_SERVER_THRESHOLD) {
+          return mergePdfsViaServer(pdf.files.map((f) => f.sourceFile));
+        } else {
+          const sources = pdf.files.map((f) => ({
+            getData: () => f.sourceFile.arrayBuffer(),
+          }));
+          return mergePdfs(sources);
+        }
+      },
+      "PDFの結合"
+    );
+  }, [pdf.files, performSave]);
+
+  const handleExtractSave = useCallback(async () => {
     const selected = pdf.pages.filter((p) => p.selected);
     if (selected.length === 0 || pdf.files.length === 0) return;
-    if (selected.length === pdf.pages.length) {
-      showToast("すべてのページを削除することはできません", "error");
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      const file = pdf.files[0];
-      const deletePageNumbers = selected.map((p) => p.pageNumber);
-      const result = await deletePages(file.data, deletePageNumbers);
-      const filename = addFilenameSuffix(file.name, "_deleted");
-      downloadPdf(result, filename);
-      showToast(`${filename} をダウンロードしました`, "success");
-    } catch {
-      showToast("ページの削除に失敗しました", "error");
-    } finally {
-      setProcessing(false);
-    }
-  }, [pdf.files, pdf.pages, showToast]);
-
-  const handleExtractDownload = useCallback(async () => {
-    const selected = pdf.pages.filter((p) => p.selected);
-    if (selected.length === 0 || pdf.files.length === 0) return;
-
-    setProcessing(true);
-    try {
-      const file = pdf.files[0];
-      const extractPageNumbers = selected.map((p) => p.pageNumber);
-      const result = await extractPages(file.data, extractPageNumbers);
-      const filename = addFilenameSuffix(file.name, "_extracted");
-      downloadPdf(result, filename);
-      showToast(`${filename} をダウンロードしました`, "success");
-    } catch {
-      showToast("ページの抽出に失敗しました", "error");
-    } finally {
-      setProcessing(false);
-    }
-  }, [pdf.files, pdf.pages, showToast]);
-
-  const handleRotateDownload = useCallback(async () => {
-    if (pdf.files.length === 0) return;
-    const rotated = pdf.pages.filter((p) => p.rotation !== 0);
-    if (rotated.length === 0) return;
-
-    setProcessing(true);
-    try {
-      const file = pdf.files[0];
-      const rotations: Record<number, PageRotation> = {};
-      for (const p of rotated) {
-        rotations[p.pageNumber] = p.rotation;
-      }
-      const result = await rotatePages(file.data, rotations);
-      const filename = addFilenameSuffix(file.name, "_rotated");
-      downloadPdf(result, filename);
-      showToast(`${filename} をダウンロードしました`, "success");
-    } catch {
-      showToast("ページの回転に失敗しました", "error");
-    } finally {
-      setProcessing(false);
-    }
-  }, [pdf.files, pdf.pages, showToast]);
+    const file = pdf.files[0];
+    const filename = addFilenameSuffix(file.name, "_extracted");
+    await performSave(
+      filename,
+      async () => {
+        const data = await file.sourceFile.arrayBuffer();
+        const extractPageNumbers = selected.map((p) => p.pageNumber);
+        return extractPages(data, extractPageNumbers);
+      },
+      "ページの抽出"
+    );
+  }, [pdf.files, pdf.pages, performSave]);
 
   const handleLoadBookmarks = useCallback(async () => {
     if (pdf.files.length === 0 || bookmarksLoaded) return;
     try {
       const file = pdf.files[0];
-      const existing = await readBookmarks(file.data);
+      const data = await file.sourceFile.arrayBuffer();
+      const existing = await readBookmarks(data);
       if (existing.length > 0) {
         setBookmarks(existing);
       }
@@ -163,36 +163,106 @@ export default function Home() {
     setBookmarksLoaded(true);
   }, [pdf.files, bookmarksLoaded]);
 
-  const handleBookmarkDownload = useCallback(async () => {
+  const handleBookmarkSave = useCallback(async () => {
     if (pdf.files.length === 0) return;
+    const file = pdf.files[0];
+    const filename = addFilenameSuffix(file.name, "_bookmarked");
+    await performSave(
+      filename,
+      async () => {
+        const data = await file.sourceFile.arrayBuffer();
+        return addBookmarks(data, bookmarks);
+      },
+      "しおりの書き込み"
+    );
+  }, [pdf.files, bookmarks, performSave]);
 
-    setProcessing(true);
-    try {
-      const file = pdf.files[0];
-      const result = await addBookmarks(file.data, bookmarks);
-      const filename = addFilenameSuffix(file.name, "_bookmarked");
-      downloadPdf(result, filename);
-      showToast(`${filename} をダウンロードしました`, "success");
-    } catch {
-      showToast("しおりの書き込みに失敗しました", "error");
-    } finally {
-      setProcessing(false);
+  const handleDeletePage = useCallback(
+    (pageId: string) => {
+      if (pdf.pages.length <= 1) {
+        showToast("最後の1ページは削除できません", "error");
+        return;
+      }
+      pdf.deletePage(pageId);
+    },
+    [pdf, showToast]
+  );
+
+  // --- 統合保存ハンドラ ---
+
+  const handleSave = useCallback(() => {
+    switch (activeTab) {
+      case "reorder":
+        return handleEditSave();
+      case "merge":
+        return handleMergeSave();
+      case "extract":
+        return handleExtractSave();
+      case "bookmark":
+        return handleBookmarkSave();
     }
-  }, [pdf.files, bookmarks, showToast]);
+  }, [activeTab, handleEditSave, handleMergeSave, handleExtractSave, handleBookmarkSave]);
 
   const hasPages = pdf.pages.length > 0;
   const selectedCount = pdf.pages.filter((p) => p.selected).length;
+  const deletedCount = pdf.files.length > 0
+    ? pdf.files.reduce((sum, f) => sum + f.pageCount, 0) - pdf.pages.length
+    : 0;
   const rotatedCount = pdf.pages.filter((p) => p.rotation !== 0).length;
+  const isBookmarkFullscreen = activeTab === "bookmark" && hasPages;
+
+  // 保存ボタンの無効化条件
+  const isSaveDisabled =
+    processing ||
+    !hasPages ||
+    (activeTab === "merge" && pdf.files.length < 2) ||
+    (activeTab === "extract" && selectedCount === 0) ||
+    (activeTab === "bookmark" && bookmarks.length === 0);
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className={`flex flex-col ${isBookmarkFullscreen ? "h-screen overflow-hidden" : "min-h-screen"}`}>
       <ProcessingOverlay visible={processing} message="PDFを処理中..." />
 
       {/* ヘッダー */}
-      <header className="border-b border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950">
-        <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-          PDF Edit Tool
-        </h1>
+      <header className={`border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 ${isBookmarkFullscreen ? "px-4 py-2" : "px-6 py-4"}`}>
+        <div className={`mx-auto flex items-center justify-between ${isBookmarkFullscreen ? "" : "max-w-6xl"}`}>
+          <h1 className={`font-bold text-zinc-900 dark:text-zinc-100 ${isBookmarkFullscreen ? "text-base" : "text-xl"}`}>
+            PDF Edit Tool
+          </h1>
+          {isBookmarkFullscreen && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                {pdf.files[0]?.name} — {pdf.pages.length}ページ
+              </span>
+              {!bookmarksLoaded && (
+                <button
+                  onClick={handleLoadBookmarks}
+                  className="rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                >
+                  既存しおり読込
+                </button>
+              )}
+              <button
+                onClick={pdf.clearAll}
+                className="rounded px-3 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+              >
+                クリア
+              </button>
+            </div>
+          )}
+          {hasPages && (
+            <button
+              onClick={handleSave}
+              disabled={isSaveDisabled}
+              className={`flex items-center gap-2 rounded-lg bg-blue-600 font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 ${isBookmarkFullscreen ? "px-4 py-1.5 text-xs" : "px-5 py-2 text-sm"}`}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+              {processing ? "処理中..." : "保存"}
+            </button>
+          )}
+        </div>
       </header>
 
       {/* タブナビゲーション */}
@@ -222,321 +292,130 @@ export default function Home() {
       </nav>
 
       {/* メインコンテンツ */}
-      <main className="flex-1 bg-zinc-50 px-6 py-6 dark:bg-zinc-900" role="tabpanel" id={`panel-${activeTab}`} aria-label={TABS.find((t) => t.id === activeTab)?.label}>
-        <div className="mx-auto max-w-6xl space-y-6">
-          {/* ファイルアップロード */}
-          <FileUploader
-            onFilesSelected={handleFilesSelected}
-            multiple={activeTab === "merge"}
-            loading={pdf.loading}
-            progress={pdf.progress}
+      <main
+        className={`flex-1 bg-zinc-50 dark:bg-zinc-900 ${isBookmarkFullscreen ? "min-h-0 overflow-hidden px-1" : "px-6 py-6"}`}
+        role="tabpanel"
+        id={`panel-${activeTab}`}
+        aria-label={TABS.find((t) => t.id === activeTab)?.label}
+      >
+        {isBookmarkFullscreen ? (
+          <BookmarkLayout
+            bookmarks={bookmarks}
+            onBookmarksChange={setBookmarks}
+            pages={pdf.pages}
+            files={pdf.files}
+            activeBookmarkNodeId={activeBookmarkNodeId}
+            onActiveNodeChange={setActiveBookmarkNodeId}
           />
+        ) : (
+          <div className="mx-auto max-w-6xl space-y-6">
+            {/* ファイルアップロード */}
+            <FileUploader
+              onFilesSelected={handleFilesSelected}
+              multiple={activeTab === "merge"}
+              loading={pdf.loading}
+              progress={pdf.progress}
+            />
 
-          {/* エラー表示 */}
-          {pdf.error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-              {pdf.error}
-            </div>
-          )}
+            {/* エラー表示 */}
+            {pdf.error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+                {pdf.error}
+              </div>
+            )}
 
-          {/* ファイル情報バー */}
-          {hasPages && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {pdf.files.length} ファイル / {pdf.pages.length} ページ
-                </span>
-                {isPageSelectTab && (
-                  <span className="text-sm text-zinc-500">
-                    {selectedCount} 件選択中
+            {/* ファイル情報バー */}
+            {hasPages && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                    {pdf.files.length} ファイル / {pdf.pages.length} ページ
                   </span>
-                )}
-              </div>
-              <div className="flex gap-2">
-                {isPageSelectTab && (
-                  <>
-                    <button
-                      onClick={pdf.selectAllPages}
-                      className="rounded px-3 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
-                    >
-                      全選択
-                    </button>
-                    <button
-                      onClick={pdf.deselectAllPages}
-                      className="rounded px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    >
-                      全解除
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={pdf.clearAll}
-                  className="rounded px-3 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
-                >
-                  クリア
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* タブ別コンテンツ */}
-          {hasPages && activeTab === "reorder" && (
-            <>
-              <PageSorter pages={pdf.pages} onReorder={pdf.reorderPages} />
-              <div className="flex justify-end">
-                <button
-                  onClick={handleReorderDownload}
-                  disabled={processing}
-                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {processing ? "処理中..." : "並び替えたPDFをダウンロード"}
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* 結合タブ */}
-          {hasPages && activeTab === "merge" && (
-            <>
-              <MergeFileList
-                files={pdf.files}
-                pages={pdf.pages}
-                onRemoveFile={pdf.removeFile}
-                onMoveFile={pdf.moveFile}
-              />
-              <div className="flex justify-end">
-                <button
-                  onClick={handleMergeDownload}
-                  disabled={processing || pdf.files.length < 2}
-                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {processing ? "処理中..." : "結合したPDFをダウンロード"}
-                </button>
-              </div>
-              {pdf.files.length < 2 && (
-                <p className="text-center text-sm text-zinc-400">
-                  結合するには2つ以上のPDFファイルをアップロードしてください
-                </p>
-              )}
-            </>
-          )}
-
-          {/* 削除タブ */}
-          {hasPages && activeTab === "delete" && (
-            <>
-              <PageSelector
-                pages={pdf.pages}
-                onToggleSelection={pdf.togglePageSelection}
-                onSelectAll={pdf.selectAllPages}
-                onDeselectAll={pdf.deselectAllPages}
-                onSelectByRange={pdf.selectByPageNumbers}
-              />
-              <div className="flex justify-end">
-                <button
-                  onClick={handleDeleteDownload}
-                  disabled={processing || selectedCount === 0}
-                  className="rounded-lg bg-red-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
-                >
-                  {processing
-                    ? "処理中..."
-                    : `選択した ${selectedCount} ページを削除してダウンロード`}
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* 抽出タブ */}
-          {hasPages && activeTab === "extract" && (
-            <>
-              <PageSelector
-                pages={pdf.pages}
-                onToggleSelection={pdf.togglePageSelection}
-                onSelectAll={pdf.selectAllPages}
-                onDeselectAll={pdf.deselectAllPages}
-                onSelectByRange={pdf.selectByPageNumbers}
-              />
-              <div className="flex justify-end">
-                <button
-                  onClick={handleExtractDownload}
-                  disabled={processing || selectedCount === 0}
-                  className="rounded-lg bg-green-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
-                >
-                  {processing
-                    ? "処理中..."
-                    : `選択した ${selectedCount} ページを抽出してダウンロード`}
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* 回転タブ */}
-          {hasPages && activeTab === "rotate" && (
-            <>
-              {/* 一括回転ボタン */}
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                  選択中のページを一括回転:
-                </span>
+                  {activeTab === "reorder" && (deletedCount > 0 || rotatedCount > 0) && (
+                    <span className="text-sm text-zinc-500">
+                      {deletedCount > 0 && `${deletedCount}ページ削除`}
+                      {deletedCount > 0 && rotatedCount > 0 && " / "}
+                      {rotatedCount > 0 && `${rotatedCount}ページ回転`}
+                    </span>
+                  )}
+                  {isPageSelectTab && (
+                    <span className="text-sm text-zinc-500">
+                      {selectedCount} 件選択中
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2">
+                  {isPageSelectTab && (
+                    <>
+                      <button
+                        onClick={pdf.selectAllPages}
+                        className="rounded px-3 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                      >
+                        全選択
+                      </button>
+                      <button
+                        onClick={pdf.deselectAllPages}
+                        className="rounded px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        全解除
+                      </button>
+                    </>
+                  )}
                   <button
-                    onClick={() => pdf.rotateSelectedPages(90)}
-                    disabled={selectedCount === 0}
-                    className="flex items-center gap-1 rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    onClick={pdf.clearAll}
+                    className="rounded px-3 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                   >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                    </svg>
-                    90°
-                  </button>
-                  <button
-                    onClick={() => pdf.rotateSelectedPages(180)}
-                    disabled={selectedCount === 0}
-                    className="flex items-center gap-1 rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  >
-                    180°
-                  </button>
-                  <button
-                    onClick={() => pdf.rotateSelectedPages(270)}
-                    disabled={selectedCount === 0}
-                    className="flex items-center gap-1 rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                    270°
+                    クリア
                   </button>
                 </div>
-                <span className="text-xs text-zinc-400">
-                  {selectedCount} 件選択 / {rotatedCount} 件回転済み
-                </span>
               </div>
+            )}
 
-              {/* サムネイルグリッド（個別回転ボタン付き） */}
-              <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-                {pdf.pages.map((page) => (
-                  <div key={page.id} className="group relative flex flex-col items-center gap-1">
-                    {/* 選択クリック領域 */}
-                    <button
-                      type="button"
-                      onClick={() => pdf.togglePageSelection(page.id)}
-                      className={`
-                        relative w-full rounded-lg p-2 transition-all
-                        hover:bg-zinc-100 dark:hover:bg-zinc-800
-                        ${page.selected ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950/30" : ""}
-                      `}
-                    >
-                      {/* 選択チェックマーク */}
-                      <div
-                        className={`
-                          absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center
-                          rounded-full border-2 text-xs transition-colors
-                          ${page.selected
-                            ? "border-blue-500 bg-blue-500 text-white"
-                            : "border-zinc-300 bg-white dark:border-zinc-600 dark:bg-zinc-800"}
-                        `}
-                      >
-                        {page.selected && "✓"}
-                      </div>
+            {/* 並び替え（+削除+回転）タブ */}
+            {hasPages && activeTab === "reorder" && (
+              <>
+                <p className="text-xs text-zinc-400">
+                  サムネイルをドラッグして並び替え / ×で削除 / 矢印で回転
+                </p>
+                <PageSorter
+                  pages={pdf.pages}
+                  onReorder={pdf.reorderPages}
+                  onDeletePage={handleDeletePage}
+                  onRotatePage={pdf.rotatePage}
+                  canDelete={pdf.pages.length > 1}
+                />
+              </>
+            )}
 
-                      {/* サムネイル */}
-                      <div className="mx-auto overflow-hidden rounded border border-zinc-200 shadow-sm dark:border-zinc-700">
-                        {page.thumbnailUrl ? (
-                          <img
-                            src={page.thumbnailUrl}
-                            alt={`Page ${page.pageNumber}`}
-                            className="h-auto w-full transition-transform"
-                            style={{ transform: `rotate(${page.rotation}deg)` }}
-                            draggable={false}
-                          />
-                        ) : (
-                          <div className="flex h-32 w-24 items-center justify-center bg-zinc-100 dark:bg-zinc-800">
-                            <span className="text-xs text-zinc-400">読込中</span>
-                          </div>
-                        )}
-                      </div>
-                    </button>
+            {/* 結合タブ */}
+            {hasPages && activeTab === "merge" && (
+              <>
+                <MergeFileList
+                  files={pdf.files}
+                  pages={pdf.pages}
+                  onRemoveFile={pdf.removeFile}
+                  onMoveFile={pdf.moveFile}
+                />
+                {pdf.files.length < 2 && (
+                  <p className="text-center text-sm text-zinc-400">
+                    結合するには2つ以上のPDFファイルをアップロードしてください
+                  </p>
+                )}
+              </>
+            )}
 
-                    {/* 個別回転ボタン + ページ番号 */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => pdf.rotatePage(page.id, 270)}
-                        className="rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700"
-                        title="左に90°回転"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4" />
-                        </svg>
-                      </button>
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {page.pageNumber}
-                        {page.rotation !== 0 && (
-                          <span className="ml-0.5 text-blue-500">{page.rotation}°</span>
-                        )}
-                      </span>
-                      <button
-                        onClick={() => pdf.rotatePage(page.id, 90)}
-                        className="rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700"
-                        title="右に90°回転"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a5 5 0 00-5 5v2M21 10l-4-4M21 10l-4 4" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* ダウンロードボタン */}
-              <div className="flex justify-end">
-                <button
-                  onClick={handleRotateDownload}
-                  disabled={processing || rotatedCount === 0}
-                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {processing
-                    ? "処理中..."
-                    : `回転したPDFをダウンロード (${rotatedCount}ページ)`}
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* しおりタブ */}
-          {hasPages && activeTab === "bookmark" && (
-            <>
-              {!bookmarksLoaded && (
-                <div className="flex justify-center">
-                  <button
-                    onClick={handleLoadBookmarks}
-                    className="rounded-lg border border-zinc-300 px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                  >
-                    既存のしおりを読み込む
-                  </button>
-                </div>
-              )}
-              <BookmarkEditor
-                bookmarks={bookmarks}
-                onBookmarksChange={setBookmarks}
-                totalPages={pdf.pages.length}
+            {/* 抽出タブ */}
+            {hasPages && activeTab === "extract" && (
+              <PageSelector
                 pages={pdf.pages}
-                activeNodeId={activeBookmarkNodeId}
-                onActiveNodeChange={setActiveBookmarkNodeId}
+                onToggleSelection={pdf.togglePageSelection}
+                onSelectAll={pdf.selectAllPages}
+                onDeselectAll={pdf.deselectAllPages}
+                onSelectByRange={pdf.selectByPageNumbers}
               />
-              <div className="flex justify-end">
-                <button
-                  onClick={handleBookmarkDownload}
-                  disabled={processing || bookmarks.length === 0}
-                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {processing
-                    ? "処理中..."
-                    : `しおり付きPDFをダウンロード (${bookmarks.length}件)`}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

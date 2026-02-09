@@ -11,7 +11,7 @@ export async function rotatePages(
   pdfData: ArrayBuffer,
   rotations: Record<number, PageRotation>
 ): Promise<Uint8Array> {
-  const pdfDoc = await PDFDocument.load(pdfData);
+  const pdfDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
   const pages = pdfDoc.getPages();
 
   for (const [pageNumStr, angle] of Object.entries(rotations)) {

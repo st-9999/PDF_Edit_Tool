@@ -20,14 +20,23 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { PageInfo } from "@/types/pdf";
+import type { PageInfo, PageRotation } from "@/types/pdf";
 
 interface PageSorterProps {
   pages: PageInfo[];
   onReorder: (pages: PageInfo[]) => void;
+  onDeletePage?: (pageId: string) => void;
+  onRotatePage?: (pageId: string, angle: PageRotation) => void;
+  canDelete?: boolean;
 }
 
-export function PageSorter({ pages, onReorder }: PageSorterProps) {
+export function PageSorter({
+  pages,
+  onReorder,
+  onDeletePage,
+  onRotatePage,
+  canDelete = true,
+}: PageSorterProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -74,7 +83,13 @@ export function PageSorter({ pages, onReorder }: PageSorterProps) {
       >
         <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
           {pages.map((page) => (
-            <SortablePageItem key={page.id} page={page} />
+            <SortablePageItem
+              key={page.id}
+              page={page}
+              onDelete={onDeletePage}
+              onRotate={onRotatePage}
+              canDelete={canDelete}
+            />
           ))}
         </div>
       </SortableContext>
@@ -88,9 +103,17 @@ export function PageSorter({ pages, onReorder }: PageSorterProps) {
 
 interface SortablePageItemProps {
   page: PageInfo;
+  onDelete?: (pageId: string) => void;
+  onRotate?: (pageId: string, angle: PageRotation) => void;
+  canDelete?: boolean;
 }
 
-function SortablePageItem({ page }: SortablePageItemProps) {
+function SortablePageItem({
+  page,
+  onDelete,
+  onRotate,
+  canDelete,
+}: SortablePageItemProps) {
   const {
     attributes,
     listeners,
@@ -110,19 +133,38 @@ function SortablePageItem({ page }: SortablePageItemProps) {
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
       className={`
-        flex cursor-grab flex-col items-center gap-1 rounded-lg p-2
+        group relative flex flex-col items-center gap-1 rounded-lg p-2
         transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800
         ${isDragging ? "opacity-30" : ""}
       `}
     >
-      <div className="overflow-hidden rounded border border-zinc-200 shadow-sm dark:border-zinc-700">
+      {/* 削除ボタン */}
+      {onDelete && canDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(page.id);
+          }}
+          className="absolute top-1 right-1 z-10 hidden h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white shadow-sm hover:bg-red-600 group-hover:flex"
+          title="ページを削除"
+        >
+          ×
+        </button>
+      )}
+
+      {/* サムネイル（ドラッグハンドル） */}
+      <div
+        {...listeners}
+        className="cursor-grab overflow-hidden rounded border border-zinc-200 shadow-sm dark:border-zinc-700"
+      >
         {page.thumbnailUrl ? (
           <img
             src={page.thumbnailUrl}
             alt={`Page ${page.pageNumber}`}
-            className="h-auto w-full"
+            className="h-auto w-full transition-transform"
+            style={{ transform: `rotate(${page.rotation}deg)` }}
             draggable={false}
           />
         ) : (
@@ -131,9 +173,46 @@ function SortablePageItem({ page }: SortablePageItemProps) {
           </div>
         )}
       </div>
-      <span className="text-xs text-zinc-500 dark:text-zinc-400">
-        {page.pageNumber}
-      </span>
+
+      {/* 回転ボタン + ページ番号 */}
+      <div className="flex items-center gap-1">
+        {onRotate && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRotate(page.id, 270);
+            }}
+            className="rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700"
+            title="左に90°回転"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4" />
+            </svg>
+          </button>
+        )}
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          {page.pageNumber}
+          {page.rotation !== 0 && (
+            <span className="ml-0.5 text-blue-500">{page.rotation}°</span>
+          )}
+        </span>
+        {onRotate && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRotate(page.id, 90);
+            }}
+            className="rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700"
+            title="右に90°回転"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a5 5 0 00-5 5v2M21 10l-4-4M21 10l-4 4" />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -146,13 +225,17 @@ function PageOverlay({ page }: { page: PageInfo }) {
           <img
             src={page.thumbnailUrl}
             alt={`Page ${page.pageNumber}`}
-            className="h-auto w-full"
+            className="h-auto w-full transition-transform"
+            style={{ transform: `rotate(${page.rotation}deg)` }}
             draggable={false}
           />
         )}
       </div>
       <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
         {page.pageNumber}
+        {page.rotation !== 0 && (
+          <span className="ml-0.5">{page.rotation}°</span>
+        )}
       </span>
     </div>
   );
