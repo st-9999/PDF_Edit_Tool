@@ -15,9 +15,6 @@ interface BookmarkEditorProps {
   bookmarks: BookmarkNode[];
   onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
   totalPages: number;
-  /** ページサムネイルクリックでページ番号を設定するためのアクティブノードID */
-  activeNodeId: string | null;
-  onActiveNodeChange: (nodeId: string | null) => void;
   /** しおりノードからページビュアーへナビゲート */
   onPageNavigate?: (pageNumber: number) => void;
 }
@@ -26,8 +23,6 @@ export function BookmarkEditor({
   bookmarks,
   onBookmarksChange,
   totalPages,
-  activeNodeId,
-  onActiveNodeChange,
   onPageNavigate,
 }: BookmarkEditorProps) {
   const nodeCount = countNodes(bookmarks);
@@ -47,21 +42,15 @@ export function BookmarkEditor({
           onClick={handleAddRoot}
           className="rounded bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-950/50"
         >
-          + 追加
+          + 親しおりを追加
         </button>
       </div>
-
-      {activeNodeId && (
-        <p className="text-[11px] text-amber-600 dark:text-amber-400">
-          右側のサムネイルをクリックするとページ番号が設定されます
-        </p>
-      )}
 
       {/* ツリー表示 */}
       {bookmarks.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-600">
           <p className="text-xs text-zinc-400">
-            しおりがありません。「+ 追加」で作成してください。
+            しおりがありません。「+ 親しおりを追加」で作成してください。
           </p>
         </div>
       ) : (
@@ -74,8 +63,6 @@ export function BookmarkEditor({
               bookmarks={bookmarks}
               onBookmarksChange={onBookmarksChange}
               totalPages={totalPages}
-              activeNodeId={activeNodeId}
-              onActiveNodeChange={onActiveNodeChange}
               onPageNavigate={onPageNavigate}
             />
           ))}
@@ -91,8 +78,6 @@ interface BookmarkTreeNodeProps {
   bookmarks: BookmarkNode[];
   onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
   totalPages: number;
-  activeNodeId: string | null;
-  onActiveNodeChange: (nodeId: string | null) => void;
   onPageNavigate?: (pageNumber: number) => void;
 }
 
@@ -102,16 +87,12 @@ function BookmarkTreeNode({
   bookmarks,
   onBookmarksChange,
   totalPages,
-  activeNodeId,
-  onActiveNodeChange,
   onPageNavigate,
 }: BookmarkTreeNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(node.title);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isActive = activeNodeId === node.id;
-
   // Focus input when entering edit mode
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -162,12 +143,7 @@ function BookmarkTreeNode({
   return (
     <div style={{ marginLeft: depth * 16 }}>
       <div
-        className={`
-          group flex items-center gap-1.5 rounded px-2 py-1.5 transition-colors
-          ${isActive
-            ? "bg-amber-50 dark:bg-amber-950/30"
-            : "hover:bg-zinc-100 dark:hover:bg-zinc-700/50"}
-        `}
+        className="group flex items-center gap-1.5 rounded px-2 py-1.5 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-700/50"
       >
         {/* 展開/折りたたみ */}
         {node.children.length > 0 ? (
@@ -228,21 +204,6 @@ function BookmarkTreeNode({
             }}
             className="w-10 rounded border border-zinc-200 bg-transparent px-1 py-0.5 text-center text-[11px] text-zinc-600 focus:border-blue-400 focus:outline-none dark:border-zinc-600 dark:text-zinc-400"
           />
-          <button
-            onClick={() =>
-              onActiveNodeChange(isActive ? null : node.id)
-            }
-            className={`rounded p-0.5 transition-colors ${
-              isActive
-                ? "bg-amber-200 text-amber-700 dark:bg-amber-800 dark:text-amber-200"
-                : "text-zinc-400 hover:text-amber-500 opacity-0 group-hover:opacity-100"
-            }`}
-            title="サムネイルからページを選択"
-          >
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-            </svg>
-          </button>
         </div>
 
         {/* 操作ボタン: 子追加・削除のみ */}
@@ -283,8 +244,6 @@ function BookmarkTreeNode({
             bookmarks={bookmarks}
             onBookmarksChange={onBookmarksChange}
             totalPages={totalPages}
-            activeNodeId={activeNodeId}
-            onActiveNodeChange={onActiveNodeChange}
             onPageNavigate={onPageNavigate}
           />
         ))}

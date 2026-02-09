@@ -13,8 +13,6 @@ interface BookmarkLayoutProps {
   onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
   pages: PageInfo[];
   files: PdfFileInfo[];
-  activeBookmarkNodeId: string | null;
-  onActiveNodeChange: (nodeId: string | null) => void;
 }
 
 export function BookmarkLayout({
@@ -22,8 +20,6 @@ export function BookmarkLayout({
   onBookmarksChange,
   pages,
   files,
-  activeBookmarkNodeId,
-  onActiveNodeChange,
 }: BookmarkLayoutProps) {
   const [selectedPageNumber, setSelectedPageNumber] = useState(1);
 
@@ -44,8 +40,6 @@ export function BookmarkLayout({
                 bookmarks={bookmarks}
                 onBookmarksChange={onBookmarksChange}
                 totalPages={pages.length}
-                activeNodeId={activeBookmarkNodeId}
-                onActiveNodeChange={onActiveNodeChange}
                 onPageNavigate={setSelectedPageNumber}
               />
             </div>
@@ -82,10 +76,6 @@ export function BookmarkLayout({
                 pages={pages}
                 selectedPageNumber={selectedPageNumber}
                 onPageSelect={setSelectedPageNumber}
-                activeBookmarkNodeId={activeBookmarkNodeId}
-                bookmarks={bookmarks}
-                onBookmarksChange={onBookmarksChange}
-                onActiveNodeChange={onActiveNodeChange}
               />
             </div>
           </div>

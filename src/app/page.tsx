@@ -35,7 +35,6 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("reorder");
   const [processing, setProcessing] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkNode[]>([]);
-  const [activeBookmarkNodeId, setActiveBookmarkNodeId] = useState<string | null>(null);
   const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
   const pdf = usePdf();
   const { showToast } = useToast();
@@ -152,7 +151,6 @@ export default function Home() {
     // ファイルがクリアされた場合
     if (!currentFileId) {
       setBookmarks([]);
-      setActiveBookmarkNodeId(null);
       setBookmarksLoaded(false);
       return;
     }
@@ -166,7 +164,6 @@ export default function Home() {
         const existing = await readBookmarks(data);
         if (!cancelled) {
           setBookmarks(existing);
-          setActiveBookmarkNodeId(null);
           setBookmarksLoaded(true);
         }
       } catch {
@@ -315,8 +312,6 @@ export default function Home() {
             onBookmarksChange={setBookmarks}
             pages={pdf.pages}
             files={pdf.files}
-            activeBookmarkNodeId={activeBookmarkNodeId}
-            onActiveNodeChange={setActiveBookmarkNodeId}
           />
         ) : (
           <div className="mx-auto max-w-6xl space-y-6">

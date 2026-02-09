@@ -1,27 +1,18 @@
 "use client";
 
 import { useRef, useEffect, useCallback } from "react";
-import type { PageInfo, BookmarkNode } from "@/types/pdf";
-import { updatePageNumber } from "@/lib/utils/bookmark-tree";
+import type { PageInfo } from "@/types/pdf";
 
 interface ThumbnailStripProps {
   pages: PageInfo[];
   selectedPageNumber: number;
   onPageSelect: (pageNumber: number) => void;
-  activeBookmarkNodeId: string | null;
-  bookmarks: BookmarkNode[];
-  onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
-  onActiveNodeChange: (nodeId: string | null) => void;
 }
 
 export function ThumbnailStrip({
   pages,
   selectedPageNumber,
   onPageSelect,
-  activeBookmarkNodeId,
-  bookmarks,
-  onBookmarksChange,
-  onActiveNodeChange,
 }: ThumbnailStripProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -36,22 +27,9 @@ export function ThumbnailStrip({
 
   const handleClick = useCallback(
     (pageNumber: number) => {
-      if (activeBookmarkNodeId) {
-        // Page-assign mode: set page number on the active bookmark node
-        onBookmarksChange(
-          updatePageNumber(bookmarks, activeBookmarkNodeId, pageNumber)
-        );
-        onActiveNodeChange(null);
-      }
       onPageSelect(pageNumber);
     },
-    [
-      activeBookmarkNodeId,
-      bookmarks,
-      onBookmarksChange,
-      onActiveNodeChange,
-      onPageSelect,
-    ]
+    [onPageSelect]
   );
 
   return (
@@ -60,11 +38,6 @@ export function ThumbnailStrip({
         <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
           ページ一覧
         </h4>
-        {activeBookmarkNodeId && (
-          <p className="mt-0.5 text-[10px] text-amber-600 dark:text-amber-400">
-            クリックでページ番号を設定
-          </p>
-        )}
       </div>
       <div
         ref={containerRef}
@@ -89,9 +62,7 @@ export function ThumbnailStrip({
                   flex flex-col items-center gap-1 rounded p-1.5 transition-all
                   ${isSelected
                     ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950/30"
-                    : activeBookmarkNodeId
-                      ? "cursor-pointer hover:bg-amber-50 hover:ring-2 hover:ring-amber-400 dark:hover:bg-amber-950/30"
-                      : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}
+                    : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}
                 `}
               >
                 <div className="w-full overflow-hidden rounded border border-zinc-200 dark:border-zinc-600">
