@@ -6,7 +6,7 @@ import { PageSorter } from "@/components/page-sorter/PageSorter";
 import { MergeFileList } from "@/components/file-uploader/MergeFileList";
 import { PageSelector } from "@/components/page-selector/PageSelector";
 import { usePdf } from "@/hooks/use-pdf";
-import { mergePdfs, mergePdfsViaServer } from "@/lib/pdf/merge";
+import { mergePdfs } from "@/lib/pdf/merge";
 import { extractPages } from "@/lib/pdf/extract";
 import { editPdfPages } from "@/lib/pdf/edit";
 import { addBookmarks, readBookmarks } from "@/lib/pdf/bookmark";
@@ -112,21 +112,13 @@ export default function Home() {
   const handleMergeSave = useCallback(async () => {
     if (pdf.files.length < 2) return;
 
-    const MERGE_SERVER_THRESHOLD = 100 * 1024 * 1024; // 100MB
-
     await performSave(
       "merged.pdf",
       async () => {
-        const totalSize = pdf.files.reduce((sum, f) => sum + f.size, 0);
-
-        if (totalSize >= MERGE_SERVER_THRESHOLD) {
-          return mergePdfsViaServer(pdf.files.map((f) => f.sourceFile));
-        } else {
-          const sources = pdf.files.map((f) => ({
-            getData: () => f.sourceFile.arrayBuffer(),
-          }));
-          return mergePdfs(sources);
-        }
+        const sources = pdf.files.map((f) => ({
+          getData: () => f.sourceFile.arrayBuffer(),
+        }));
+        return mergePdfs(sources);
       },
       "PDFの結合"
     );
