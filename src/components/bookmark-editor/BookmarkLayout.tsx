@@ -28,7 +28,7 @@ export function BookmarkLayout({
   const [selectedPageNumber, setSelectedPageNumber] = useState(1);
 
   const sourceFile = files.length > 0 ? files[0].sourceFile : null;
-  const { renderPage, pdfDoc, loading, totalPages } = usePageViewer({
+  const { renderPage, loading, totalPages } = usePageViewer({
     sourceFile,
     active: true,
   });
@@ -64,7 +64,6 @@ export function BookmarkLayout({
                 pageNumber={selectedPageNumber}
                 totalPages={totalPages}
                 renderPage={renderPage}
-                pdfDoc={pdfDoc}
                 loading={loading}
                 onPageChange={setSelectedPageNumber}
               />

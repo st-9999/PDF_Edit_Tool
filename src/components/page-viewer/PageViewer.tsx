@@ -1,22 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { PDFDocumentProxy } from "pdfjs-dist";
 
 const ZOOM_MIN = 30;
 const ZOOM_MAX = 100;
 const ZOOM_DEFAULT = 60;
 const ZOOM_STEP = 10;
 
-// Viewport scale used by renderPageThumbnail in use-page-viewer
-const RENDER_SCALE = 2.0;
-
 interface PageViewerProps {
   /** 表示するページ番号（1始まり） */
   pageNumber: number;
   totalPages: number;
   renderPage: (pageNumber: number) => Promise<string | null>;
-  pdfDoc?: PDFDocumentProxy | null;
   loading: boolean;
   onPageChange?: (pageNumber: number) => void;
 }
@@ -25,7 +20,6 @@ export function PageViewer({
   pageNumber,
   totalPages,
   renderPage,
-  pdfDoc,
   loading,
   onPageChange,
 }: PageViewerProps) {
@@ -33,14 +27,8 @@ export function PageViewer({
   const [rendering, setRendering] = useState(false);
   const [zoom, setZoom] = useState(ZOOM_DEFAULT);
   const containerRef = useRef<HTMLDivElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-  const textLayerRef = useRef<HTMLDivElement>(null);
-  const textLayerInstanceRef = useRef<{ cancel: () => void } | null>(null);
-  // Native pixel width of the TextLayer (before CSS scaling)
-  const textLayerNativeWidthRef = useRef(0);
 
-  // Render the current page image when pageNumber changes
+  // Render the current page when pageNumber changes
   useEffect(() => {
     if (totalPages === 0) return;
     let cancelled = false;
@@ -57,84 +45,6 @@ export function PageViewer({
       cancelled = true;
     };
   }, [pageNumber, totalPages, renderPage]);
-
-  // Render text layer overlay after image is loaded
-  useEffect(() => {
-    if (!pdfDoc || !imageUrl || totalPages === 0) return;
-    if (pageNumber < 1 || pageNumber > pdfDoc.numPages) return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        // Cancel previous text layer
-        if (textLayerInstanceRef.current) {
-          textLayerInstanceRef.current.cancel();
-          textLayerInstanceRef.current = null;
-        }
-
-        const page = await pdfDoc.getPage(pageNumber);
-        if (cancelled) return;
-
-        const viewport = page.getViewport({ scale: RENDER_SCALE });
-
-        const textLayerDiv = textLayerRef.current;
-        if (!textLayerDiv || cancelled) return;
-
-        // Clear previous content
-        textLayerDiv.innerHTML = "";
-        const nativeW = Math.floor(viewport.width);
-        const nativeH = Math.floor(viewport.height);
-        textLayerDiv.style.width = `${nativeW}px`;
-        textLayerDiv.style.height = `${nativeH}px`;
-        textLayerNativeWidthRef.current = nativeW;
-
-        const textContent = await page.getTextContent();
-        if (cancelled) return;
-
-        const { TextLayer } = await import("pdfjs-dist");
-        if (cancelled) return;
-
-        const tl = new TextLayer({
-          textContentSource: textContent,
-          container: textLayerDiv,
-          viewport,
-        });
-        textLayerInstanceRef.current = tl;
-        await tl.render();
-      } catch {
-        // ignore text layer errors — image still works
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (textLayerInstanceRef.current) {
-        textLayerInstanceRef.current.cancel();
-        textLayerInstanceRef.current = null;
-      }
-    };
-  }, [pdfDoc, pageNumber, imageUrl, totalPages]);
-
-  // Scale TextLayer to match displayed image size
-  useEffect(() => {
-    const wrapper = wrapperRef.current;
-    const textLayerDiv = textLayerRef.current;
-    if (!wrapper || !textLayerDiv) return;
-
-    const syncScale = () => {
-      const nativeW = textLayerNativeWidthRef.current;
-      if (nativeW <= 0) return;
-      const displayW = wrapper.getBoundingClientRect().width;
-      const scale = displayW / nativeW;
-      textLayerDiv.style.transform = `scale(${scale})`;
-    };
-
-    syncScale();
-    const ro = new ResizeObserver(syncScale);
-    ro.observe(wrapper);
-    return () => ro.disconnect();
-  }, [imageUrl]);
 
   // --- Page navigation ---
   const goToPrev = useCallback(() => {
@@ -260,24 +170,13 @@ export function PageViewer({
               <span className="text-xs">ページ {pageNumber} を読み込み中...</span>
             </div>
           ) : imageUrl ? (
-            <div
-              ref={wrapperRef}
-              className="relative shadow-lg"
+            <img
+              src={imageUrl}
+              alt={`Page ${pageNumber}`}
+              className="shadow-lg"
               style={{ width: `${zoom}%` }}
-            >
-              <img
-                ref={imgRef}
-                src={imageUrl}
-                alt={`Page ${pageNumber}`}
-                className="block w-full"
-                draggable={false}
-              />
-              {/* TextLayer overlay — scaled to match img display size */}
-              <div
-                ref={textLayerRef}
-                className="textLayer absolute left-0 top-0 origin-top-left"
-              />
-            </div>
+              draggable={false}
+            />
           ) : (
             <span className="text-xs text-zinc-400">ページを表示できません</span>
           )}
