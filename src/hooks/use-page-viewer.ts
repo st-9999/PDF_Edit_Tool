@@ -13,6 +13,7 @@ interface UsePageViewerOptions {
 
 export interface UsePageViewerReturn {
   renderPage: (pageNumber: number) => Promise<string | null>;
+  pdfDoc: PDFDocumentProxy | null;
   loading: boolean;
   totalPages: number;
 }
@@ -101,5 +102,5 @@ export function usePageViewer({
     []
   );
 
-  return { renderPage, loading, totalPages };
+  return { renderPage, pdfDoc: pdfDocRef.current, loading, totalPages };
 }

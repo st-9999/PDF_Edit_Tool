@@ -1,50 +1,148 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 
 const ZOOM_MIN = 30;
 const ZOOM_MAX = 100;
 const ZOOM_DEFAULT = 60;
 const ZOOM_STEP = 10;
+const RENDER_SCALE = 2.0;
 
 interface PageViewerProps {
   /** 表示するページ番号（1始まり） */
   pageNumber: number;
   totalPages: number;
-  renderPage: (pageNumber: number) => Promise<string | null>;
-  loading: boolean;
+  pdfDoc?: PDFDocumentProxy | null;
   onPageChange?: (pageNumber: number) => void;
 }
 
 export function PageViewer({
   pageNumber,
   totalPages,
-  renderPage,
-  loading,
+  pdfDoc,
   onPageChange,
 }: PageViewerProps) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [zoom, setZoom] = useState(ZOOM_DEFAULT);
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const textLayerRef = useRef<HTMLDivElement>(null);
+  const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
+  const textLayerInstanceRef = useRef<{ cancel: () => void } | null>(null);
 
-  // Render the current page when pageNumber changes
+  // Render page to canvas + TextLayer in a single effect
   useEffect(() => {
-    if (totalPages === 0) return;
+    if (!pdfDoc || totalPages === 0) return;
+    if (pageNumber < 1 || pageNumber > pdfDoc.numPages) return;
+
     let cancelled = false;
+    let ro: ResizeObserver | null = null;
 
     setRendering(true);
-    renderPage(pageNumber).then((url) => {
-      if (!cancelled) {
-        setImageUrl(url);
+
+    (async () => {
+      try {
+        // Cancel previous tasks
+        if (renderTaskRef.current) {
+          renderTaskRef.current.cancel();
+          renderTaskRef.current = null;
+        }
+        if (textLayerInstanceRef.current) {
+          textLayerInstanceRef.current.cancel();
+          textLayerInstanceRef.current = null;
+        }
+
+        const page = await pdfDoc.getPage(pageNumber);
+        if (cancelled) return;
+
+        const viewport = page.getViewport({ scale: RENDER_SCALE });
+        const outputScale = window.devicePixelRatio || 1;
+
+        const canvas = canvasRef.current;
+        const textLayerDiv = textLayerRef.current;
+        const wrapper = wrapperRef.current;
+        if (!canvas || !textLayerDiv || !wrapper || cancelled) return;
+
+        // Set canvas physical dimensions for HiDPI
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx || cancelled) return;
+
+        // Render page to canvas
+        const transform =
+          outputScale !== 1
+            ? [outputScale, 0, 0, outputScale, 0, 0]
+            : undefined;
+
+        const renderTask = page.render({
+          canvas: null,
+          canvasContext: ctx,
+          viewport,
+          transform,
+        });
+        renderTaskRef.current = renderTask;
+        await renderTask.promise;
+        if (cancelled) return;
+        renderTaskRef.current = null;
         setRendering(false);
+
+        // Build TextLayer on top of canvas
+        textLayerDiv.innerHTML = "";
+        const textContent = await page.getTextContent();
+        if (cancelled) return;
+
+        const { TextLayer } = await import("pdfjs-dist");
+        if (cancelled) return;
+
+        const tl = new TextLayer({
+          textContentSource: textContent,
+          container: textLayerDiv,
+          viewport,
+        });
+        textLayerInstanceRef.current = tl;
+        await tl.render();
+        if (cancelled) return;
+        textLayerInstanceRef.current = null;
+
+        // Sync --total-scale-factor so TextLayer font/dimension calcs match canvas.
+        // TextLayer uses unscaled PDF page width (rawDims.pageWidth) internally,
+        // so we must divide by the unscaled width, not viewport.width (which
+        // includes RENDER_SCALE).
+        const rawPageWidth = viewport.width / viewport.scale;
+        const syncScale = () => {
+          const displayW = wrapper.getBoundingClientRect().width;
+          if (displayW > 0 && rawPageWidth > 0) {
+            textLayerDiv.style.setProperty(
+              "--total-scale-factor",
+              `${displayW / rawPageWidth}`
+            );
+          }
+        };
+        syncScale();
+        ro = new ResizeObserver(syncScale);
+        ro.observe(wrapper);
+      } catch {
+        if (!cancelled) setRendering(false);
       }
-    });
+    })();
 
     return () => {
       cancelled = true;
+      if (ro) ro.disconnect();
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
+      }
+      if (textLayerInstanceRef.current) {
+        textLayerInstanceRef.current.cancel();
+        textLayerInstanceRef.current = null;
+      }
     };
-  }, [pageNumber, totalPages, renderPage]);
+  }, [pdfDoc, pageNumber, totalPages]);
 
   // --- Page navigation ---
   const goToPrev = useCallback(() => {
@@ -161,24 +259,58 @@ export function PageViewer({
         <div className="flex min-h-full items-center justify-center p-4">
           {!hasPages ? (
             <span className="text-sm text-zinc-400">PDFを読み込んでください</span>
-          ) : rendering && !imageUrl ? (
-            <div className="flex flex-col items-center gap-2 text-zinc-400">
-              <svg className="h-6 w-6 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span className="text-xs">ページ {pageNumber} を読み込み中...</span>
-            </div>
-          ) : imageUrl ? (
-            <img
-              src={imageUrl}
-              alt={`Page ${pageNumber}`}
-              className="shadow-lg"
-              style={{ width: `${zoom}%` }}
-              draggable={false}
-            />
           ) : (
-            <span className="text-xs text-zinc-400">ページを表示できません</span>
+            <div
+              ref={wrapperRef}
+              className="relative min-h-[200px] shadow-lg"
+              style={{ width: `${zoom}%` }}
+            >
+              <canvas
+                ref={canvasRef}
+                width={0}
+                height={0}
+                className="block w-full"
+                style={{ height: "auto" }}
+              />
+              <div
+                ref={textLayerRef}
+                className="textLayer"
+                style={
+                  {
+                    "--scale-round-x": "1px",
+                    "--scale-round-y": "1px",
+                  } as React.CSSProperties
+                }
+              />
+              {rendering && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-2 text-zinc-400">
+                    <svg
+                      className="h-6 w-6 animate-spin"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                    <span className="text-xs">
+                      ページ {pageNumber} を読み込み中...
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
