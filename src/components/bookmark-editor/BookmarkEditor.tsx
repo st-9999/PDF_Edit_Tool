@@ -62,6 +62,11 @@ export function BookmarkEditor({
         </button>
       </div>
 
+      {/* ヒント */}
+      <p className="-mt-1.5 text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
+        Tip: ビューアー上でテキストを選択した状態でしおりを追加すると、選択テキストがしおり名になります。
+      </p>
+
       {/* ツリー表示 */}
       {bookmarks.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-600">
@@ -89,10 +94,6 @@ export function BookmarkEditor({
         </div>
       )}
 
-      {/* ヒント */}
-      <p className="text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
-        Tip: ビューアー上でテキストを選択した状態でしおりを追加すると、選択テキストがしおり名になります。
-      </p>
     </div>
   );
 }
