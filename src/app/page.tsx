@@ -27,8 +27,8 @@ import type { BookmarkNode } from "@/types/pdf";
 const TABS = [
   { id: "bookmark", label: "しおり" },
   { id: "reorder", label: "並び替え" },
-  { id: "merge", label: "結合" },
   { id: "extract", label: "抽出" },
+  { id: "merge", label: "結合" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -39,6 +39,7 @@ export default function Home() {
   const [bookmarks, setBookmarks] = useState<BookmarkNode[]>([]);
   const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [pendingTab, setPendingTab] = useState<TabId | null>(null);
   const pdf = usePdf();
   const { showToast } = useToast();
 
@@ -61,6 +62,26 @@ export default function Home() {
     setShowClearConfirm(false);
     pdf.clearAll();
   }, [pdf]);
+
+  // 結合タブから他タブへ移動する際、複数ファイルがあればクリア確認
+  const handleTabChange = useCallback(
+    (tab: TabId) => {
+      if (activeTab === "merge" && tab !== "merge" && pdf.files.length >= 2) {
+        setPendingTab(tab);
+      } else {
+        setActiveTab(tab);
+      }
+    },
+    [activeTab, pdf.files.length]
+  );
+
+  const handleTabChangeConfirm = useCallback(() => {
+    pdf.clearAll();
+    if (pendingTab) {
+      setActiveTab(pendingTab);
+      setPendingTab(null);
+    }
+  }, [pdf, pendingTab]);
 
   const isPageSelectTab = activeTab === "extract";
 
@@ -311,7 +332,7 @@ export default function Home() {
               role="tab"
               aria-selected={activeTab === tab.id}
               aria-controls={`panel-${tab.id}`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`
                 px-4 py-3 text-sm font-medium transition-colors
                 border-b-2
@@ -478,6 +499,33 @@ export default function Home() {
       >
         <p className="text-sm text-zinc-600 dark:text-zinc-300">
           読み込み中のPDFと編集内容がすべて破棄されます。よろしいですか？
+        </p>
+      </Dialog>
+
+      {/* 結合タブからの移動確認ダイアログ */}
+      <Dialog
+        open={pendingTab !== null}
+        onClose={() => setPendingTab(null)}
+        title="タブの移動"
+        footer={
+          <>
+            <button
+              onClick={() => setPendingTab(null)}
+              className="rounded-lg px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={handleTabChangeConfirm}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              クリアして移動
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          結合用に読み込んだ複数のPDFファイルがクリアされます。よろしいですか？
         </p>
       </Dialog>
     </div>
