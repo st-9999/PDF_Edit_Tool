@@ -48,7 +48,7 @@ export function BookmarkEditor({
   }, [onNodeSelect]);
 
   return (
-    <div className="flex min-h-full flex-col gap-3" onClick={handleBackgroundClick}>
+    <div className="min-h-full space-y-3" onClick={handleBackgroundClick}>
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
@@ -63,36 +63,34 @@ export function BookmarkEditor({
       </div>
 
       {/* ツリー表示 */}
-      <div className="flex-1">
-        {bookmarks.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-600">
-            <p className="text-xs text-zinc-400">
-              しおりがありません。「+ 親しおりを追加」で作成してください。
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            {bookmarks.map((node, index) => (
-              <BookmarkTreeNode
-                key={node.id}
-                node={node}
-                depth={0}
-                bookmarks={bookmarks}
-                onBookmarksChange={onBookmarksChange}
-                totalPages={totalPages}
-                currentPage={currentPage}
-                onPageNavigate={onPageNavigate}
-                selectedNodeId={selectedNodeId}
-                onNodeSelect={onNodeSelect}
-                isFirstSibling={index === 0}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {bookmarks.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-600">
+          <p className="text-xs text-zinc-400">
+            しおりがありません。「+ 親しおりを追加」で作成してください。
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-0.5">
+          {bookmarks.map((node, index) => (
+            <BookmarkTreeNode
+              key={node.id}
+              node={node}
+              depth={0}
+              bookmarks={bookmarks}
+              onBookmarksChange={onBookmarksChange}
+              totalPages={totalPages}
+              currentPage={currentPage}
+              onPageNavigate={onPageNavigate}
+              selectedNodeId={selectedNodeId}
+              onNodeSelect={onNodeSelect}
+              isFirstSibling={index === 0}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* ヒント（枠最下部に固定） */}
-      <p className="mt-auto text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
+      {/* ヒント */}
+      <p className="text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
         Tip: ビューアー上でテキストを選択した状態でしおりを追加すると、選択テキストがしおり名になります。
       </p>
     </div>
