@@ -163,7 +163,8 @@ class SequenceTracker {
 
   /**
    * 見出しが順序的に妥当かを判定し、内部状態を更新する。
-   * @returns true=採用, false=後退のため除外
+   * 同番号または+1のみ許可し、それ以外（後退・+2以上ジャンプ）は除外。
+   * @returns true=採用, false=除外
    */
   accept(level: 1 | 2 | 3, title: string): boolean {
     const major = extractLeadingNumber(title);
@@ -171,8 +172,8 @@ class SequenceTracker {
 
     const prev = this.lastMajor.get(level);
 
-    if (prev !== undefined && major < prev) {
-      // 後退 → 除外
+    if (prev !== undefined && major !== prev && major !== prev + 1) {
+      // 同番号でも+1でもない → 除外
       return false;
     }
 
