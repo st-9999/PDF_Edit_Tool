@@ -11,6 +11,7 @@ import { extractPages } from "@/lib/pdf/extract";
 import { editPdfPages } from "@/lib/pdf/edit";
 import { addBookmarks, readBookmarks } from "@/lib/pdf/bookmark";
 import { BookmarkLayout } from "@/components/bookmark-editor/BookmarkLayout";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import {
   hasFileSystemAccess,
   openSaveDialog,
@@ -242,9 +243,12 @@ export default function Home() {
       {/* ヘッダー */}
       <header className={`border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 ${isBookmarkFullscreen ? "px-4 py-2" : "px-6 py-4"}`}>
         <div className={`mx-auto flex items-center justify-between ${isBookmarkFullscreen ? "" : "max-w-6xl"}`}>
-          <h1 className={`font-bold text-zinc-900 dark:text-zinc-100 ${isBookmarkFullscreen ? "text-base" : "text-xl"}`}>
-            PDF Edit Tool
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className={`font-bold text-zinc-900 dark:text-zinc-100 ${isBookmarkFullscreen ? "text-base" : "text-xl"}`}>
+              PDF Edit Tool
+            </h1>
+            <ThemeToggle />
+          </div>
           {isBookmarkFullscreen && (
             <div className="flex items-center gap-3">
               <span className="text-xs text-zinc-500 dark:text-zinc-400">
