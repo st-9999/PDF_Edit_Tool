@@ -321,9 +321,6 @@ export function AutoBookmarkDialog({
                     <span className="text-xs text-zinc-700 dark:text-zinc-300">
                       {p.label}
                     </span>
-                    <code className="ml-auto max-w-[200px] truncate text-[10px] text-zinc-400">
-                      {p.pattern}
-                    </code>
                   </label>
                 ))}
             </div>
