@@ -24,16 +24,16 @@ import { ProcessingOverlay } from "@/components/ui/ProcessingOverlay";
 import type { BookmarkNode } from "@/types/pdf";
 
 const TABS = [
+  { id: "bookmark", label: "しおり" },
   { id: "reorder", label: "並び替え" },
   { id: "merge", label: "結合" },
   { id: "extract", label: "抽出" },
-  { id: "bookmark", label: "しおり" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<TabId>("reorder");
+  const [activeTab, setActiveTab] = useState<TabId>("bookmark");
   const [processing, setProcessing] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkNode[]>([]);
   const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
