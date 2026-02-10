@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   DndContext,
   closestCenter,
@@ -22,6 +22,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { PageInfo, PageRotation } from "@/types/pdf";
 
+const THUMB_BASE_PX = 120;
+const THUMB_SCALE_MIN = 0.5;
+const THUMB_SCALE_MAX = 2.5;
+const THUMB_SCALE_STEP = 0.1;
+
 interface PageSorterProps {
   pages: PageInfo[];
   onReorder: (pages: PageInfo[]) => void;
@@ -38,6 +43,8 @@ export function PageSorter({
   canDelete = true,
 }: PageSorterProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [thumbnailScale, setThumbnailScale] = useState(1);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -68,6 +75,25 @@ export function PageSorter({
     [pages, onReorder]
   );
 
+  // Ctrl + wheel でサムネイル拡縮
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setThumbnailScale((prev) => {
+        const delta = e.deltaY < 0 ? THUMB_SCALE_STEP : -THUMB_SCALE_STEP;
+        return Math.round(Math.max(THUMB_SCALE_MIN, Math.min(THUMB_SCALE_MAX, prev + delta)) * 10) / 10;
+      });
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const columnWidth = Math.round(THUMB_BASE_PX * thumbnailScale);
   const activePage = activeId ? pages.find((p) => p.id === activeId) : null;
 
   return (
@@ -81,7 +107,13 @@ export function PageSorter({
         items={pages.map((p) => p.id)}
         strategy={rectSortingStrategy}
       >
-        <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+        <div
+          ref={gridRef}
+          className="grid gap-4"
+          style={{
+            gridTemplateColumns: `repeat(auto-fill, minmax(${columnWidth}px, 1fr))`,
+          }}
+        >
           {pages.map((page) => (
             <SortablePageItem
               key={page.id}

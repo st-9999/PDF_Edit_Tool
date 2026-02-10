@@ -381,7 +381,8 @@ export default function Home() {
             {hasPages && activeTab === "reorder" && (
               <>
                 <p className="text-xs text-zinc-400">
-                  サムネイルをドラッグして並び替え / ×で削除 / 矢印で回転
+                  サムネイルをドラッグして並び替え / ×で削除 / 矢印で回転 /
+                  Ctrl+ホイールで拡大縮小
                 </p>
                 <PageSorter
                   pages={pdf.pages}
