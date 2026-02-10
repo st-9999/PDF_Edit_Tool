@@ -25,6 +25,8 @@ interface BookmarkEditorProps {
   selectedNodeId?: string | null;
   /** しおりノード選択時のコールバック */
   onNodeSelect?: (nodeId: string | null) => void;
+  /** 自動作成ダイアログを開く */
+  onAutoGenerate?: () => void;
 }
 
 export function BookmarkEditor({
@@ -35,6 +37,7 @@ export function BookmarkEditor({
   onPageNavigate,
   selectedNodeId,
   onNodeSelect,
+  onAutoGenerate,
 }: BookmarkEditorProps) {
   const nodeCount = countNodes(bookmarks);
 
@@ -54,12 +57,22 @@ export function BookmarkEditor({
         <h3 className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
           しおり一覧（{nodeCount} 件）
         </h3>
-        <button
-          onClick={handleAddRoot}
-          className="rounded bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-950/50"
-        >
-          + 親しおりを追加
-        </button>
+        <div className="flex items-center gap-1.5">
+          {onAutoGenerate && (
+            <button
+              onClick={onAutoGenerate}
+              className="rounded bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+            >
+              しおりを自動作成
+            </button>
+          )}
+          <button
+            onClick={handleAddRoot}
+            className="rounded bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-950/50"
+          >
+            + 親しおりを追加
+          </button>
+        </div>
       </div>
 
       {/* ツリー表示 */}

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Panel, Group, Separator } from "react-resizable-panels";
 import type { BookmarkNode, PageInfo, PdfFileInfo } from "@/types/pdf";
 import { BookmarkEditor } from "./BookmarkEditor";
+import { AutoBookmarkDialog } from "./AutoBookmarkDialog";
 import { PageViewer } from "@/components/page-viewer/PageViewer";
 import { ThumbnailStrip } from "@/components/thumbnail-strip/ThumbnailStrip";
 import { usePageViewer } from "@/hooks/use-page-viewer";
+import { countNodes } from "@/lib/utils/bookmark-tree";
 
 interface BookmarkLayoutProps {
   bookmarks: BookmarkNode[];
@@ -23,6 +25,7 @@ export function BookmarkLayout({
 }: BookmarkLayoutProps) {
   const [selectedPageNumber, setSelectedPageNumber] = useState(1);
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | null>(null);
+  const [autoDialogOpen, setAutoDialogOpen] = useState(false);
 
   const sourceFile = files.length > 0 ? files[0].sourceFile : null;
   const { pdfDoc, totalPages } = usePageViewer({
@@ -30,8 +33,26 @@ export function BookmarkLayout({
     active: true,
   });
 
+  const handleAutoGenerate = useCallback(
+    (generated: BookmarkNode[], mode: "replace" | "append") => {
+      if (mode === "replace") {
+        onBookmarksChange(generated);
+      } else {
+        onBookmarksChange([...bookmarks, ...generated]);
+      }
+    },
+    [bookmarks, onBookmarksChange]
+  );
+
   return (
     <div className="h-full">
+      <AutoBookmarkDialog
+        open={autoDialogOpen}
+        onClose={() => setAutoDialogOpen(false)}
+        pdfDoc={pdfDoc}
+        existingCount={countNodes(bookmarks)}
+        onGenerate={handleAutoGenerate}
+      />
       <Group orientation="horizontal" id="bookmark-layout">
         {/* 左カラム: しおりツリー */}
         <Panel id="bookmark-tree" defaultSize={27} minSize={15}>
@@ -45,6 +66,7 @@ export function BookmarkLayout({
                 onPageNavigate={setSelectedPageNumber}
                 selectedNodeId={selectedBookmarkId}
                 onNodeSelect={setSelectedBookmarkId}
+                onAutoGenerate={() => setAutoDialogOpen(true)}
               />
             </div>
           </div>
