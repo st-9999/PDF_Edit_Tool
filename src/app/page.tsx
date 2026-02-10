@@ -140,6 +140,16 @@ export default function Home() {
     );
   }, [pdf.files, pdf.pages, performSave]);
 
+  // PDFが読み込まれている間はページ離脱時に警告を表示
+  useEffect(() => {
+    if (pdf.files.length === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [pdf.files.length]);
+
   // PDFファイル変更時にしおりを自動読み込み
   const prevFileIdRef = useRef<string | null>(null);
   useEffect(() => {
