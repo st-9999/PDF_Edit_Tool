@@ -128,6 +128,68 @@ function compilePatterns(
     .map((p) => ({ regex: new RegExp(p.pattern, "mu"), level: p.level }));
 }
 
+/* ------------------------------------------------------------------ */
+/*  番号順序フィルタ                                                    */
+/* ------------------------------------------------------------------ */
+
+/** 全角数字→半角数字に正規化 */
+function normalizeDigits(s: string): string {
+  return s.replace(/[０-９]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30)
+  );
+}
+
+/**
+ * 見出しタイトルから先頭番号（メジャー番号）を抽出する。
+ * 例: "9.4 横断距離..." → 9, "第3章 ..." → 3, "1.2.3 ..." → 1
+ */
+function extractLeadingNumber(title: string): number | null {
+  const normalized = normalizeDigits(title.trim());
+  // "第N章" パターン
+  const chapterMatch = normalized.match(/^第(\d+)章/);
+  if (chapterMatch) return parseInt(chapterMatch[1], 10);
+  // "N.N" / "N.N.N" パターン
+  const numMatch = normalized.match(/^(\d+)[.．]/);
+  if (numMatch) return parseInt(numMatch[1], 10);
+  return null;
+}
+
+/**
+ * レベルごとに直前の先頭番号を追跡し、後退を検出するトラッカー。
+ * 上位レベルの見出し出現時に下位レベルの追跡をリセットする。
+ */
+class SequenceTracker {
+  private lastMajor: Map<number, number> = new Map();
+
+  /**
+   * 見出しが順序的に妥当かを判定し、内部状態を更新する。
+   * @returns true=採用, false=後退のため除外
+   */
+  accept(level: 1 | 2 | 3, title: string): boolean {
+    const major = extractLeadingNumber(title);
+    if (major === null) return true; // 番号なし（第N章以外のカスタム等）→ 常に採用
+
+    const prev = this.lastMajor.get(level);
+
+    if (prev !== undefined && major < prev) {
+      // 後退 → 除外
+      return false;
+    }
+
+    // 採用: 現在レベルの番号を更新
+    this.lastMajor.set(level, major);
+
+    // 上位レベルが来たら下位レベルをリセット（新章で節番号が1に戻るケースに対応）
+    for (const [l] of this.lastMajor) {
+      if (l > level) {
+        this.lastMajor.delete(l);
+      }
+    }
+
+    return true;
+  }
+}
+
 /**
  * PDF全ページからテキストを抽出し、見出しを検出する。
  */
@@ -142,6 +204,7 @@ export async function extractHeadings(
 
   const totalPages = pdfDoc.numPages;
   const headings: HeadingMatch[] = [];
+  const tracker = new SequenceTracker();
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
     if (signal?.aborted) break;
@@ -157,7 +220,7 @@ export async function extractHeadings(
 
     for (const { text } of lines) {
       const result = matchHeading(text, compiled);
-      if (result) {
+      if (result && tracker.accept(result.level, result.title)) {
         headings.push({
           title: result.title,
           level: result.level,
