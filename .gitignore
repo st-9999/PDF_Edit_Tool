@@ -37,3 +37,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ツール/エージェント設定
+.claude/
+.serena/
+.playwright-mcp/
+
+# テスト関連
+vitest.config.ts
+vitest.setup.ts
+src/**/*.test.ts
+src/**/test-helpers/
+docs/TEST_RESULTS.md
+
+# 参考資料・仕様書（ローカルのみ）
+docs/SPEC_*.md
+docs/参考資料*.png
+
+# 一時ファイル
+test.pdf
+tree-view-check.png
+nul
