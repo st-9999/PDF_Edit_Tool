@@ -88,6 +88,11 @@ export function BookmarkEditor({
           ))}
         </div>
       )}
+
+      {/* ヒント */}
+      <p className="text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
+        Tip: ビューアー上でテキストを選択した状態でしおりを追加すると、選択テキストがしおり名になります。
+      </p>
     </div>
   );
 }
