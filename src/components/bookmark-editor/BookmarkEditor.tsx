@@ -17,6 +17,8 @@ interface BookmarkEditorProps {
   bookmarks: BookmarkNode[];
   onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
   totalPages: number;
+  /** 現在ビューアーで表示中のページ番号 */
+  currentPage?: number;
   /** しおりノードからページビュアーへナビゲート */
   onPageNavigate?: (pageNumber: number) => void;
   /** 現在選択中のしおりノードID */
@@ -29,6 +31,7 @@ export function BookmarkEditor({
   bookmarks,
   onBookmarksChange,
   totalPages,
+  currentPage = 1,
   onPageNavigate,
   selectedNodeId,
   onNodeSelect,
@@ -36,8 +39,9 @@ export function BookmarkEditor({
   const nodeCount = countNodes(bookmarks);
 
   const handleAddRoot = useCallback(() => {
-    onBookmarksChange([...bookmarks, createBookmarkNode("新しいしおり", 1)]);
-  }, [bookmarks, onBookmarksChange]);
+    const title = window.getSelection()?.toString().trim() || "新しいしおり";
+    onBookmarksChange([...bookmarks, createBookmarkNode(title, currentPage)]);
+  }, [bookmarks, onBookmarksChange, currentPage]);;
 
   const handleBackgroundClick = useCallback(() => {
     onNodeSelect?.(null);
@@ -75,6 +79,7 @@ export function BookmarkEditor({
               bookmarks={bookmarks}
               onBookmarksChange={onBookmarksChange}
               totalPages={totalPages}
+              currentPage={currentPage}
               onPageNavigate={onPageNavigate}
               selectedNodeId={selectedNodeId}
               onNodeSelect={onNodeSelect}
@@ -93,6 +98,7 @@ interface BookmarkTreeNodeProps {
   bookmarks: BookmarkNode[];
   onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
   totalPages: number;
+  currentPage: number;
   onPageNavigate?: (pageNumber: number) => void;
   selectedNodeId?: string | null;
   onNodeSelect?: (nodeId: string | null) => void;
@@ -105,6 +111,7 @@ function BookmarkTreeNode({
   bookmarks,
   onBookmarksChange,
   totalPages,
+  currentPage,
   onPageNavigate,
   selectedNodeId,
   onNodeSelect,
@@ -263,7 +270,8 @@ function BookmarkTreeNode({
           {/* 子しおりを追加 */}
           <button
             onClick={() => {
-              onBookmarksChange(addChild(bookmarks, node.id));
+              const title = window.getSelection()?.toString().trim() || "新しいしおり";
+              onBookmarksChange(addChild(bookmarks, node.id, currentPage, title));
               setExpanded(true);
             }}
             className="rounded p-1 text-zinc-400 hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-950/30"
@@ -309,6 +317,7 @@ function BookmarkTreeNode({
                   bookmarks={bookmarks}
                   onBookmarksChange={onBookmarksChange}
                   totalPages={totalPages}
+                  currentPage={currentPage}
                   onPageNavigate={onPageNavigate}
                   selectedNodeId={selectedNodeId}
                   onNodeSelect={onNodeSelect}

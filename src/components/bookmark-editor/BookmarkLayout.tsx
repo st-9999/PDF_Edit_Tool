@@ -41,6 +41,7 @@ export function BookmarkLayout({
                 bookmarks={bookmarks}
                 onBookmarksChange={onBookmarksChange}
                 totalPages={pages.length}
+                currentPage={selectedPageNumber}
                 onPageNavigate={setSelectedPageNumber}
                 selectedNodeId={selectedBookmarkId}
                 onNodeSelect={setSelectedBookmarkId}

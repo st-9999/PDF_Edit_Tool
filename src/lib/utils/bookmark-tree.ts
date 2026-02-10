@@ -42,16 +42,18 @@ export function addSibling(
 /** 指定ノードの子として新しいノードを追加 */
 export function addChild(
   tree: BookmarkNode[],
-  parentId: string
+  parentId: string,
+  pageNumber?: number,
+  title?: string
 ): BookmarkNode[] {
   return tree.map((node) => {
     if (node.id === parentId) {
       return {
         ...node,
-        children: [...node.children, createBookmarkNode()],
+        children: [...node.children, createBookmarkNode(title, pageNumber)],
       };
     }
-    const updatedChildren = addChild(node.children, parentId);
+    const updatedChildren = addChild(node.children, parentId, pageNumber, title);
     if (updatedChildren !== node.children) {
       return { ...node, children: updatedChildren };
     }
