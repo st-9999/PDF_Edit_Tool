@@ -22,6 +22,7 @@ export function BookmarkLayout({
   files,
 }: BookmarkLayoutProps) {
   const [selectedPageNumber, setSelectedPageNumber] = useState(1);
+  const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | null>(null);
 
   const sourceFile = files.length > 0 ? files[0].sourceFile : null;
   const { pdfDoc, totalPages } = usePageViewer({
@@ -41,6 +42,8 @@ export function BookmarkLayout({
                 onBookmarksChange={onBookmarksChange}
                 totalPages={pages.length}
                 onPageNavigate={setSelectedPageNumber}
+                selectedNodeId={selectedBookmarkId}
+                onNodeSelect={setSelectedBookmarkId}
               />
             </div>
           </div>

@@ -19,6 +19,10 @@ interface BookmarkEditorProps {
   totalPages: number;
   /** しおりノードからページビュアーへナビゲート */
   onPageNavigate?: (pageNumber: number) => void;
+  /** 現在選択中のしおりノードID */
+  selectedNodeId?: string | null;
+  /** しおりノード選択時のコールバック */
+  onNodeSelect?: (nodeId: string | null) => void;
 }
 
 export function BookmarkEditor({
@@ -26,6 +30,8 @@ export function BookmarkEditor({
   onBookmarksChange,
   totalPages,
   onPageNavigate,
+  selectedNodeId,
+  onNodeSelect,
 }: BookmarkEditorProps) {
   const nodeCount = countNodes(bookmarks);
 
@@ -33,8 +39,12 @@ export function BookmarkEditor({
     onBookmarksChange([...bookmarks, createBookmarkNode("新しいしおり", 1)]);
   }, [bookmarks, onBookmarksChange]);
 
+  const handleBackgroundClick = useCallback(() => {
+    onNodeSelect?.(null);
+  }, [onNodeSelect]);
+
   return (
-    <div className="space-y-3">
+    <div className="min-h-full space-y-3" onClick={handleBackgroundClick}>
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
@@ -66,6 +76,8 @@ export function BookmarkEditor({
               onBookmarksChange={onBookmarksChange}
               totalPages={totalPages}
               onPageNavigate={onPageNavigate}
+              selectedNodeId={selectedNodeId}
+              onNodeSelect={onNodeSelect}
               isFirstSibling={index === 0}
             />
           ))}
@@ -82,6 +94,8 @@ interface BookmarkTreeNodeProps {
   onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
   totalPages: number;
   onPageNavigate?: (pageNumber: number) => void;
+  selectedNodeId?: string | null;
+  onNodeSelect?: (nodeId: string | null) => void;
   isFirstSibling: boolean;
 }
 
@@ -92,6 +106,8 @@ function BookmarkTreeNode({
   onBookmarksChange,
   totalPages,
   onPageNavigate,
+  selectedNodeId,
+  onNodeSelect,
   isFirstSibling,
 }: BookmarkTreeNodeProps) {
   const [expanded, setExpanded] = useState(true);
@@ -123,10 +139,13 @@ function BookmarkTreeNode({
     setEditing(false);
   }, [editValue, node.title, node.id, bookmarks, onBookmarksChange]);
 
+  const isSelected = selectedNodeId === node.id;
+
   const handleClick = useCallback(() => {
     if (editing) return;
+    onNodeSelect?.(node.id);
     onPageNavigate?.(node.pageNumber);
-  }, [editing, node.pageNumber, onPageNavigate]);
+  }, [editing, node.id, node.pageNumber, onNodeSelect, onPageNavigate]);
 
   const handleDoubleClick = useCallback(() => {
     setEditValue(node.title);
@@ -146,14 +165,20 @@ function BookmarkTreeNode({
   );
 
   return (
-    <div>
+    <div onClick={(e) => e.stopPropagation()}>
       <div
-        className="group flex items-center gap-1.5 rounded px-2 py-1.5 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-700/50"
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+        className={`group flex cursor-pointer items-center gap-1.5 rounded border px-2 py-1.5 transition-colors ${
+          isSelected
+            ? "border-blue-400 bg-blue-50 dark:border-blue-500 dark:bg-blue-950/30"
+            : "border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-700/50"
+        }`}
       >
         {/* 展開/折りたたみ */}
         {node.children.length > 0 ? (
           <button
-            onClick={() => setExpanded(!expanded)}
+            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
             className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
           >
             <svg
@@ -169,7 +194,7 @@ function BookmarkTreeNode({
           <div className="h-4 w-4 flex-shrink-0" />
         )}
 
-        {/* タイトル（クリックでページジャンプ / ダブルクリックで編集） */}
+        {/* タイトル（ダブルクリックで編集） */}
         {editing ? (
           <input
             ref={inputRef}
@@ -178,13 +203,13 @@ function BookmarkTreeNode({
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitEdit}
             onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
             className="min-w-0 flex-1 rounded border border-blue-400 bg-white px-1.5 py-0.5 text-xs text-zinc-800 outline-none dark:bg-zinc-700 dark:text-zinc-200"
           />
         ) : (
           <span
-            onClick={handleClick}
-            onDoubleClick={handleDoubleClick}
-            className="min-w-0 flex-1 cursor-pointer truncate text-xs text-zinc-700 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-400"
+            className="min-w-0 flex-1 truncate text-xs text-zinc-700 dark:text-zinc-300"
             title={`${node.title}（ダブルクリックで名称変更）`}
           >
             {node.title}
@@ -192,7 +217,7 @@ function BookmarkTreeNode({
         )}
 
         {/* ページ番号 */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
           <span className="text-[10px] text-zinc-400">p.</span>
           <input
             type="number"
@@ -212,7 +237,7 @@ function BookmarkTreeNode({
         </div>
 
         {/* 操作ボタン */}
-        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
           {/* アウトデント（←） */}
           <button
             onClick={() => onBookmarksChange(outdentNode(bookmarks, node.id))}
@@ -285,6 +310,8 @@ function BookmarkTreeNode({
                   onBookmarksChange={onBookmarksChange}
                   totalPages={totalPages}
                   onPageNavigate={onPageNavigate}
+                  selectedNodeId={selectedNodeId}
+                  onNodeSelect={onNodeSelect}
                   isFirstSibling={index === 0}
                 />
               </div>
