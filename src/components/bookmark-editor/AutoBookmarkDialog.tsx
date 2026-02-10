@@ -82,6 +82,9 @@ export function AutoBookmarkDialog({
   const [newLevel, setNewLevel] = useState<1 | 2 | 3>(1);
   const [patternError, setPatternError] = useState("");
 
+  // 開始ページ
+  const [startPage, setStartPage] = useState(1);
+
   // 実行中
   const [progress, setProgress] = useState<ExtractionProgress>({
     currentPage: 0,
@@ -102,6 +105,7 @@ export function AutoBookmarkDialog({
       setStored(s);
       setPatterns(buildPatterns(s));
       setShowAddForm(false);
+      setStartPage(1);
       setResults([]);
       setMergeMode("replace");
     }
@@ -190,7 +194,8 @@ export function AutoBookmarkDialog({
         pdfDoc,
         patterns,
         setProgress,
-        controller.signal
+        controller.signal,
+        startPage
       );
       if (!controller.signal.aborted) {
         setResults(bookmarks);
@@ -202,7 +207,7 @@ export function AutoBookmarkDialog({
         setStep("result");
       }
     }
-  }, [pdfDoc, patterns]);
+  }, [pdfDoc, patterns, startPage]);
 
   /* 中止 */
   const handleAbort = useCallback(() => {
@@ -273,6 +278,27 @@ export function AutoBookmarkDialog({
       {/* Step 1: パターン設定 */}
       {step === "config" && (
         <div className="space-y-4">
+          {/* 開始ページ */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-zinc-600 dark:text-zinc-300">
+              開始ページ
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={pdfDoc?.numPages ?? 1}
+              value={startPage}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v)) setStartPage(v);
+              }}
+              className="w-20 rounded border border-zinc-200 bg-white px-2 py-1 text-center text-xs dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-200"
+            />
+            <span className="text-[11px] text-zinc-400">
+              / {pdfDoc?.numPages ?? 0} ページ
+            </span>
+          </div>
+
           {/* ビルトインパターン */}
           <div>
             <h4 className="mb-2 text-xs font-medium text-zinc-600 dark:text-zinc-300">

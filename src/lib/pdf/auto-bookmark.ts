@@ -198,16 +198,18 @@ export async function extractHeadings(
   pdfDoc: PDFDocumentProxy,
   patterns: HeadingPattern[],
   onProgress?: (progress: ExtractionProgress) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  startPage = 1
 ): Promise<HeadingMatch[]> {
   const compiled = compilePatterns(patterns);
   if (compiled.length === 0) return [];
 
   const totalPages = pdfDoc.numPages;
+  const begin = Math.max(1, Math.min(startPage, totalPages));
   const headings: HeadingMatch[] = [];
   const tracker = new SequenceTracker();
 
-  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+  for (let pageNum = begin; pageNum <= totalPages; pageNum++) {
     if (signal?.aborted) break;
 
     const page = await pdfDoc.getPage(pageNum);
@@ -285,8 +287,9 @@ export async function autoGenerateBookmarks(
   pdfDoc: PDFDocumentProxy,
   patterns: HeadingPattern[],
   onProgress?: (progress: ExtractionProgress) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  startPage = 1
 ): Promise<BookmarkNode[]> {
-  const headings = await extractHeadings(pdfDoc, patterns, onProgress, signal);
+  const headings = await extractHeadings(pdfDoc, patterns, onProgress, signal, startPage);
   return buildBookmarkTree(headings);
 }
