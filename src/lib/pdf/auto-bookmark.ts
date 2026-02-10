@@ -8,11 +8,15 @@ import { createBookmarkNode } from "@/lib/utils/bookmark-tree";
 /*  デフォルトパターン                                                   */
 /* ------------------------------------------------------------------ */
 
+// テキスト部に日本語または英字を1文字以上要求するサフィックス
+// （数値のみの行＝表データ等を除外する）
+const TEXT_REQUIRE = String.raw`\S*[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}a-zA-Zａ-ｚＡ-Ｚ].+?`;
+
 export const DEFAULT_PATTERNS: HeadingPattern[] = [
   {
     id: "builtin-chapter",
     label: "章（第N章）",
-    pattern: String.raw`^\s*(?<title>第[0-9０-９]+章\s*.+?)\s*$`,
+    pattern: String.raw`^\s*(?<title>第[0-9０-９]+章\s*` + TEXT_REQUIRE + String.raw`)\s*$`,
     level: 1,
     enabled: true,
     builtin: true,
@@ -20,7 +24,7 @@ export const DEFAULT_PATTERNS: HeadingPattern[] = [
   {
     id: "builtin-section",
     label: "節（N.N）",
-    pattern: String.raw`^\s*(?<title>[0-9０-９]+[.．][0-9０-９]+(?![.．0-9０-９])\s+.+?)\s*$`,
+    pattern: String.raw`^\s*(?<title>[0-9０-９]{1,2}[.．][0-9０-９]{1,2}(?![.．0-9０-９])\s+` + TEXT_REQUIRE + String.raw`)\s*$`,
     level: 2,
     enabled: true,
     builtin: true,
@@ -28,7 +32,7 @@ export const DEFAULT_PATTERNS: HeadingPattern[] = [
   {
     id: "builtin-subsection",
     label: "項（N.N.N）",
-    pattern: String.raw`^\s*(?<title>[0-9０-９]+[.．][0-9０-９]+[.．][0-9０-９]+\s+.+?)\s*$`,
+    pattern: String.raw`^\s*(?<title>[0-9０-９]{1,2}[.．][0-9０-９]{1,2}[.．][0-9０-９]{1,2}\s+` + TEXT_REQUIRE + String.raw`)\s*$`,
     level: 3,
     enabled: true,
     builtin: true,
@@ -121,7 +125,7 @@ function compilePatterns(
   return patterns
     .filter((p) => p.enabled)
     .sort((a, b) => b.level - a.level) // 項(3)→節(2)→章(1)
-    .map((p) => ({ regex: new RegExp(p.pattern, "m"), level: p.level }));
+    .map((p) => ({ regex: new RegExp(p.pattern, "mu"), level: p.level }));
 }
 
 /**
