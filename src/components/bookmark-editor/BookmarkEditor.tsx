@@ -8,6 +8,8 @@ import {
   removeNode,
   updateTitle,
   updatePageNumber,
+  indentNode,
+  outdentNode,
   countNodes,
 } from "@/lib/utils/bookmark-tree";
 
@@ -55,7 +57,7 @@ export function BookmarkEditor({
         </div>
       ) : (
         <div className="space-y-0.5">
-          {bookmarks.map((node) => (
+          {bookmarks.map((node, index) => (
             <BookmarkTreeNode
               key={node.id}
               node={node}
@@ -64,6 +66,7 @@ export function BookmarkEditor({
               onBookmarksChange={onBookmarksChange}
               totalPages={totalPages}
               onPageNavigate={onPageNavigate}
+              isFirstSibling={index === 0}
             />
           ))}
         </div>
@@ -79,6 +82,7 @@ interface BookmarkTreeNodeProps {
   onBookmarksChange: (bookmarks: BookmarkNode[]) => void;
   totalPages: number;
   onPageNavigate?: (pageNumber: number) => void;
+  isFirstSibling: boolean;
 }
 
 function BookmarkTreeNode({
@@ -88,6 +92,7 @@ function BookmarkTreeNode({
   onBookmarksChange,
   totalPages,
   onPageNavigate,
+  isFirstSibling,
 }: BookmarkTreeNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -141,7 +146,7 @@ function BookmarkTreeNode({
   );
 
   return (
-    <div style={{ marginLeft: depth * 16 }}>
+    <div>
       <div
         className="group flex items-center gap-1.5 rounded px-2 py-1.5 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-700/50"
       >
@@ -206,8 +211,31 @@ function BookmarkTreeNode({
           />
         </div>
 
-        {/* 操作ボタン: 子追加・削除のみ */}
+        {/* 操作ボタン */}
         <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          {/* アウトデント（←） */}
+          <button
+            onClick={() => onBookmarksChange(outdentNode(bookmarks, node.id))}
+            disabled={depth === 0}
+            className="rounded p-1 text-zinc-400 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-400 dark:hover:bg-blue-950/30"
+            title="アウトデント"
+          >
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          {/* インデント（→） */}
+          <button
+            onClick={() => onBookmarksChange(indentNode(bookmarks, node.id))}
+            disabled={isFirstSibling}
+            className="rounded p-1 text-zinc-400 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-400 dark:hover:bg-blue-950/30"
+            title="インデント"
+          >
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          {/* 子しおりを追加 */}
           <button
             onClick={() => {
               onBookmarksChange(addChild(bookmarks, node.id));
@@ -220,6 +248,7 @@ function BookmarkTreeNode({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
           </button>
+          {/* 削除 */}
           <button
             onClick={() =>
               onBookmarksChange(removeNode(bookmarks, node.id))
@@ -234,19 +263,35 @@ function BookmarkTreeNode({
         </div>
       </div>
 
-      {/* 子ノード */}
-      {expanded &&
-        node.children.map((child) => (
-          <BookmarkTreeNode
-            key={child.id}
-            node={child}
-            depth={depth + 1}
-            bookmarks={bookmarks}
-            onBookmarksChange={onBookmarksChange}
-            totalPages={totalPages}
-            onPageNavigate={onPageNavigate}
-          />
-        ))}
+      {/* 子ノード — ツリーコネクタ線付き */}
+      {expanded && node.children.length > 0 && (
+        <div className="ml-[15px]">
+          {node.children.map((child, index) => {
+            const isLast = index === node.children.length - 1;
+            return (
+              <div key={child.id} className="relative pl-3">
+                {/* 縦線: 最後の子は行中央まで、それ以外は全高 */}
+                <div
+                  className={`absolute left-0 w-px bg-zinc-300 dark:bg-zinc-600 ${
+                    isLast ? "top-0 h-[15px]" : "inset-y-0"
+                  }`}
+                />
+                {/* 横線: 縦線からノードへの接続 */}
+                <div className="absolute left-0 top-[15px] h-px w-3 bg-zinc-300 dark:bg-zinc-600" />
+                <BookmarkTreeNode
+                  node={child}
+                  depth={depth + 1}
+                  bookmarks={bookmarks}
+                  onBookmarksChange={onBookmarksChange}
+                  totalPages={totalPages}
+                  onPageNavigate={onPageNavigate}
+                  isFirstSibling={index === 0}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

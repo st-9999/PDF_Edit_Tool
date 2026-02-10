@@ -141,6 +141,81 @@ export function moveNode(
   });
 }
 
+/** ノードを1つ上の兄弟の最後の子に移動する（インデント） */
+export function indentNode(
+  tree: BookmarkNode[],
+  targetId: string
+): BookmarkNode[] {
+  const idx = tree.findIndex((n) => n.id === targetId);
+  if (idx > 0) {
+    // 上の兄弟が見つかった — targetをその兄弟の子の末尾に移動
+    const prevSibling = tree[idx - 1];
+    const target = tree[idx];
+    const newTree = [...tree];
+    newTree.splice(idx, 1); // targetを除去
+    newTree[idx - 1] = {
+      ...prevSibling,
+      children: [...prevSibling.children, target],
+    };
+    return newTree;
+  }
+  if (idx === 0) {
+    // 先頭なのでインデント不可 — 子ノード内を再帰探索
+    return tree.map((node) => {
+      const updatedChildren = indentNode(node.children, targetId);
+      if (updatedChildren !== node.children) {
+        return { ...node, children: updatedChildren };
+      }
+      return node;
+    });
+  }
+  // この階層にはない — 子ノード内を再帰探索
+  return tree.map((node) => {
+    const updatedChildren = indentNode(node.children, targetId);
+    if (updatedChildren !== node.children) {
+      return { ...node, children: updatedChildren };
+    }
+    return node;
+  });
+}
+
+/** ノードを親の次の兄弟として移動する（アウトデント） */
+export function outdentNode(
+  tree: BookmarkNode[],
+  targetId: string
+): BookmarkNode[] {
+  // ルートレベルではアウトデント不可 — 子の中を探す
+  for (let i = 0; i < tree.length; i++) {
+    const parent = tree[i];
+    const childIdx = parent.children.findIndex((n) => n.id === targetId);
+    if (childIdx !== -1) {
+      const target = parent.children[childIdx];
+      // 後続の兄弟をtargetの子の末尾に追加
+      const laterSiblings = parent.children.slice(childIdx + 1);
+      const movedTarget: BookmarkNode = {
+        ...target,
+        children: [...target.children, ...laterSiblings],
+      };
+      // 親の子からtargetと後続兄弟を除去
+      const newParentChildren = parent.children.slice(0, childIdx);
+      const newParent = { ...parent, children: newParentChildren };
+      // 親の直後にtargetを挿入
+      const newTree = [...tree];
+      newTree[i] = newParent;
+      newTree.splice(i + 1, 0, movedTarget);
+      return newTree;
+    }
+    // さらに深い階層を再帰探索
+    const updatedChildren = outdentNode(parent.children, targetId);
+    if (updatedChildren !== parent.children) {
+      return tree.map((node, j) =>
+        j === i ? { ...node, children: updatedChildren } : node
+      );
+    }
+  }
+  return tree;
+}
+
 /** ツリー全体のノード数をカウント */
 export function countNodes(tree: BookmarkNode[]): number {
   let count = 0;
