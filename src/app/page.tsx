@@ -21,6 +21,7 @@ import {
 } from "@/lib/utils/download";
 import { useToast } from "@/components/ui/Toast";
 import { ProcessingOverlay } from "@/components/ui/ProcessingOverlay";
+import { Dialog } from "@/components/ui/Dialog";
 import type { BookmarkNode } from "@/types/pdf";
 
 const TABS = [
@@ -37,6 +38,7 @@ export default function Home() {
   const [processing, setProcessing] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkNode[]>([]);
   const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const pdf = usePdf();
   const { showToast } = useToast();
 
@@ -46,6 +48,19 @@ export default function Home() {
     },
     [pdf]
   );
+
+  const handleClearRequest = useCallback(() => {
+    if (pdf.files.length > 0) {
+      setShowClearConfirm(true);
+    } else {
+      pdf.clearAll();
+    }
+  }, [pdf]);
+
+  const handleClearConfirm = useCallback(() => {
+    setShowClearConfirm(false);
+    pdf.clearAll();
+  }, [pdf]);
 
   const isPageSelectTab = activeTab === "extract";
 
@@ -265,7 +280,7 @@ export default function Home() {
                 {pdf.files[0]?.name} — {pdf.pages.length}ページ
               </span>
               <button
-                onClick={pdf.clearAll}
+                onClick={handleClearRequest}
                 className="rounded px-3 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
               >
                 クリア
@@ -382,7 +397,7 @@ export default function Home() {
                     </>
                   )}
                   <button
-                    onClick={pdf.clearAll}
+                    onClick={handleClearRequest}
                     className="rounded px-3 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                   >
                     クリア
@@ -438,6 +453,33 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {/* クリア確認ダイアログ */}
+      <Dialog
+        open={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        title="PDFをクリア"
+        footer={
+          <>
+            <button
+              onClick={() => setShowClearConfirm(false)}
+              className="rounded-lg px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={handleClearConfirm}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              クリア
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          読み込み中のPDFと編集内容がすべて破棄されます。よろしいですか？
+        </p>
+      </Dialog>
     </div>
   );
 }
