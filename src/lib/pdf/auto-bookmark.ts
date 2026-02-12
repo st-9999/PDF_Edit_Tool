@@ -16,7 +16,7 @@ export const DEFAULT_PATTERNS: HeadingPattern[] = [
   {
     id: "builtin-chapter",
     label: "章（第N章）",
-    pattern: String.raw`^\s*(?<title>第[0-9０-９]+章\s*` + TEXT_REQUIRE + String.raw`)\s*$`,
+    pattern: String.raw`^\s*(?<title>第\s*[0-9０-９]+\s*章(?:\s+` + TEXT_REQUIRE + String.raw`)?)\s*$`,
     level: 1,
     enabled: true,
     builtin: true,
@@ -24,7 +24,7 @@ export const DEFAULT_PATTERNS: HeadingPattern[] = [
   {
     id: "builtin-section",
     label: "節（N.N）",
-    pattern: String.raw`^\s*(?<title>[0-9０-９]{1,2}[.．][0-9０-９]{1,2}(?![.．0-9０-９])\s+` + TEXT_REQUIRE + String.raw`)\s*$`,
+    pattern: String.raw`^\s*(?<title>[0-9０-９]{1,2}\s*[.．]\s*[0-9０-９]{1,2}(?!\s*[.．]\s*[0-9０-９])\s+` + TEXT_REQUIRE + String.raw`)\s*$`,
     level: 2,
     enabled: true,
     builtin: true,
@@ -32,7 +32,7 @@ export const DEFAULT_PATTERNS: HeadingPattern[] = [
   {
     id: "builtin-subsection",
     label: "項（N.N.N）",
-    pattern: String.raw`^\s*(?<title>[0-9０-９]{1,2}[.．][0-9０-９]{1,2}[.．][0-9０-９]{1,2}\s+` + TEXT_REQUIRE + String.raw`)\s*$`,
+    pattern: String.raw`^\s*(?<title>[0-9０-９]{1,2}\s*[.．]\s*[0-9０-９]{1,2}\s*[.．]\s*[0-9０-９]{1,2}\s+` + TEXT_REQUIRE + String.raw`)\s*$`,
     level: 3,
     enabled: true,
     builtin: true,
@@ -52,8 +52,14 @@ interface LineInfo {
  * TextItem配列をy座標でグループ化し、行テキストを復元する。
  * 同じ行のアイテムはx座標順に結合される。
  */
-function reconstructLines(items: TextItem[], yTolerance = 2): LineInfo[] {
+function reconstructLines(items: TextItem[]): LineInfo[] {
   if (items.length === 0) return [];
+
+  // フォントサイズ（transform[3] = y方向スケール）の中央値を基に yTolerance を算出
+  const fontSizes = items.map((item) => Math.abs(item.transform[3]));
+  fontSizes.sort((a, b) => a - b);
+  const medianFontSize = fontSizes[Math.floor(fontSizes.length / 2)];
+  const yTolerance = Math.max(2, medianFontSize * 0.3);
 
   // transform[5] = y座標, transform[4] = x座標
   const sorted = [...items].sort((a, b) => {
@@ -96,14 +102,55 @@ interface HeadingMatch {
 /**
  * 1行に対し、項→節→章の順（具体的なパターン優先）でマッチを試みる。
  */
-function matchHeading(
+/**
+ * 検出されたタイトルの文字間スペースを正規化する。
+ * PDF抽出時に入る不要なスペースを除去し、読みやすいタイトルにする。
+ */
+export function normalizeTitle(title: string): string {
+  let result = title;
+  // 「第 N 章」→「第N章」
+  result = result.replace(/第\s*([0-9０-９]+)\s*章/, "第$1章");
+  // 「N. N. N」→「N.N.N」（3階層パターンを先に処理）
+  result = result.replace(
+    /([0-9０-９]{1,2})\s*([.．])\s*([0-9０-９]{1,2})\s*([.．])\s*([0-9０-９]{1,2})/g,
+    "$1$2$3$4$5",
+  );
+  // 「N. N」→「N.N」
+  result = result.replace(
+    /([0-9０-９]{1,2})\s*([.．])\s*([0-9０-９]{1,2})/g,
+    "$1$2$3",
+  );
+  // CJK文字間の単一スペースを除去（繰り返し適用）
+  // ・(U+30FB)はScript=Commonだが、CJKテキストの一部として扱う
+  let prev;
+  do {
+    prev = result;
+    result = result.replace(
+      /([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u30FB])\s+([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u30FB])/gu,
+      "$1$2",
+    );
+  } while (result !== prev);
+  // 番号部分とテキスト部分の区切りスペースを復元
+  result = result.replace(/(第[0-9０-９]+章)([^\s])/, "$1 $2");
+  result = result.replace(
+    /([0-9０-９][.．][0-9０-９](?:[.．][0-9０-９]+)?)([^\s0-9０-９.．])/,
+    "$1 $2",
+  );
+  return result;
+}
+
+export function matchHeading(
   line: string,
   patterns: { regex: RegExp; level: 1 | 2 | 3 }[]
 ): { title: string; level: 1 | 2 | 3 } | null {
+  // TOC行（目次リーダー線）を除外
+  if (/[-─–—]{3,}|[.．…]{5,}/.test(line)) return null;
+
   for (const { regex, level } of patterns) {
     const m = regex.exec(line);
     if (m) {
-      const title = m.groups?.title?.trim() ?? m[0].trim();
+      const raw = m.groups?.title?.trim() ?? m[0].trim();
+      const title = normalizeTitle(raw);
       if (title.length > 0) {
         return { title, level };
       }
@@ -119,7 +166,7 @@ function matchHeading(
 /**
  * 有効パターンをコンパイルし、level降順（項→節→章）にソート。
  */
-function compilePatterns(
+export function compilePatterns(
   patterns: HeadingPattern[]
 ): { regex: RegExp; level: 1 | 2 | 3 }[] {
   return patterns
@@ -158,12 +205,12 @@ function extractLeadingNumber(title: string): number | null {
  * レベルごとに直前の先頭番号を追跡し、後退を検出するトラッカー。
  * 上位レベルの見出し出現時に下位レベルの追跡をリセットする。
  */
-class SequenceTracker {
+export class SequenceTracker {
   private lastMajor: Map<number, number> = new Map();
 
   /**
    * 見出しが順序的に妥当かを判定し、内部状態を更新する。
-   * 同番号または+1のみ許可し、それ以外（後退・+2以上ジャンプ）は除外。
+   * 後退のみ除外し、前方ジャンプは許可する。
    * @returns true=採用, false=除外
    */
   accept(level: 1 | 2 | 3, title: string): boolean {
@@ -172,8 +219,8 @@ class SequenceTracker {
 
     const prev = this.lastMajor.get(level);
 
-    if (prev !== undefined && major !== prev && major !== prev + 1) {
-      // 同番号でも+1でもない → 除外
+    if (prev !== undefined && major < prev) {
+      // 後退 → 除外（前方ジャンプは許可：章の欠落や偽マッチに対応）
       return false;
     }
 
