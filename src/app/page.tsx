@@ -292,7 +292,7 @@ export default function Home() {
         <div className={`mx-auto flex items-center justify-between ${isBookmarkFullscreen ? "" : "max-w-6xl"}`}>
           <div className="flex items-center gap-2">
             <h1 className={`font-bold text-zinc-900 dark:text-zinc-100 ${isBookmarkFullscreen ? "text-base" : "text-xl"}`}>
-              PDF Edit Tool
+              PDF Edit Tool β版
             </h1>
             <ThemeToggle />
           </div>

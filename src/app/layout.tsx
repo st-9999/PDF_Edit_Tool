@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PDF Edit Tool",
+  title: "PDF Edit Tool β版",
   description: "PDF editing tool - reorder, merge, extract, delete, rotate pages and manage bookmarks",
 };
 
