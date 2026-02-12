@@ -5,7 +5,8 @@ let pdfjsLib: typeof import("pdfjs-dist") | null = null;
 async function getPdfjs() {
   if (pdfjsLib) return pdfjsLib;
   pdfjsLib = await import("pdfjs-dist");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  const basePath = process.env.__NEXT_ROUTER_BASEPATH || "";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `${basePath}/pdf.worker.min.mjs`;
   return pdfjsLib;
 }
 
