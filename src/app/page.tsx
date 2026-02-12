@@ -63,10 +63,11 @@ export default function Home() {
     pdf.clearAll();
   }, [pdf]);
 
-  // 結合タブから他タブへ移動する際、複数ファイルがあればクリア確認
+  // タブ移動時、PDFが読み込まれていればクリア確認
   const handleTabChange = useCallback(
     (tab: TabId) => {
-      if (activeTab === "merge" && tab !== "merge" && pdf.files.length >= 2) {
+      if (tab === activeTab) return;
+      if (pdf.files.length > 0) {
         setPendingTab(tab);
       } else {
         setActiveTab(tab);
@@ -502,11 +503,11 @@ export default function Home() {
         </p>
       </Dialog>
 
-      {/* 結合タブからの移動確認ダイアログ */}
+      {/* タブ移動確認ダイアログ */}
       <Dialog
         open={pendingTab !== null}
         onClose={() => setPendingTab(null)}
-        title="タブの移動"
+        title="機能の切り替え"
         footer={
           <>
             <button
@@ -525,7 +526,7 @@ export default function Home() {
         }
       >
         <p className="text-sm text-zinc-600 dark:text-zinc-300">
-          結合用に読み込んだ複数のPDFファイルがクリアされます。よろしいですか？
+          現在の編集内容は維持されません。PDFをクリアして機能を切り替えますか？
         </p>
       </Dialog>
     </div>
