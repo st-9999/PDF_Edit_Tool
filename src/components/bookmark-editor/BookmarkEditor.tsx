@@ -8,6 +8,7 @@ import {
   removeNode,
   updateTitle,
   updatePageNumber,
+  moveNode,
   indentNode,
   outdentNode,
   countNodes,
@@ -97,6 +98,7 @@ export function BookmarkEditor({
               selectedNodeId={selectedNodeId}
               onNodeSelect={onNodeSelect}
               isFirstSibling={index === 0}
+              isLastSibling={index === bookmarks.length - 1}
             />
           ))}
         </div>
@@ -121,6 +123,7 @@ interface BookmarkTreeNodeProps {
   selectedNodeId?: string | null;
   onNodeSelect?: (nodeId: string | null) => void;
   isFirstSibling: boolean;
+  isLastSibling: boolean;
 }
 
 function BookmarkTreeNode({
@@ -134,6 +137,7 @@ function BookmarkTreeNode({
   selectedNodeId,
   onNodeSelect,
   isFirstSibling,
+  isLastSibling,
 }: BookmarkTreeNodeProps) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -263,6 +267,28 @@ function BookmarkTreeNode({
 
         {/* 操作ボタン */}
         <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+          {/* 上に移動（↑） */}
+          <button
+            onClick={() => onBookmarksChange(moveNode(bookmarks, node.id, "up"))}
+            disabled={isFirstSibling}
+            className="rounded p-1 text-zinc-400 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-400 dark:hover:bg-blue-950/30"
+            title="上に移動"
+          >
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          {/* 下に移動（↓） */}
+          <button
+            onClick={() => onBookmarksChange(moveNode(bookmarks, node.id, "down"))}
+            disabled={isLastSibling}
+            className="rounded p-1 text-zinc-400 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-400 dark:hover:bg-blue-950/30"
+            title="下に移動"
+          >
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
           {/* アウトデント（←） */}
           <button
             onClick={() => onBookmarksChange(outdentNode(bookmarks, node.id))}
@@ -340,6 +366,7 @@ function BookmarkTreeNode({
                   selectedNodeId={selectedNodeId}
                   onNodeSelect={onNodeSelect}
                   isFirstSibling={index === 0}
+                  isLastSibling={isLast}
                 />
               </div>
             );
