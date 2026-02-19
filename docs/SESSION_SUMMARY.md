@@ -17,14 +17,24 @@ Next.js 16 + TypeScript + pdf-lib によるクライアントサイド処理。
 | 5 | ページ回転 | `e16f839` feat: add page rotation |
 | 6 | しおり編集 | `c1dd709` feat: add bookmark editor with tree structure |
 | 7 | 統合 & UI/UX仕上げ | `bcf46bf` feat: integrate all features and polish UI |
-| 8 | テスト & ドキュメント | (本コミット) |
+| 8 | テスト & ドキュメント | `843254c` docs: add documentation and test results |
+| 9 | テスト基盤修正 | `8d578c6` vitest パスエイリアス修正、未コミット変更の整理 |
+| 10 | テストカバレッジ拡充 | `353cf17` コンポーネント47件 + E2E 4件 + 統合8件 |
+| 11 | 品質改善 & デプロイ | デプロイワークフロー修正、モバイル対応、アーキテクチャ文書化 |
 
 ## 技術的な意思決定
 
-### クライアントサイド完結
+### クライアントサイド完結（API Routes 不採用の理由）
 - pdf-lib はブラウザで動作するため API Routes 不使用
 - ファイルがサーバーに送信されないためプライバシー面で有利
 - 大容量ファイルはブラウザメモリに依存（100MB制限を設定）
+- デプロイが `output: "export"` による静的ファイルのみで完結 → サーバー運用コスト0
+
+### `output: "export"` 採用理由
+- GitHub Pages など静的ホスティングへのデプロイを可能にする
+- サーバーサイド処理がないため SSR/ISR は不要
+- `basePath: "/PDF_Edit_Tool"` でサブディレクトリ配信に対応
+- Node.js ランタイム不要 → CDN 配信で高速・安価
 
 ### pdfjs-dist v5 対応
 - `canvas` プロパティが廃止 → レンダーコンテキストにパラメータ渡し
@@ -56,6 +66,22 @@ Next.js 16 + TypeScript + pdf-lib によるクライアントサイド処理。
 | コンソールエラー | 0件 |
 | ビルド (next build) | OK (2.4s, 0 errors) |
 
+### デプロイワークフロー
+- GitHub Actions (`.github/workflows/deploy.yml`) で `main` ブランチ push 時に自動デプロイ
+- `next build` → `out/` を GitHub Pages Artifact としてアップロード → deploy-pages で公開
+- URL: `https://<user>.github.io/PDF_Edit_Tool/`
+
+## パフォーマンス特性
+
+| 項目 | 状況 |
+|---|---|
+| サムネイル生成 | プログレッシブ（1ページずつコールバック通知） |
+| 仮想スクロール | 未実装（全ページをDOMに配置） |
+| 遅延レンダリング | 未実装（初回読み込み時に全ページ生成） |
+| メモリ使用量 | ページ数に比例（各ページのData URL保持） |
+| 大容量PDF目安 | 50〜100ページは実用的、数百ページではメモリ注意 |
+| Ctrl+ホイール拡大 | サムネイル・ページビューアの両方で対応 |
+
 ## 既知の制限事項
 
 - パスワード付きPDFは非対応（pdf-lib の制限）
@@ -64,5 +90,5 @@ Next.js 16 + TypeScript + pdf-lib によるクライアントサイド処理。
 
 ## 将来の拡張 (v2)
 
-- しおり自動作成（PDF本文から章・項・節を自動抽出）
+- ~~しおり自動作成~~ → **実装済み**（auto-bookmark.ts + AutoBookmarkDialog.tsx）
 - PDFレビュー（矩形描画 + コメント指摘）

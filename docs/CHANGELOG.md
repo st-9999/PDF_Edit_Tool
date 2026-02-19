@@ -3,6 +3,29 @@
 All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.0] - 2026-02-19
+
+### Fixed
+- **Phase 9**: vitest パスエイリアス解決の修正（`vite-tsconfig-paths` → `resolve.alias` 直接設定）
+  - 7テストスイートの失敗を解消（全11スイート 138テスト → パス）
+
+### Added
+- **Phase 10**: テストカバレッジ拡充
+  - Reactコンポーネントテスト 47件（FileUploader, PageSelector, BookmarkEditor, PageSorter）
+  - Playwright E2Eテスト 4件（ページ表示、タブ、PDFアップロード、しおり追加）
+  - 自動しおり統合テスト 8件（見出し抽出パイプライン全体）
+  - 最終: vitest 16スイート 193テスト + E2E 4テスト
+
+- **Phase 11**: 品質改善 & デプロイ
+  - GitHub Pages デプロイワークフローを `main` ブランチトリガーに変更
+  - モバイル表示の最低限の対応（ヘッダー・タブ・コンテンツのレスポンシブパディング）
+  - アーキテクチャ決定事項の文書化（API Routes 不採用理由、`output: "export"` 採用理由）
+  - パフォーマンス特性のドキュメント化
+
+### Changed
+- しおりエディタに上下移動ボタンを追加
+- タブ切り替え時のPDFクリア確認ダイアログ改善
+
 ## [0.1.0] - 2026-02-06
 
 ### Added

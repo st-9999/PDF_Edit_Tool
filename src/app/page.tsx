@@ -287,7 +287,7 @@ export default function Home() {
       <ProcessingOverlay visible={processing} message="PDFを処理中..." />
 
       {/* ヘッダー */}
-      <header className={`border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 ${isBookmarkFullscreen ? "px-4 py-2" : "px-6 py-4"}`}>
+      <header className={`border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 ${isBookmarkFullscreen ? "px-4 py-2" : "px-3 py-3 sm:px-6 sm:py-4"}`}>
         <div className={`mx-auto flex items-center justify-between ${isBookmarkFullscreen ? "" : "max-w-6xl"}`}>
           <div className="flex items-center gap-2">
             <h1 className={`font-bold text-zinc-900 dark:text-zinc-100 ${isBookmarkFullscreen ? "text-base" : "text-xl"}`}>
@@ -325,7 +325,7 @@ export default function Home() {
 
       {/* タブナビゲーション */}
       <nav className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950" aria-label="機能メニュー">
-        <div className="flex gap-0 overflow-x-auto px-6" role="tablist">
+        <div className="flex gap-0 overflow-x-auto px-2 sm:px-6" role="tablist">
           {TABS.map((tab) => (
             <button
               key={tab.id}
@@ -334,7 +334,7 @@ export default function Home() {
               aria-controls={`panel-${tab.id}`}
               onClick={() => handleTabChange(tab.id)}
               className={`
-                px-4 py-3 text-sm font-medium transition-colors
+                px-2.5 py-2 text-xs sm:px-4 sm:py-3 sm:text-sm font-medium transition-colors whitespace-nowrap
                 border-b-2
                 ${
                   activeTab === tab.id
@@ -351,7 +351,7 @@ export default function Home() {
 
       {/* メインコンテンツ */}
       <main
-        className={`flex-1 bg-zinc-50 dark:bg-zinc-900 ${isBookmarkFullscreen ? "min-h-0 overflow-hidden px-1" : "px-6 py-6"}`}
+        className={`flex-1 bg-zinc-50 dark:bg-zinc-900 ${isBookmarkFullscreen ? "min-h-0 overflow-hidden px-1" : "px-3 py-4 sm:px-6 sm:py-6"}`}
         role="tabpanel"
         id={`panel-${activeTab}`}
         aria-label={TABS.find((t) => t.id === activeTab)?.label}
@@ -382,7 +382,7 @@ export default function Home() {
 
             {/* ファイル情報バー */}
             {hasPages && (
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-4">
                   <span className="text-sm text-zinc-600 dark:text-zinc-400">
                     {pdf.files.length} ファイル / {pdf.pages.length} ページ
