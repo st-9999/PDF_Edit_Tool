@@ -77,12 +77,11 @@ export default function Home() {
   );
 
   const handleTabChangeConfirm = useCallback(() => {
-    pdf.clearAll();
     if (pendingTab) {
       setActiveTab(pendingTab);
       setPendingTab(null);
     }
-  }, [pdf, pendingTab]);
+  }, [pendingTab]);
 
   const isPageSelectTab = activeTab === "extract";
 
@@ -520,13 +519,13 @@ export default function Home() {
               onClick={handleTabChangeConfirm}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
-              クリアして移動
+              移動する
             </button>
           </>
         }
       >
         <p className="text-sm text-zinc-600 dark:text-zinc-300">
-          現在の編集内容は維持されません。PDFをクリアして機能を切り替えますか？
+          現在の編集内容は保存されません。機能を切り替えますか？
         </p>
       </Dialog>
     </div>
