@@ -2,6 +2,8 @@
 
 ブラウザ上で動作するPDF編集ツール。すべての処理をクライアントサイドで実行するため、ファイルがサーバーにアップロードされることはありません。
 
+**公開URL**: https://st-9999.github.io/PDF_Edit_Tool/
+
 ## 機能
 
 | 機能 | 説明 |
@@ -37,12 +39,30 @@ npm run build
 npm start
 ```
 
-### テスト
+## テスト
 
 ```bash
-npm test          # ウォッチモード
-npm run test:run  # 単発実行
+npm test              # ウォッチモード（vitest）
+npm run test:run      # 単発実行
+npm run test:coverage # カバレッジ付き実行
+npm run test:e2e      # E2Eテスト（Playwright）
+npm run test:e2e:ui   # E2Eテスト（UIモード）
 ```
+
+| 種別 | フレームワーク | テスト数 |
+|------|--------------|---------|
+| ユニットテスト | Vitest | 138件（11スイート） |
+| コンポーネントテスト | Vitest + Testing Library | 47件（4スイート） |
+| 統合テスト | Vitest | 8件（1スイート） |
+| E2Eテスト | Playwright | 4件 |
+
+## デプロイ
+
+GitHub Actions で `main` ブランチへの push 時に自動デプロイされます。
+
+- ワークフロー: `.github/workflows/deploy.yml`
+- ビルド: `next build` → 静的ファイル（`out/`）を生成
+- ホスティング: GitHub Pages（`/PDF_Edit_Tool/`）
 
 ## 使い方
 
@@ -75,14 +95,17 @@ npm run test:run  # 単発実行
 
 ## 技術スタック
 
-- **フレームワーク**: Next.js 16 (App Router, TypeScript)
-- **PDF操作**: pdf-lib (編集) / pdfjs-dist (レンダリング・テキスト抽出)
-- **ドラッグ&ドロップ**: @dnd-kit
-- **スタイリング**: Tailwind CSS v4
-- **テーマ**: next-themes（ダークモードデフォルト）
-- **レイアウト**: react-resizable-panels（しおりエディタ3カラム）
-- **テスト**: Vitest
-- **処理方式**: 全処理クライアントサイド
+| カテゴリ | 技術 |
+|---------|------|
+| フレームワーク | Next.js 16 (App Router, TypeScript) |
+| PDF操作 | pdf-lib (編集) / pdfjs-dist (レンダリング・テキスト抽出) |
+| ドラッグ&ドロップ | @dnd-kit |
+| スタイリング | Tailwind CSS v4 |
+| テーマ | next-themes（ダークモードデフォルト） |
+| レイアウト | react-resizable-panels（しおりエディタ3カラム） |
+| ユニットテスト | Vitest + Testing Library |
+| E2Eテスト | Playwright |
+| 処理方式 | 全処理クライアントサイド（`output: "export"` で静的配信） |
 
 ## ディレクトリ構成
 
@@ -111,12 +134,14 @@ src/
 - サムネイルの Ctrl+ホイール ズーム
 - PDFビューアーのテキスト選択でしおりタイトル入力
 - PDF読み込み中のブラウザ閉じ警告
-- PDF切り替え時の確認ダイアログ
+- タブ切り替え時の確認ダイアログ
+- モバイル対応（レスポンシブパディング・タブ横スクロール）
 
 ## 制限事項
 
 - パスワード付きPDF: 対応済み（`ignoreEncryption: true`）
-- 全処理がクライアントサイドのため、非常に大きなPDFではメモリ不足の可能性あり
+- 全処理がクライアントサイドのため、非常に大きなPDF（数百ページ）ではメモリ不足の可能性あり
+- しおりの読み取りは Dest 配列形式のみ対応（Action 形式は未対応）
 
 ## ライセンス
 
