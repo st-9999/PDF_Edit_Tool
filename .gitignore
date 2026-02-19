@@ -47,8 +47,13 @@ next-env.d.ts
 vitest.config.ts
 vitest.setup.ts
 src/**/*.test.ts
+src/**/*.test.tsx
 src/**/test-helpers/
 docs/TEST_RESULTS.md
+e2e/
+playwright.config.ts
+playwright-report/
+test-results/
 
 # 参考資料・仕様書（ローカルのみ）
 docs/SPEC_*.md
