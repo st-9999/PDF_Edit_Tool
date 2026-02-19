@@ -281,20 +281,17 @@
 > v1 完了後に発覚した問題。品質担保のために最優先で対処。
 
 ### 9-1. vitest パスエイリアス解決の修正
-- [ ] `@/lib/test-helpers/pdf-generators` が解決できず **7テストスイートが失敗**
-  - 原因: `tsconfig.json` の `exclude` に `src/**/test-helpers/**` が含まれており、`vite-tsconfig-paths` がパス解決をスキップしている可能性
-  - 対策案A: `vitest.config.ts` に `resolve.alias` を直接設定
-  - 対策案B: テスト用 `tsconfig.test.json` を作成し `vite-tsconfig-paths({ projects: ['./tsconfig.test.json'] })` で参照
-  - 対策案C: `tsconfig.json` の `exclude` から `src/**/test-helpers/**` を除去（Next.js ビルドへの影響を確認）
-- [ ] 修正後、全11テストスイート（97件以上）がパスすることを確認
+- [x] `@/lib/test-helpers/pdf-generators` が解決できず **7テストスイートが失敗**
+  - 原因: `tsconfig.json` の `exclude` に `src/**/test-helpers/**` が含まれており、`vite-tsconfig-paths` がパス解決をスキップしていた
+  - 採用: 対策案A — `vitest.config.ts` に `resolve.alias` を直接設定し、`vite-tsconfig-paths` を除去
+- [x] 修正後、全11テストスイート（138テスト）がパスすることを確認
 
 ### 9-2. 未コミット変更のコミット
-- [ ] 以下の変更をコミット:
-  - `BookmarkEditor.tsx`: しおりノードの上下移動ボタン（`moveNode`）追加
-  - `page.tsx`: タブ切り替え確認ダイアログの文言修正（PDFクリアを削除）
-  - `package.json` / `package-lock.json`: vitest, jsdom, vite-tsconfig-paths 追加
-  - `CLAUDE.md`: テストコード作成時の厳守事項追記
-  - `vitest.config.ts`, `vitest.setup.ts`: テスト基盤設定（未追跡→追加）
+- [x] 以下の変更をコミット（4コミット）:
+  - `e1c4f97` `feat: add move up/down buttons for bookmark nodes`
+  - `2ba2070` `fix: preserve PDF data when switching feature tabs`
+  - `d39f3e7` `chore: add vitest and jsdom test dependencies`
+  - `612d8e0` `docs: add test guidelines and Phase 9-11 remaining tasks`
 
 ---
 
