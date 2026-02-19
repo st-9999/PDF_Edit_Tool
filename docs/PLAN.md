@@ -276,9 +276,83 @@
 
 ---
 
+## Phase 9: テスト基盤修正 & 未コミット変更の整理（残タスク・Critical）
+
+> v1 完了後に発覚した問題。品質担保のために最優先で対処。
+
+### 9-1. vitest パスエイリアス解決の修正
+- [ ] `@/lib/test-helpers/pdf-generators` が解決できず **7テストスイートが失敗**
+  - 原因: `tsconfig.json` の `exclude` に `src/**/test-helpers/**` が含まれており、`vite-tsconfig-paths` がパス解決をスキップしている可能性
+  - 対策案A: `vitest.config.ts` に `resolve.alias` を直接設定
+  - 対策案B: テスト用 `tsconfig.test.json` を作成し `vite-tsconfig-paths({ projects: ['./tsconfig.test.json'] })` で参照
+  - 対策案C: `tsconfig.json` の `exclude` から `src/**/test-helpers/**` を除去（Next.js ビルドへの影響を確認）
+- [ ] 修正後、全11テストスイート（97件以上）がパスすることを確認
+
+### 9-2. 未コミット変更のコミット
+- [ ] 以下の変更をコミット:
+  - `BookmarkEditor.tsx`: しおりノードの上下移動ボタン（`moveNode`）追加
+  - `page.tsx`: タブ切り替え確認ダイアログの文言修正（PDFクリアを削除）
+  - `package.json` / `package-lock.json`: vitest, jsdom, vite-tsconfig-paths 追加
+  - `CLAUDE.md`: テストコード作成時の厳守事項追記
+  - `vitest.config.ts`, `vitest.setup.ts`: テスト基盤設定（未追跡→追加）
+
+---
+
+## Phase 10: テストカバレッジ拡充（残タスク・Medium）
+
+> 現状: lib/pdf と lib/utils のユニットテストのみ。コンポーネントテスト・E2Eテスト 0件。
+
+### 10-1. Reactコンポーネントテストの追加
+- [ ] テストフレームワーク: vitest + @testing-library/react
+- [ ] 優先度の高いコンポーネント:
+  - [ ] `FileUploader` — ファイル受付・バリデーション・ドロップゾーン
+  - [ ] `PageSelector` — ページ範囲入力・選択/解除
+  - [ ] `BookmarkEditor` — ノード追加/削除/移動/インデント
+  - [ ] `PageSorter` — ドラッグ&ドロップ並び替え（dnd-kitモック要）
+- [ ] `@testing-library/react`, `@testing-library/user-event` を devDependencies に追加
+
+### 10-2. E2E テストの検討
+- [ ] Playwright または Cypress でブラウザ統合テスト
+- [ ] 最低限のシナリオ:
+  - PDFアップロード → サムネイル表示
+  - ページ並び替え → ダウンロード
+  - しおり追加 → 保存
+- [ ] 優先度: Low（手動テストで当面カバー）
+
+### 10-3. 自動しおり機能のE2E検証
+- [ ] 実PDFを使ったヘッディング抽出の統合テスト
+- [ ] パフォーマンス計測（100ページ超のPDFでの処理時間）
+- [ ] 画像のみPDF（テキストなし）の場合に適切なメッセージを表示
+
+---
+
+## Phase 11: 品質改善 & デプロイ確認（残タスク・Low）
+
+### 11-1. GitHub Pages デプロイ検証
+- [ ] `main` ブランチへのマージ → GitHub Actions 自動デプロイの動作確認
+- [ ] デプロイ後のURL(`/PDF_Edit_Tool/`)でアクセス確認
+- [ ] 静的アセット（pdfjs-dist ワーカー等）の読み込み確認
+- [ ] basePath 設定下でのリンク整合性
+
+### 11-2. パフォーマンス計測
+- [ ] 大容量PDF（50〜100ページ、数十MB）での操作レスポンス
+- [ ] サムネイル生成の遅延レンダリング動作確認
+- [ ] メモリ使用量のプロファイリング（Chrome DevTools）
+
+### 11-3. UX改善
+- [ ] タブ切り替え時のPDF保持改善（現状タブ変更でクリア→保持が理想）
+- [ ] モバイル表示の最低限の調整（サムネイルグリッドの折り返し等）
+- [ ] キーボードショートカット（Ctrl+Z Undo 等）の検討
+
+### 11-4. アーキテクチャ決定事項の文書化
+- [ ] API Routes を採用しない理由の記録（クライアントサイド完結 → プライバシー・デプロイ簡素化）
+- [ ] `output: "export"` 採用理由（GitHub Pages 対応、サーバー不要）
+
+---
+
 ## 将来 (v2) — 参考
 
 > v1 完了後に着手。ここでは実行しない。
 
-- [ ] しおり自動作成（PDF本文から章・項・節を自動抽出）
+- [x] しおり自動作成（PDF本文から章・項・節を自動抽出）→ **実装済み**（auto-bookmark.ts + AutoBookmarkDialog.tsx）
 - [ ] PDFレビュー（矩形描画 + コメント指摘）
