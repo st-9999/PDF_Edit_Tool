@@ -1,10 +1,17 @@
 "use client";
 
 import { useRef } from "react";
-import { FileTextIcon, UploadIcon, XIcon } from "lucide-react";
+import {
+  FileTextIcon,
+  RedoIcon,
+  UndoIcon,
+  UploadIcon,
+  XIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useViewerStore } from "@/store/viewer-store";
+import { editorSelectors, useEditorStore } from "@/store/editor-store";
 
 function isPdfFile(file: File): boolean {
   return (
@@ -17,6 +24,10 @@ export function TopBar() {
   const fileName = useViewerStore((s) => s.fileName);
   const setFile = useViewerStore((s) => s.setFile);
   const clearFile = useViewerStore((s) => s.clearFile);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
+  const canUndo = useEditorStore(editorSelectors.canUndo);
+  const canRedo = useEditorStore(editorSelectors.canRedo);
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -43,6 +54,31 @@ export function TopBar() {
           </Button>
         )}
       </div>
+
+      {fileName && (
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="元に戻す"
+            disabled={!canUndo}
+            onClick={undo}
+          >
+            <UndoIcon aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="やり直す"
+            disabled={!canRedo}
+            onClick={redo}
+          >
+            <RedoIcon aria-hidden />
+          </Button>
+        </div>
+      )}
 
       {fileName && (
         <span className="text-muted-foreground ml-auto max-w-[40ch] truncate text-sm">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useViewerStore } from "@/store/viewer-store";
+import { editorSelectors, useEditorStore } from "@/store/editor-store";
 import { formatFileSize } from "@/lib/format";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -16,6 +17,7 @@ export function StatusBar() {
   const fileSize = useViewerStore((s) => s.fileSize);
   const status = useViewerStore((s) => s.status);
   const error = useViewerStore((s) => s.error);
+  const dirty = useEditorStore(editorSelectors.isDirty);
 
   return (
     <footer
@@ -29,6 +31,14 @@ export function StatusBar() {
       <span className={status === "error" ? "text-destructive" : undefined}>
         {status === "error" && error ? error : (STATUS_LABEL[status] ?? status)}
       </span>
+      {dirty && (
+        <>
+          <span aria-hidden>·</span>
+          <span className="text-amber-600 dark:text-amber-500">
+            <span aria-hidden>●</span> 未保存
+          </span>
+        </>
+      )}
     </footer>
   );
 }

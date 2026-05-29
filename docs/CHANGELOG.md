@@ -14,6 +14,14 @@
 
 ### Added
 
+<!-- P2 編集コア + Undo/Redo -->
+
+- feat(editor): 操作ログ方式の編集エンジンを実装。`PageRef` と `EditOperation`（reorder/rotate/delete/merge）、`applyOperation` / `derivePages`、replay 方式の Undo/Redo 履歴（`history.ts`）。
+- feat(editor): 複数選択モデル（`selection.ts`: 単一/Ctrl トグル/Shift 範囲/全選択）と `editor-store`（Zustand）を追加。
+- feat(editor): TopBar に Undo/Redo ボタン、StatusBar に未保存インジケータ（●）、`beforeunload` ガード、Ctrl/Cmd+Z・Ctrl+Y/Shift+Z ショートカットを配線。
+- feat(editor): サムネイル一覧をクリック/Ctrl/Shift で複数選択（ハイライト）対応。
+- test(editor): 操作/派生/履歴/選択/ストアの unit（合計 65 件）と、選択・Undo 配線の Chromium E2E を追加。
+
 <!-- P1 ビューア基盤 -->
 
 - feat(viewer): pdfjs-dist を導入し、worker / CMap / 標準フォント / wasm を `public/pdfjs/` へ配置（`scripts/copy-pdfjs-assets.mjs`）して basePath 経由で配信。

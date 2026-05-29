@@ -11,6 +11,9 @@ import {
 import { loadPdfDocument } from "@/lib/pdf/pdfjs";
 import { readPdfMeta } from "@/lib/pdf/document";
 import { useViewerStore } from "@/store/viewer-store";
+import { editorSelectors, useEditorStore } from "@/store/editor-store";
+import { useUnsavedGuard } from "@/lib/hooks/use-unsaved-guard";
+import { useEditorShortcuts } from "@/lib/hooks/use-editor-shortcuts";
 import { PdfDocumentProvider } from "./pdf-document-context";
 import { LeftPane } from "./left-pane";
 import { PageViewer } from "./page-viewer";
@@ -24,7 +27,13 @@ export function ViewerLayout() {
   const setStatus = useViewerStore((s) => s.setStatus);
   const setError = useViewerStore((s) => s.setError);
   const clearFile = useViewerStore((s) => s.clearFile);
+  const initDocument = useEditorStore((s) => s.initDocument);
+  const resetEditor = useEditorStore((s) => s.reset);
+  const dirty = useEditorStore(editorSelectors.isDirty);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
+
+  useUnsavedGuard(dirty);
+  useEditorShortcuts();
 
   useEffect(() => {
     if (!file) return;
@@ -44,6 +53,7 @@ export function ViewerLayout() {
         if (cancelled) return;
         setPdf(doc);
         setNumPages(meta.numPages);
+        initDocument(meta.numPages);
         setStatus("ready");
       } catch (err) {
         if (cancelled) return;
@@ -58,9 +68,18 @@ export function ViewerLayout() {
     return () => {
       cancelled = true;
       setPdf(null);
+      resetEditor();
       void loaded?.destroy();
     };
-  }, [file, setNumPages, setStatus, setError, clearFile]);
+  }, [
+    file,
+    setNumPages,
+    setStatus,
+    setError,
+    clearFile,
+    initDocument,
+    resetEditor,
+  ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

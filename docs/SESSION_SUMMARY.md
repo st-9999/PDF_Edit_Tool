@@ -13,6 +13,48 @@
 
 ---
 
+## 2026-05-29 — P2 編集コア + Undo/Redo（★設計の要）
+
+### 実施内容
+
+- **操作ログ（コマンド）方式の編集モデル**を設計・実装。元バイト列は変更せず、ページ状態を `PageRef`（id/sourceId/sourceIndex/rotation）の列で表現。`EditOperation`＝`reorder`/`rotate`/`delete`/`merge`。
+- **派生計算** `derivePages(initial, ops)`：初期ページ列に操作ログを畳み込んで現在状態を導出（純関数）。
+- **Undo/Redo**：履歴を `{initial, applied, undone}` で保持し、毎回 initial+applied から replay する可逆設計（per-command inverse 不要）。
+- **複数選択モデル**（純関数 `selection.ts`）：単一 / Ctrl トグル / Shift 範囲 / 全選択 / クリア。anchor 管理。
+- **editor-store（Zustand）**：document/history/selection を統合。`initDocument`/`reset`、`reorder`/`rotateSelected`/`deleteSelected`/`mergePages`、`undo`/`redo`、選択アクション、セレクタ（canUndo/canRedo/isDirty/selectedCount）。
+- **配線**：TopBar に Undo/Redo ボタン、StatusBar に未保存 ● 表示、`beforeunload` ガード、Ctrl/Cmd+Z・Ctrl+Y/Shift+Z ショートカット（入力中は無効）。サムネイルをクリック/Ctrl/Shift で複数選択＋ハイライト。読み込み時に `initDocument`、クローズ時に `reset`。
+- **設計判断**：`extract`/`split` は「現在状態を変えず新規 PDF を出力する」エクスポート操作のため、Undo/Redo 対象の操作ログには含めず P3/P4 で純関数実装する。
+
+### 作成ファイル
+
+- `src/lib/editor/{operations,history,selection}.ts` + 各 `.test.ts`
+- `src/store/editor-store.ts` + `editor-store.test.ts`
+- `src/lib/id.ts`、`src/lib/hooks/{use-unsaved-guard,use-editor-shortcuts}.ts`
+- `e2e/editor.spec.ts`
+
+### 変更ファイル
+
+- `src/features/viewer/{top-bar,status-bar,thumbnail,thumbnail-list,viewer-layout}.tsx`（Undo/Redo・未保存・選択・初期化配線）
+- `docs/CHANGELOG.md` / `docs/TODO.md`
+
+### 計測結果
+
+- **テスト**: Vitest **65 件**全通過（9 ファイル：operations 13 / history 6 / selection 8 / editor-store 7 / 既存 31）。Playwright E2E（Chromium）**3 件**全通過（空状態 / 実 PDF ビューア / 選択・Undo 配線）。`lint` / `tsc` / `prettier --check` クリーン。
+- **ビルド**: 静的エクスポート成功。初期 JS raw 696KB / gzip 208KB（P1 から変化なし＝編集ロジックは遅延ビューアチャンク内）。
+
+### Risks/TODO
+
+- 編集操作を発行する UI（回転/削除ボタン・D&D 並び替え・コンテキストメニュー・半透明削除プレビュー）と pdf-lib による実出力は **P3**。本フェーズはエンジン＋配線まで。
+- ビューア本体（メイン描画）はまだ派生ページ（並び替え/回転/削除）を反映しない。P3 で derivePages を描画にも適用する。
+- 未保存判定は `applied.length>0`。保存（P4）後にクリアする「保存済みマーカー」は P4 で追加。
+- 連続表示はページ均一サイズ近似のまま（仮想化は P7）。
+
+### 次ステップ
+
+- TODO P3「編集機能」: `dnd-kit` 並び替え、回転/削除 UI（サムネ反映）、pdf-lib による抽出/分割/結合の実出力と検証テスト、ContextMenu、選択時のツールバー活性制御。
+
+---
+
 ## 2026-05-29 — P1 ビューア基盤
 
 ### 実施内容

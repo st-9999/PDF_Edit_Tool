@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useInView } from "@/lib/hooks/use-in-view";
 import { renderPageToCanvas } from "@/lib/pdf/render";
@@ -9,17 +9,23 @@ import { cn } from "@/lib/utils";
 
 interface ThumbnailProps {
   pdf: PDFDocumentProxy;
+  /** 描画する元ページ（1 始まり）。 */
   pageNumber: number;
-  active: boolean;
-  onSelect: (pageNumber: number) => void;
+  /** 一覧内の表示位置（1 始まり・ラベル/現在ページ判定用）。 */
+  position: number;
+  selected: boolean;
+  current: boolean;
+  onClick: (event: MouseEvent) => void;
 }
 
 /** サムネイル 1 件。可視範囲に入ったら低解像度で描画する（遅延生成）。 */
 export function Thumbnail({
   pdf,
   pageNumber,
-  active,
-  onSelect,
+  position,
+  selected,
+  current,
+  onClick,
 }: ThumbnailProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -52,23 +58,26 @@ export function Thumbnail({
     };
   }, [inView, pdf, pageNumber]);
 
-  // 選択中サムネは一覧内に見えるようスクロール
+  // 現在ページのサムネは一覧内に見えるようスクロール
   useEffect(() => {
-    if (active) {
-      buttonRef.current?.scrollIntoView({ block: "nearest" });
-    }
-  }, [active]);
+    if (current) buttonRef.current?.scrollIntoView({ block: "nearest" });
+  }, [current]);
 
   return (
     <button
       ref={buttonRef}
       type="button"
-      onClick={() => onSelect(pageNumber)}
-      aria-label={`ページ ${pageNumber}`}
-      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+      aria-label={`ページ ${position}`}
+      aria-pressed={selected}
+      aria-current={current ? "page" : undefined}
       className={cn(
         "flex flex-col items-center gap-1 rounded-md p-1.5 transition-colors",
-        active ? "bg-primary/10 ring-primary ring-2" : "hover:bg-muted",
+        selected
+          ? "bg-primary/10 ring-primary ring-2"
+          : current
+            ? "ring-ring ring-1"
+            : "hover:bg-muted",
       )}
     >
       <div
@@ -80,7 +89,7 @@ export function Thumbnail({
       >
         <canvas ref={canvasRef} className="block w-full" />
       </div>
-      <span className="text-muted-foreground text-xs">{pageNumber}</span>
+      <span className="text-muted-foreground text-xs">{position}</span>
     </button>
   );
 }
