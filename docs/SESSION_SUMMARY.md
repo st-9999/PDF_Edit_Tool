@@ -13,6 +13,43 @@
 
 ---
 
+## 2026-05-30 — サムネの「閲覧中／選択中」状態表示を刷新＋ページ追従をスムーズスクロール化
+
+### 実施内容
+
+- **前回セッションの中断分の完成**: PC シャットダウンで未コミットのまま残っていたサムネイル UI 改善作業を、動作確認のうえ完成・コミット。
+- **状態表示の刷新（`thumbnail.tsx`）**: 「いま表示中（閲覧中）」と「編集対象として選択中」がともにリング表現で紛らわしかった問題を解消。
+  - 閲覧中ページ: 青いリング（`ring-2 ring-sky-500` + `ring-offset-2`）＋ページ番号を青バッジ（`bg-sky-500 text-white`）で強調。
+  - 選択中ページ: primary の淡い塗り（`bg-primary/15`）＋サムネ枠を primary の太枠（`ring-primary ring-2`）にし、右上に primary 円のチェックアイコン（lucide `CheckIcon`）を表示。未選択時のみホバー反応（`hover:bg-muted`）。
+- **ページ追従のスムーズ化（`thumbnail-list.tsx`）**: ビュアーのページ追従スクロールを `container.scrollTo({ behavior: "smooth" })` に変更。`prefers-reduced-motion: reduce` 設定時は `behavior: "auto"`（即時）にフォールバックしてモーション過敏に配慮。
+
+### 作成ファイル
+
+- なし
+
+### 変更ファイル
+
+- `src/features/viewer/thumbnail.tsx` — 閲覧中/選択中の状態表示を刷新（青リング＋番号バッジ／primary 塗り＋チェックアイコン）
+- `src/features/viewer/thumbnail-list.tsx` — ページ追従を smooth スクロール化（reduced-motion 時は即時）
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）: パス（エラー 0）
+- Lint（`eslint`）: パス（警告/エラー 0）
+- Unit（`vitest run`）: **114 / 114 パス**（全 18 ファイル）
+
+### Risks/TODO
+
+- 本変更は見た目（Tailwind クラス）中心で、サムネの状態表示に対する専用ユニットテストは未追加。視覚的な回帰は目視 or 既存 e2e に委ねている。
+- 実機でライト/ダーク両テーマでの青リング・チェックアイコンのコントラストを目視確認推奨。
+
+### 次ステップ
+
+- 実機でサムネの「閲覧中／選択中」表示とページ追従スクロールの体感を目視確認。
+
+---
+
 ## 2026-05-29 — スクロール時の現在ページ未更新を修正＋body レイアウト崩れ（pdf.js 隠し canvas）を修正（Playwright 検証）
 
 ### 実施内容

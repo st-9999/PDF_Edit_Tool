@@ -142,7 +142,15 @@ export function ThumbnailList() {
       eRect.top,
       eRect.height,
     );
-    if (delta !== 0) container.scrollTop += delta;
+    if (delta === 0) return;
+    // スムーズスクロールで追従（モーション抑制設定時は即時）
+    const reduceMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    container.scrollTo({
+      top: container.scrollTop + delta,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
   }, [currentPage]);
 
   // 右クリック時、対象が未選択ならそのページだけを選択してから操作する

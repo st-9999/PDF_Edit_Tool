@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MouseEvent } from "react";
+import { CheckIcon } from "lucide-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useVisible } from "@/lib/hooks/use-visible";
 import { renderPageToCanvas } from "@/lib/pdf/render";
@@ -82,24 +83,44 @@ export function Thumbnail({
       aria-pressed={selected}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "flex flex-col items-center gap-1 rounded-md p-1.5 transition-colors",
-        selected
-          ? "bg-primary/10 ring-primary ring-2"
-          : current
-            ? "ring-ring ring-1"
-            : "hover:bg-muted",
+        "relative flex flex-col items-center gap-1 rounded-md p-1.5 transition-all",
+        // 閲覧中ページ: 青いリング＋オフセットで「いま表示中」を明示
+        current && "ring-2 ring-sky-500 ring-offset-2 ring-offset-background",
+        // 選択中ページ（編集対象）: primary の淡い塗り。未選択時のみホバー反応
+        selected ? "bg-primary/15" : "hover:bg-muted",
       )}
     >
       <div
-        className="bg-background overflow-hidden ring-1 ring-black/5"
+        className={cn(
+          "bg-background relative overflow-hidden transition-colors",
+          // 選択中は primary の太枠＋チェック、非選択は控えめな枠
+          selected ? "ring-primary ring-2" : "ring-1 ring-black/5",
+        )}
         style={{
           width,
           minHeight: Math.round(width * THUMBNAIL_ASPECT),
         }}
       >
         {visible ? <canvas ref={canvasRef} className="block w-full" /> : null}
+        {selected && (
+          <span
+            className="bg-primary text-primary-foreground absolute top-1 right-1 flex size-4 items-center justify-center rounded-full shadow-sm"
+            aria-hidden
+          >
+            <CheckIcon className="size-3" />
+          </span>
+        )}
       </div>
-      <span className="text-muted-foreground text-xs">{position}</span>
+      <span
+        className={cn(
+          "rounded-full px-2 text-xs tabular-nums transition-colors",
+          current
+            ? "bg-sky-500 font-semibold text-white"
+            : "text-muted-foreground",
+        )}
+      >
+        {position}
+      </span>
     </button>
   );
 }
