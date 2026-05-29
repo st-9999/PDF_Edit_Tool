@@ -13,6 +13,54 @@
 
 ---
 
+## 2026-05-29 — P1 ビューア基盤
+
+### 実施内容
+
+- **pdf.js 基盤**: `pdfjs-dist` を直接利用。worker / CMap / 標準フォント / wasm を `scripts/copy-pdfjs-assets.mjs` で `public/pdfjs/` にコピーし、`withBasePath` 経由で参照（静的エクスポート + basePath 対応）。pdfjs は SSR 回避のためクライアントで遅延 import。
+- **状態管理**: Zustand の viewer ストアを構築（file/numPages/currentPage/zoom/fitMode/viewMode/status/leftTab + スクロール要求 navSeq）。純関数 `clampPage` / `clampZoom` を分離。
+- **読込**: D&D + ファイル選択の空状態 UI、PDF バイト列からのロード・メタ（ページ数/タイトル）取得、破損/パスワード PDF のトースト通知。
+- **ビューア**: メインページ描画（HiDPI・レンダータスクキャンセル）、ページ送り（◀ N/Total ▶・番号入力ジャンプ）、ズーム（スライダー + % 入力 + 幅合わせ/全体表示）、単ページ / 連続スクロール切替。連続表示は IntersectionObserver で遅延描画＋スクロール↔現在ページ同期。
+- **左ペイン**: `Tabs`（サムネイル / しおり枠）、サムネイル一覧（遅延・低解像度生成、クリックでジャンプ、選択ハイライト）。`Resizable` で幅可変。
+- **ステータスバー**: 総ページ数・ファイルサイズ・処理状況。
+- **最適化**: ビューア本体を `next/dynamic` で分離し初期バンドル削減。
+
+### 作成ファイル
+
+- `scripts/copy-pdfjs-assets.mjs`
+- `src/lib/pdf/{constants,pdfjs,document,render}.ts`、`src/lib/format.ts`、`src/lib/hooks/{use-in-view,use-element-size}.ts`
+- `src/store/viewer-store.ts`
+- `src/features/viewer/{pdf-document-context,pdf-page-canvas,empty-state,top-bar,status-bar,zoom 関連を含む page-viewer,thumbnail,thumbnail-list,left-pane,viewer-layout,viewer-app}.tsx`
+- テスト: `src/store/viewer-store.test.ts`、`src/lib/format.test.ts`、`src/lib/pdf/document.node.test.ts`、`src/features/viewer/empty-state.test.tsx`、`e2e/viewer.spec.ts`
+- shadcn 追加: `input` / `toggle` / `scroll-area` / `separator`
+
+### 変更ファイル
+
+- `src/app/page.tsx`（ViewerApp 表示）、`src/app/layout.tsx`（Sonner Toaster 追加）
+- `package.json`（deps 追加・`copy:pdfjs`/`predev`/`prebuild`）、`.gitignore`（`/public/pdfjs`）、`eslint.config.mjs`（`public/**` 除外）
+- `e2e/home.spec.ts`（空状態に合わせ更新）、`docs/CHANGELOG.md` / `docs/TODO.md`
+
+### 計測結果
+
+- **ビルド**: `next build`（静的エクスポート）成功、4 ページ静的生成。コンパイル 2.3s + 型チェック 2.5s。
+- **バンドル**: 初期 JS（index.html 参照分）raw 696KB / gzip 208KB（P0 比 +約 27KB gzip）。全 `_next` チャンク raw 約 1238KB。pdf.js（約 434KB チャンク）とビューア本体は遅延ロードで初期非搭載。
+- **テスト**: Vitest 31 件すべて通過（5 ファイル）。Playwright E2E（Chromium）2 件通過（空状態表示 / 実 PDF 5p をロード→描画→ページ送り→番号ジャンプ）。`lint` / `tsc` / `prettier --check` エラーなし。
+- pdf.js による PDF ロード解析を Node 統合テストで検証（ページ数・メタ取得）。
+
+### Risks/TODO
+
+- **中規模 PDF（数百ページ/数十MB）の formal な初回描画時間・メモリ計測は未実施** → P7「計測基盤（`performance.memory` ロガー）」で実施予定。基本描画パイプラインは E2E(5p) で確認済み。
+- 連続表示はページサイズ均一を仮定（1 ページ目基準でボックス寸法を算出）。サイズ可変 PDF では概算。仮想化（離れた canvas 破棄/LRU）は P7。
+- パスワード保護 PDF は P1 では未対応（トースト表示のみ）。本格対応は P8。
+- Playwright は Chromium のみ実行（Firefox 系は browser 未インストール）。`npx playwright install firefox` で追加可能。
+- `text-muted-foreground` 等の shadcn テーマトークン使用。ダーク/ライトテーマ切替は P8。
+
+### 次ステップ
+
+- TODO P2「編集コア + Undo/Redo」: 操作ログ（コマンド）方式の編集モデル、派生状態計算、Undo/Redo スタック、複数選択モデル、未保存ガード、ショートカット。
+
+---
+
 ## 2026-05-29 — P0 プロジェクト基盤構築
 
 ### 実施内容

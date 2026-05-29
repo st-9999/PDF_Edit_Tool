@@ -1,0 +1,71 @@
+"use client";
+
+import { useRef } from "react";
+import { FileTextIcon, UploadIcon, XIcon } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { useViewerStore } from "@/store/viewer-store";
+
+function isPdfFile(file: File): boolean {
+  return (
+    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+  );
+}
+
+/** トップバー: アプリ名・ファイルを開く/閉じる。編集系は P2 以降で追加。 */
+export function TopBar() {
+  const fileName = useViewerStore((s) => s.fileName);
+  const setFile = useViewerStore((s) => s.setFile);
+  const clearFile = useViewerStore((s) => s.clearFile);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <header className="flex items-center gap-3 border-b px-4 py-2">
+      <div className="flex items-center gap-2 font-semibold">
+        <FileTextIcon className="size-5" aria-hidden />
+        <span>PDF ビューア＆エディタ</span>
+      </div>
+
+      <div className="ml-2 flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => inputRef.current?.click()}
+        >
+          <UploadIcon aria-hidden />
+          開く
+        </Button>
+        {fileName && (
+          <Button type="button" variant="ghost" size="sm" onClick={clearFile}>
+            <XIcon aria-hidden />
+            閉じる
+          </Button>
+        )}
+      </div>
+
+      {fileName && (
+        <span className="text-muted-foreground ml-auto max-w-[40ch] truncate text-sm">
+          {fileName}
+        </span>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          if (!isPdfFile(file)) {
+            toast.error("PDF ファイルを選択してください");
+            return;
+          }
+          setFile(file);
+          e.target.value = "";
+        }}
+      />
+    </header>
+  );
+}

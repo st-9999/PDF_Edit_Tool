@@ -14,6 +14,15 @@
 
 ### Added
 
+<!-- P1 ビューア基盤 -->
+
+- feat(viewer): pdfjs-dist を導入し、worker / CMap / 標準フォント / wasm を `public/pdfjs/` へ配置（`scripts/copy-pdfjs-assets.mjs`）して basePath 経由で配信。
+- feat(viewer): D&D + ファイル選択の空状態 UI、3 ペイン（トップバー / 左ペイン / メインビューア）+ ステータスバーを実装。
+- feat(viewer): ページ描画（HiDPI 対応・レンダータスクキャンセル）、ページ送り、ズーム（スライダー / % 入力 / 幅合わせ / 全体表示）、単ページ / 連続スクロール切替を実装。
+- feat(viewer): サムネイル一覧（IntersectionObserver による遅延・低解像度生成）と `Tabs`（サムネイル / しおり枠）を実装。
+- feat(store): Zustand の viewer ストア（ページ・ズーム・表示モード・状態・ナビ要求）と純関数 `clampPage` / `clampZoom` を追加。
+- perf(viewer): ビューア本体を `next/dynamic` で遅延ロードし、初期バンドルを削減（初期 JS gzip 243KB→208KB）。
+- test(viewer): store 境界/ズームの unit、pdf.js による PDF ロードの node 統合、`EmptyState` の RTL、Chromium での実描画 E2E を追加（unit 31 件 + E2E 2 件）。
 - `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` の雛形を作成（TODO P0）。
 - build: Next.js 16.2.6（App Router / TypeScript）プロジェクトを静的エクスポート構成で作成。
 - feat: `next.config.ts` に静的エクスポート設定（`output: 'export'`、`images.unoptimized`、`trailingSlash`）と、`NEXT_PUBLIC_BASE_PATH` による `basePath`/`assetPrefix` の環境変数注入を実装。
@@ -27,6 +36,9 @@
 - chore: ディレクトリ設計（`features/`・`lib/pdf/`・`store/`・`workers/`）を作成。
 
 ### Changed
+
+- chore(deps): `pdfjs-dist` / `zustand` / `pdf-lib` を追加。`build`/`dev` 前に `copy:pdfjs` を実行。
+- chore: `.gitignore` に `/public/pdfjs`（生成アセット）を追加。ESLint で `public/**` を除外。
 
 - chore: `.gitignore` に `tmp/`・Playwright 成果物を追加。
 
