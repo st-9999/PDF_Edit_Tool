@@ -14,6 +14,12 @@
 
 ### Added
 
+<!-- P6 しおり表示 -->
+
+- feat(bookmark): pdf.js のアウトラインを解決済みツリーへ変換する `buildOutline`（名前付き/明示 dest → ページ解決）を追加。
+- feat(bookmark): 左ペイン「しおり」タブに再帰ツリー（開閉）と空状態を実装。クリックで該当ページへジャンプ（sourceIndex→現在の表示位置にマップ）。
+- test(bookmark): ツリー構造・dest 解決（mock）、実 PDF のアウトライン有/無（node 統合）と、ツリー表示・ジャンプ・空状態の Chromium E2E を追加。
+
 <!-- P5 テキスト検索・選択 -->
 
 - feat(search): pdf.js テキストレイヤをメインビューアに重畳（`renderTextLayer`・`PdfPageView`）。ネイティブ選択・コピーと「全選択」ボタンに対応。

@@ -13,6 +13,42 @@
 
 ---
 
+## 2026-05-29 — P6 しおり表示
+
+### 実施内容
+
+- **アウトライン読取・解決**: `lib/pdf/outline.ts` に `buildOutline(source)` を実装。pdf.js の `getOutline` → 各項目の dest（名前付きは `getDestination`、明示は配列）を `getPageIndex` で 0 始まりページに解決し、`OutlineNode` ツリー（id/title/sourceIndex/children）を構築。テスト容易性のため必要メソッドだけの `OutlineSource` 型で受ける。
+- **しおり UI**: `BookmarkPanel` ＋ 再帰 `TreeItem`（開閉トグル）。左ペイン「しおり」タブに表示。元ソース（`editor-store.sourceId`）のアウトラインを読み込み、クリック時に `sourceIndex` を現在の表示ページ列（`pages`）の位置へマップして `requestPage`（編集で並びが変わっても正しいページへ）。解決不能な項目は無効化。
+- **空状態**: アウトラインが無い PDF では「しおり（アウトライン）がありません」を表示。
+
+### 作成ファイル
+
+- `src/lib/pdf/outline.ts` + `outline.test.ts`
+- `src/features/bookmark/bookmark-panel.tsx`
+- `e2e/bookmark.spec.ts`
+
+### 変更ファイル
+
+- `src/features/viewer/left-pane.tsx`（しおりタブに `BookmarkPanel` を配線）
+- `docs/CHANGELOG.md` / `docs/TODO.md`
+
+### 計測結果
+
+- **テスト**: Vitest **92 件**全通過（14 ファイル。outline 5 件＝mock のツリー/解決・dest なし・実 PDF のアウトライン有無を含む）。Playwright E2E（Chromium）**8 件**全通過（＋しおりツリー表示・ジャンプ＝ページ番号 3 / 空状態）。`lint`/`tsc`/`prettier --check` クリーン。
+- **ビルド**: 静的エクスポート成功。初期 JS raw 696.7KB / gzip 208.4KB（P5 から変化なし＝しおりも遅延ビューアチャンク内）。
+
+### Risks/TODO
+
+- しおりは元ソース（最初に開いた文書）のアウトラインのみ表示。結合した別ソースのしおりは未統合（v2 のしおり編集と併せて検討）。
+- ジャンプは `sourceIndex` を現在の表示位置へマップ。該当ページが削除済みなら無効（クリックしても移動しない）。
+- v1 は閲覧のみ。しおりの追加・リネーム・階層変更・Outline 書き戻しは v2。
+
+### 次ステップ
+
+- TODO P7「性能・大規模対策（基礎）」: 計測基盤（`performance.memory` ロガー・CI 簡易ベンチ）、ページ/サムネ仮想化、重い処理の Web Worker 隔離、進捗＋キャンセル、推奨上限の UI 明示。
+
+---
+
 ## 2026-05-29 — P5 テキスト検索・選択
 
 ### 実施内容
