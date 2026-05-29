@@ -18,6 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { Toggle } from "@/components/ui/toggle";
 import { useElementSize } from "@/lib/hooks/use-element-size";
 import { useVisible } from "@/lib/hooks/use-visible";
+import { useCtrlWheelZoom } from "@/lib/hooks/use-ctrl-wheel-zoom";
 import { computeFitScale } from "@/lib/pdf/render";
 import { ZOOM_MAX, ZOOM_MIN } from "@/lib/pdf/constants";
 import { useViewerStore } from "@/store/viewer-store";
@@ -136,6 +137,9 @@ export function PageViewer() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(scrollRef);
   const [baseDims, setBaseDims] = useState<BaseDims | null>(null);
+
+  // ビュアー上の Ctrl+ホイールはページ表示ズーム（既存の ± と同じ刻み）に割り当てる
+  useCtrlWheelZoom(scrollRef, { onZoomIn: zoomIn, onZoomOut: zoomOut });
 
   const firstPage = pages[0];
   const firstProxy = firstPage ? getProxy(firstPage.sourceId) : undefined;

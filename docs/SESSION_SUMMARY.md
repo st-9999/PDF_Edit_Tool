@@ -13,6 +13,49 @@
 
 ---
 
+## 2026-05-29 — Ctrl+ホイールのスコープ別ズーム＆サムネのページ追従スクロール
+
+### 実施内容
+
+- **要望1（Ctrl+ホイール）**: カーソルが左ペインにあればサムネ、ビュアーにあればページ表示が拡大縮小されるようにする。
+- **要望2（追従スクロール）**: ビュアーの表示ページに合わせてサムネ一覧も自動スクロールする。
+- **技術確認（context7 / React 公式）**: React の `onWheel` 合成イベントは root に **passive** リスナとして登録されるため、その中で `preventDefault()` を呼んでもブラウザ標準のズームを止められない。確実に抑止するには対象要素へ `{ passive: false }` のネイティブ wheel リスナを直接張る必要がある（useEffect + addEventListener パターン）。これを `useCtrlWheelZoom` フックに実装。
+- **実装1**: `useCtrlWheelZoom(ref, { onZoomIn, onZoomOut })` を新設。`Ctrl/⌘` 押下時のみ `preventDefault()` し、`deltaY` の符号で in/out を判定。
+  - ビュアー: `page-viewer.tsx` のスクロール要素に適用し `zoomIn/zoomOut`（既存 ± と同じ 0.25 刻み）へ接続。
+  - 左ペイン: `left-pane.tsx` のサムネスクロール要素に適用し `thumbnailZoomIn/Out`（20px 刻み）へ接続。
+  - カーソルが各要素上のときだけ発火するため、3 系統（サムネ／ビュアー／ブラウザ）が自然に分離。領域外では従来どおりブラウザのページズームが効く。
+- **実装2**: サムネのページ追従スクロールを `ThumbnailList` に集約。位置(1始まり)→ボタン要素の ref マップを持ち、`currentPage` 変化時に該当サムネへ `scrollIntoView({ block: "nearest" })`。従来 `Thumbnail` 内にあった個別の current スクロール effect は削除し、マウント順に依存しない確実な追従にした。
+
+### 作成ファイル
+
+- `src/lib/hooks/use-ctrl-wheel-zoom.ts` — Ctrl+ホイールのスコープ別ズーム用フック（非 passive リスナ）
+- `src/lib/hooks/use-ctrl-wheel-zoom.test.tsx` — 方向・スコープ・preventDefault・アンマウント解除のテスト（4 件）
+
+### 変更ファイル
+
+- `src/features/viewer/page-viewer.tsx` — ビュアーに `useCtrlWheelZoom` を接続
+- `src/features/viewer/left-pane.tsx` — サムネスクロール要素に `useCtrlWheelZoom` を接続（ref 追加）
+- `src/features/viewer/thumbnail.tsx` — `registerRef` prop 追加、個別 current スクロール effect を削除
+- `src/features/viewer/thumbnail-list.tsx` — ref マップ＋`currentPage` 追従スクロール effect を追加
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）: パス（エラー 0）
+- Lint: パス（警告/エラー 0）
+- Unit（`vitest run`）: **109 / 109 パス**（フック新規 4 件を追加。前回 105 → 109）
+
+### Risks/TODO
+
+- ホイール 1 ノッチ = 1 ステップ（ビュアー 25% / サムネ 20px）。トラックパッドのピンチズームは `ctrlKey` 付き wheel を多数発火するため拡大縮小が速くなる。必要なら `deltaY` 量に応じた比例ズームや間引きを検討。
+- フィット表示中に Ctrl+ホイールすると既存 ± と同様に `fitMode='actual'` へ切替＋最後の zoom 値起点になる（既存仕様に踏襲）。
+
+### 次ステップ
+
+- 実機で「サムネ上／ビュアー上／領域外」での Ctrl+ホイール挙動と、ビュアー連続スクロール時のサムネ追従を目視確認。
+
+---
+
 ## 2026-05-29 — サムネイルの独立拡大縮小（3 系統のズームを分離）
 
 ### 実施内容

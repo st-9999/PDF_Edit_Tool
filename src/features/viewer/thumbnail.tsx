@@ -23,6 +23,8 @@ interface ThumbnailProps {
   selected: boolean;
   current: boolean;
   onClick: (event: MouseEvent) => void;
+  /** 一覧側がスクロール同期に使うボタン要素の登録コールバック。 */
+  registerRef?: (el: HTMLButtonElement | null) => void;
 }
 
 /** サムネイル 1 件。可視範囲に入ったら低解像度で描画する（遅延生成）。 */
@@ -35,6 +37,7 @@ export function Thumbnail({
   selected,
   current,
   onClick,
+  registerRef,
 }: ThumbnailProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -67,14 +70,12 @@ export function Thumbnail({
     };
   }, [visible, pdf, pageNumber, rotation, width]);
 
-  // 現在ページのサムネは一覧内に見えるようスクロール
-  useEffect(() => {
-    if (current) buttonRef.current?.scrollIntoView({ block: "nearest" });
-  }, [current]);
-
   return (
     <button
-      ref={buttonRef}
+      ref={(el) => {
+        buttonRef.current = el;
+        registerRef?.(el);
+      }}
       type="button"
       onClick={onClick}
       aria-label={`ページ ${position}`}

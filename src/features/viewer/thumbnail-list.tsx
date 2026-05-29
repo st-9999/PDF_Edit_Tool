@@ -1,6 +1,6 @@
 "use client";
 
-import type { MouseEvent } from "react";
+import { useCallback, useEffect, useRef, type MouseEvent } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -39,6 +39,7 @@ function SortableThumbnail({
   selected,
   current,
   onClick,
+  registerRef,
 }: {
   pdf: PDFDocumentProxy | undefined;
   page: PageRef;
@@ -47,6 +48,7 @@ function SortableThumbnail({
   selected: boolean;
   current: boolean;
   onClick: (event: MouseEvent) => void;
+  registerRef: (el: HTMLButtonElement | null) => void;
 }) {
   const {
     setNodeRef,
@@ -90,6 +92,7 @@ function SortableThumbnail({
           selected={selected}
           current={current}
           onClick={onClick}
+          registerRef={registerRef}
         />
       ) : null}
     </div>
@@ -109,6 +112,21 @@ export function ThumbnailList() {
   const requestPage = useViewerStore((s) => s.requestPage);
   const thumbnailWidth = useViewerStore((s) => s.thumbnailWidth);
   const actions = useEditActions();
+
+  // 位置(1始まり)→サムネボタン要素。ビュアーの現在ページに追従してスクロールする
+  const itemRefs = useRef(new Map<number, HTMLButtonElement>());
+  const registerItem = useCallback(
+    (position: number, el: HTMLButtonElement | null) => {
+      if (el) itemRefs.current.set(position, el);
+      else itemRefs.current.delete(position);
+    },
+    [],
+  );
+
+  // ビュアー側で currentPage が変わったら、その位置のサムネを一覧内に見えるようスクロール
+  useEffect(() => {
+    itemRefs.current.get(currentPage)?.scrollIntoView({ block: "nearest" });
+  }, [currentPage]);
 
   // 右クリック時、対象が未選択ならそのページだけを選択してから操作する
   const ensureSelected = (id: string) => {
@@ -160,6 +178,7 @@ export function ThumbnailList() {
                     selected={selected.has(page.id)}
                     current={position === currentPage}
                     onClick={(event) => handleClick(event, page.id, position)}
+                    registerRef={(el) => registerItem(position, el)}
                   />
                 </ContextMenuTrigger>
                 <ContextMenuContent>
