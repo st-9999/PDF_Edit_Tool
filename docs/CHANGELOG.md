@@ -14,6 +14,14 @@
 
 ### Added
 
+<!-- P4 保存層 -->
+
+- feat(save): `SaveStrategy` 抽象と能力判定（`createSaveStrategy`/`isFileSystemAccessSupported`）を追加。Chromium は File System Access（名前を付けて保存・上書き保存）、Firefox は `<a download>` フォールバック。
+- feat(save): TopBar に保存メニュー（名前を付けて保存 / 上書き保存（能力依存・無効化明示）/ 分割して保存）と Ctrl/Cmd+S を追加。
+- feat(editor): `fileHandle` / `savedAppliedLength` / `markSaved` を追加し、保存後に未保存フラグをクリア（`isDirty` を保存時点との比較に変更）。
+- refactor(editor): 抽出・分割の出力を保存層（能力判定）経由に統一（P3 の暫定ダウンロードを置換）。
+- test(save): 能力判定の分岐・保存バイトの再読込妥当性・FS Access 書込/上書き・ダウンロード経路の unit と、Firefox フォールバックでのダウンロード発火 E2E を追加。
+
 <!-- P3 編集機能 -->
 
 - feat(editor): pdf-lib 実出力ビルダ `buildPdf` / `extractPages` / `splitPdf`（並び替え・回転・削除・抽出・分割・結合の実バイト生成）を実装。
@@ -54,6 +62,7 @@
 
 ### Changed
 
+- chore(deps): `@types/wicg-file-system-access`（File System Access の型）を追加。
 - chore(deps): `@dnd-kit/core` / `@dnd-kit/sortable` / `@dnd-kit/utilities` を追加。
 - refactor(viewer): 単一プロキシ前提を廃止し、複数ソース（sourceId→proxy）描画へ刷新（`pdf-document-context` を `pdf-sources-context` に置換）。
 - chore(deps): `pdfjs-dist` / `zustand` / `pdf-lib` を追加。`build`/`dev` 前に `copy:pdfjs` を実行。

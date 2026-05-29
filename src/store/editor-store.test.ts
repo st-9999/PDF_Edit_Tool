@@ -43,6 +43,24 @@ describe("editor-store: 選択 + 回転 + Undo/Redo", () => {
   });
 });
 
+describe("editor-store: 保存フラグ", () => {
+  beforeEach(() => get().initDocument(3, "doc"));
+
+  it("markSaved で未保存が解消し、追加編集で再び未保存になる", () => {
+    const [a] = ids();
+    get().selectClick(a!);
+    get().rotateSelected(90);
+    expect(editorSelectors.isDirty(get())).toBe(true);
+
+    get().markSaved();
+    expect(editorSelectors.isDirty(get())).toBe(false);
+
+    get().selectClick(a!);
+    get().rotateSelected(90);
+    expect(editorSelectors.isDirty(get())).toBe(true);
+  });
+});
+
 describe("editor-store: 範囲選択 + 削除", () => {
   beforeEach(() => get().initDocument(5, "doc"));
 

@@ -80,14 +80,14 @@
 
 ## P4. 保存層 (v1)
 
-- [ ] 保存処理の抽象化（`SaveStrategy` インターフェース）
-- [ ] **能力判定**（`window.showSaveFilePicker` の有無）
-- [ ] Chromium経路: File System Access API で「名前を付けて保存」「上書き保存（元ファイルハンドル保持）」
-- [ ] Firefox経路: `<a download>` フォールバック（上書き不可をUIで明示・無効化）
-- [ ] 分割時の複数ファイル順次保存
-- [ ] 保存後に未保存フラグをクリア
-- [ ] 大きな出力を溜め込まない書き出し（可能な範囲でストリーム）
-- [ ] **テスト**: 能力判定の分岐 / 生成PDFバイト列の妥当性（再読込して構造検証）/ Firefoxフォールバック時のダウンロード発火（E2E）
+- [x] 保存処理の抽象化（`SaveStrategy` インターフェース＝`lib/save/strategy.ts`）
+- [x] **能力判定**（`isFileSystemAccessSupported` = `window.showSaveFilePicker` の有無）
+- [x] Chromium経路: File System Access API で「名前を付けて保存」「上書き保存（保存/オープン時のハンドルを保持し再書込）」
+- [x] Firefox経路: `<a download>` フォールバック（上書き保存メニューを無効化＋「Chrome/Edge のみ」明示）
+- [x] 分割時の複数ファイル順次保存（`saveSplit`、キャンセルで中断）
+- [x] 保存後に未保存フラグをクリア（`markSaved` で `savedAppliedLength` を更新、`isDirty` を基準比較に変更）
+- [x] 大きな出力を溜め込まない書き出し（FS Access は `createWritable` ストリームへ直接 write）。※pdf-lib は全体シリアライズのため真のストリームは v2
+- [x] **テスト**: 能力判定の分岐 / 生成PDFバイト列の妥当性（保存→再読込で構造検証）/ Firefoxフォールバック時のダウンロード発火（E2E）
 
 ## P5. テキスト検索・選択 (v1)
 

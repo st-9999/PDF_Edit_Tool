@@ -6,7 +6,6 @@ import {
   canUndo,
   createHistory,
   currentPages,
-  isDirty,
   redoHistory,
   undoHistory,
   type EditHistory,
@@ -33,10 +32,17 @@ interface EditorState {
   /** 現在のページ列（history から導出。subscribe 用に保持）。 */
   pages: PageRef[];
   selection: SelectionState;
+  /** 上書き保存用のファイルハンドル（FS Access で保存/オープン時に設定）。 */
+  fileHandle: FileSystemFileHandle | null;
+  /** 最後に保存した時点の適用済み操作数（未保存判定の基準）。 */
+  savedAppliedLength: number;
 
   // ライフサイクル
   initDocument: (numPages: number, sourceId?: string) => void;
   reset: () => void;
+  /** 保存完了を記録（未保存フラグをクリア）。任意でハンドルを保持。 */
+  markSaved: (handle?: FileSystemFileHandle | null) => void;
+  setFileHandle: (handle: FileSystemFileHandle | null) => void;
 
   // 編集操作（履歴へ積む）
   applyEdit: (op: EditOperation) => void;
@@ -66,6 +72,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   history: emptyHistory,
   pages: [],
   selection: emptySelection(),
+  fileHandle: null,
+  savedAppliedLength: 0,
 
   initDocument: (numPages, sourceId = createId("src")) => {
     const initial = createInitialPages(sourceId, numPages);
@@ -74,6 +82,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       history: createHistory(initial),
       pages: initial,
       selection: emptySelection(),
+      fileHandle: null,
+      savedAppliedLength: 0,
     });
   },
 
@@ -83,7 +93,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       history: emptyHistory,
       pages: [],
       selection: emptySelection(),
+      fileHandle: null,
+      savedAppliedLength: 0,
     }),
+
+  markSaved: (handle) =>
+    set((state) => ({
+      savedAppliedLength: state.history.applied.length,
+      fileHandle: handle === undefined ? state.fileHandle : handle,
+    })),
+
+  setFileHandle: (handle) => set({ fileHandle: handle }),
 
   applyEdit: (op) => set(commit(applyToHistory(get().history, op))),
 
@@ -134,6 +154,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 export const editorSelectors = {
   canUndo: (s: EditorState) => canUndo(s.history),
   canRedo: (s: EditorState) => canRedo(s.history),
-  isDirty: (s: EditorState) => isDirty(s.history),
+  // 最後に保存した時点と適用済み操作数が異なれば未保存
+  isDirty: (s: EditorState) =>
+    s.history.applied.length !== s.savedAppliedLength,
   selectedCount: (s: EditorState) => s.selection.selected.size,
 };

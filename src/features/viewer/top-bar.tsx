@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useViewerStore } from "@/store/viewer-store";
 import { editorSelectors, useEditorStore } from "@/store/editor-store";
+import { SaveMenu } from "@/features/save/save-menu";
 
 function isPdfFile(file: File): boolean {
   return (
@@ -81,9 +82,12 @@ export function TopBar() {
       )}
 
       {fileName && (
-        <span className="text-muted-foreground ml-auto max-w-[40ch] truncate text-sm">
-          {fileName}
-        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-muted-foreground max-w-[32ch] truncate text-sm">
+            {fileName}
+          </span>
+          <SaveMenu />
+        </div>
       )}
 
       <input

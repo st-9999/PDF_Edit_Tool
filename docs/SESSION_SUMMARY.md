@@ -13,6 +13,46 @@
 
 ---
 
+## 2026-05-29 — P4 保存層
+
+### 実施内容
+
+- **保存抽象 `SaveStrategy`**（`lib/save/strategy.ts`）: `kind`/`canOverwrite`/`saveAs`/`overwrite`。`createSaveStrategy()` が `window.showSaveFilePicker` の有無で実装を選択。
+  - `FileSystemAccessStrategy`（Chromium）: `showSaveFilePicker` で保存先指定→`createWritable` ストリームへ直接書込。返却ハンドルを保持し `overwrite` で再書込（上書き保存）。
+  - `DownloadStrategy`（Firefox 等）: `<a download>` フォールバック。`canOverwrite=false`、`overwrite` は例外。
+- **未保存フラグ**: editor-store に `savedAppliedLength`/`fileHandle`/`markSaved` を追加。`isDirty` を「保存時点の適用済み操作数との差」に変更。保存成功で `markSaved`（フラグクリア＋ハンドル保持）。
+- **保存 UI**: TopBar に保存メニュー（名前を付けて保存／上書き保存（FS Access かつハンドルあり時のみ活性・無効時は「Chrome/Edge のみ」明示）／分割して保存）。Ctrl/Cmd+S は「ハンドルがあれば上書き、無ければ名前を付けて保存」。
+- **統一**: P3 で暫定ダウンロードだった抽出・分割を保存層（能力判定）経由に統一（`useSave` の `saveExtract`/`saveSplit`）。分割は複数ファイルを順次保存（キャンセルで中断）。
+
+### 作成ファイル
+
+- `src/lib/save/strategy.ts` + `strategy.test.ts`
+- `src/features/save/{use-save.ts,save-menu.tsx}`
+- `e2e/save.spec.ts`
+
+### 変更ファイル
+
+- `src/store/editor-store.ts`（保存状態・isDirty）+ `editor-store.test.ts`（markSaved テスト）
+- `src/features/editor/use-edit-actions.ts`（抽出/分割を useSave へ委譲）、`src/features/viewer/top-bar.tsx`（保存メニュー）
+- `package.json`（`@types/wicg-file-system-access`）、`docs/CHANGELOG.md` / `docs/TODO.md`
+
+### 計測結果
+
+- **テスト**: Vitest **80 件**全通過（11 ファイル。save strategy 6 件＝能力判定分岐・保存バイト再読込妥当性・FS書込/上書き/ダウンロード、editor-store に markSaved 1 件）。Playwright E2E（Chromium）**5 件**全通過（＋Firefox フォールバックのダウンロード発火）。`lint`/`tsc`/`prettier --check` クリーン。
+- **ビルド**: 静的エクスポート成功。初期 JS raw 696.7KB / gzip 208.4KB（P3 から変化なし＝保存層も遅延ビューアチャンク内）。
+
+### Risks/TODO
+
+- 「元ファイルへの上書き保存」は、保存/オープンで取得したハンドルがある場合に有効。現状の読込は D&D / `<input>` 経由でハンドルを持たないため、初回は「名前を付けて保存」が必要（その後は上書き可）。showOpenFilePicker / DataTransfer ハンドル取得での「開いた元ファイルへ直接上書き」は将来拡張。
+- pdf-lib は全体をシリアライズするため、真のストリーミング書き出しは未対応（出力は一括 write）。大規模は P7/v2（操作ログ＋遅延適用・ページ単位ストリーム）。
+- FS Access の保存ダイアログはネイティブ UI のため自動 E2E 不可。Chromium 経路は unit（モック）で担保、ダウンロード経路を E2E で担保。
+
+### 次ステップ
+
+- TODO P5「テキスト検索・選択」: pdf.js テキストレイヤ重畳、部分/全選択・コピー、検索バー（Ctrl+F・ハイライト・ヒット件数・前後移動）。
+
+---
+
 ## 2026-05-29 — P3 編集機能
 
 ### 実施内容
