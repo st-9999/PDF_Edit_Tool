@@ -9,6 +9,8 @@ interface PdfPageCanvasProps {
   pdf: PDFDocumentProxy;
   pageNumber: number;
   scale: number;
+  /** ユーザー適用の追加回転（時計回り度）。 */
+  rotation?: number;
   className?: string;
 }
 
@@ -20,6 +22,7 @@ export function PdfPageCanvas({
   pdf,
   pageNumber,
   scale,
+  rotation = 0,
   className,
 }: PdfPageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -36,7 +39,7 @@ export function PdfPageCanvas({
       try {
         const page = await pdf.getPage(pageNumber);
         if (cancelled) return;
-        const handle = renderPageToCanvas(page, canvas, scale);
+        const handle = renderPageToCanvas(page, canvas, scale, rotation);
         cancelRender = handle.cancel;
         await handle.promise;
       } catch (err) {
@@ -54,7 +57,7 @@ export function PdfPageCanvas({
       cancelled = true;
       cancelRender?.();
     };
-  }, [pdf, pageNumber, scale]);
+  }, [pdf, pageNumber, scale, rotation]);
 
   if (failed) {
     return (

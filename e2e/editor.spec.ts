@@ -25,7 +25,7 @@ test.describe("P2 編集コア（選択・Undo/Redo 配線）", () => {
     await expect(page.getByRole("button", { name: "やり直す" })).toBeDisabled();
 
     const thumb = (n: number) =>
-      page.getByRole("button", { name: `ページ ${n}` });
+      page.getByRole("button", { name: `ページ ${n}`, exact: true });
 
     // 単一選択
     await thumb(2).click();

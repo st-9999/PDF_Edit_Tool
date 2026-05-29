@@ -18,8 +18,11 @@ export function renderPageToCanvas(
   page: PDFPageProxy,
   canvas: HTMLCanvasElement,
   scale: number,
+  /** ユーザー適用の追加回転（時計回り度）。元ページの回転に加算する。 */
+  rotation = 0,
 ): PageRenderHandle {
-  const viewport = page.getViewport({ scale });
+  const total = (((page.rotate + rotation) % 360) + 360) % 360;
+  const viewport = page.getViewport({ scale, rotation: total });
   const context = canvas.getContext("2d");
   if (!context) {
     throw new Error("Canvas の 2D コンテキストを取得できません");

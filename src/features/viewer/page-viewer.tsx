@@ -21,8 +21,10 @@ import { useInView } from "@/lib/hooks/use-in-view";
 import { computeFitScale } from "@/lib/pdf/render";
 import { ZOOM_MAX, ZOOM_MIN } from "@/lib/pdf/constants";
 import { useViewerStore } from "@/store/viewer-store";
+import { useEditorStore } from "@/store/editor-store";
+import type { PageRef } from "@/lib/editor/operations";
 import { cn } from "@/lib/utils";
-import { usePdfDocument } from "./pdf-document-context";
+import { usePdfSources } from "./pdf-sources-context";
 import { PdfPageCanvas } from "./pdf-page-canvas";
 
 const VIEWER_PADDING = 24;
@@ -32,21 +34,29 @@ interface BaseDims {
   height: number;
 }
 
-/** 連続表示の 1 ページ。可視範囲に入ったら canvas を描画する（遅延）。 */
+/** 回転を考慮した表示ボックス寸法（90/270 度で幅高さを入れ替え）。 */
+function boxFor(base: BaseDims, scale: number, rotation: number): BaseDims {
+  const swap = rotation % 180 === 90;
+  const w = (swap ? base.height : base.width) * scale;
+  const h = (swap ? base.width : base.height) * scale;
+  return { width: w, height: h };
+}
+
+/** 連続表示の 1 ページ。可視範囲に入ったら描画する（遅延）。 */
 function ContinuousPage({
-  pdf,
-  pageNumber,
+  proxy,
+  page,
+  position,
   scale,
-  boxWidth,
-  boxHeight,
+  box,
   registerRef,
 }: {
-  pdf: PDFDocumentProxy;
-  pageNumber: number;
+  proxy: PDFDocumentProxy | undefined;
+  page: PageRef;
+  position: number;
   scale: number;
-  boxWidth: number;
-  boxHeight: number;
-  registerRef: (pageNumber: number, el: HTMLElement | null) => void;
+  box: BaseDims;
+  registerRef: (position: number, el: HTMLElement | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref);
@@ -55,17 +65,22 @@ function ContinuousPage({
     <div
       ref={(el) => {
         ref.current = el;
-        registerRef(pageNumber, el);
+        registerRef(position, el);
       }}
-      data-page={pageNumber}
+      data-page={position}
       className="bg-background relative mx-auto shadow-sm ring-1 ring-black/5"
-      style={{ width: boxWidth, height: boxHeight }}
+      style={{ width: box.width, height: box.height }}
     >
-      {inView ? (
-        <PdfPageCanvas pdf={pdf} pageNumber={pageNumber} scale={scale} />
+      {inView && proxy ? (
+        <PdfPageCanvas
+          pdf={proxy}
+          pageNumber={page.sourceIndex + 1}
+          scale={scale}
+          rotation={page.rotation}
+        />
       ) : (
         <div className="text-muted-foreground flex h-full w-full items-center justify-center text-xs">
-          {pageNumber}
+          {position}
         </div>
       )}
     </div>
@@ -73,8 +88,9 @@ function ContinuousPage({
 }
 
 export function PageViewer() {
-  const pdf = usePdfDocument();
-  const numPages = useViewerStore((s) => s.numPages);
+  const { getProxy } = usePdfSources();
+  const pages = useEditorStore((s) => s.pages);
+  const numPages = pages.length;
   const currentPage = useViewerStore((s) => s.currentPage);
   const zoom = useViewerStore((s) => s.zoom);
   const fitMode = useViewerStore((s) => s.fitMode);
@@ -95,11 +111,15 @@ export function PageViewer() {
   const size = useElementSize(scrollRef);
   const [baseDims, setBaseDims] = useState<BaseDims | null>(null);
 
-  // サイズ計算の基準として 1 ページ目の素のビューポートを使う（v1 は均一サイズ近似）
+  const firstPage = pages[0];
+  const firstProxy = firstPage ? getProxy(firstPage.sourceId) : undefined;
+
+  // サイズ計算の基準として先頭ページの素のビューポートを使う（v1 は均一サイズ近似）
   useEffect(() => {
+    if (!firstPage || !firstProxy) return;
     let cancelled = false;
     (async () => {
-      const page = await pdf.getPage(1);
+      const page = await firstProxy.getPage(firstPage.sourceIndex + 1);
       if (cancelled) return;
       const vp = page.getViewport({ scale: 1 });
       setBaseDims({ width: vp.width, height: vp.height });
@@ -107,7 +127,7 @@ export function PageViewer() {
     return () => {
       cancelled = true;
     };
-  }, [pdf]);
+  }, [firstProxy, firstPage]);
 
   const effectiveScale = useMemo(() => {
     if (fitMode === "actual" || !baseDims || size.width === 0) return zoom;
@@ -121,17 +141,13 @@ export function PageViewer() {
     );
   }, [fitMode, baseDims, size.width, size.height, zoom]);
 
-  const boxWidth = baseDims ? baseDims.width * effectiveScale : 0;
-  const boxHeight = baseDims ? baseDims.height * effectiveScale : 0;
-
-  // 連続表示: 各ページ要素の可視状態から現在ページを更新する（逆方向の自動スクロールはしない）
+  // 連続表示: 各ページ要素の可視状態から現在ページを更新（逆方向の自動スクロールはしない）
   const pageEls = useRef(new Map<number, HTMLElement>());
-  const visible = useRef(new Set<number>());
 
   const registerRef = useCallback(
-    (pageNumber: number, el: HTMLElement | null) => {
-      if (el) pageEls.current.set(pageNumber, el);
-      else pageEls.current.delete(pageNumber);
+    (position: number, el: HTMLElement | null) => {
+      if (el) pageEls.current.set(position, el);
+      else pageEls.current.delete(position);
     },
     [],
   );
@@ -141,19 +157,15 @@ export function PageViewer() {
     const root = scrollRef.current;
     if (!root || typeof IntersectionObserver === "undefined") return;
 
-    visible.current.clear();
+    const visible = new Set<number>();
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          const page = Number(
-            (entry.target as HTMLElement).dataset.page ?? "0",
-          );
-          if (entry.isIntersecting) visible.current.add(page);
-          else visible.current.delete(page);
+          const pos = Number((entry.target as HTMLElement).dataset.page ?? "0");
+          if (entry.isIntersecting) visible.add(pos);
+          else visible.delete(pos);
         }
-        if (visible.current.size > 0) {
-          setCurrentPage(Math.min(...visible.current));
-        }
+        if (visible.size > 0) setCurrentPage(Math.min(...visible));
       },
       { root, threshold: 0.1 },
     );
@@ -161,28 +173,30 @@ export function PageViewer() {
     return () => observer.disconnect();
   }, [viewMode, numPages, setCurrentPage]);
 
-  // 明示ナビ（navSeq の更新）に応じて連続表示をスクロールする
+  // 明示ナビ（navSeq 更新）に応じて連続表示をスクロール
   useEffect(() => {
     if (navSeq === 0 || viewMode !== "continuous") return;
     pageEls.current.get(navTarget)?.scrollIntoView({ block: "start" });
   }, [navSeq, navTarget, viewMode]);
 
   const displayPercent = Math.round(effectiveScale * 100);
+  const activePage = pages[currentPage - 1];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div ref={scrollRef} className="bg-muted/40 min-h-0 flex-1 overflow-auto">
         {viewMode === "single" ? (
           <div className="flex min-h-full items-start justify-center p-6">
-            {baseDims && (
+            {baseDims && activePage && (
               <div
                 className="bg-background shadow-sm ring-1 ring-black/5"
-                style={{ width: boxWidth, height: boxHeight }}
+                style={boxFor(baseDims, effectiveScale, activePage.rotation)}
               >
                 <PdfPageCanvas
-                  pdf={pdf}
-                  pageNumber={currentPage}
+                  pdf={getProxy(activePage.sourceId)!}
+                  pageNumber={activePage.sourceIndex + 1}
                   scale={effectiveScale}
+                  rotation={activePage.rotation}
                 />
               </div>
             )}
@@ -190,14 +204,14 @@ export function PageViewer() {
         ) : (
           <div className="flex flex-col items-center gap-4 p-6">
             {baseDims &&
-              Array.from({ length: numPages }, (_, i) => i + 1).map((page) => (
+              pages.map((page, index) => (
                 <ContinuousPage
-                  key={page}
-                  pdf={pdf}
-                  pageNumber={page}
+                  key={page.id}
+                  proxy={getProxy(page.sourceId)}
+                  page={page}
+                  position={index + 1}
                   scale={effectiveScale}
-                  boxWidth={boxWidth}
-                  boxHeight={boxHeight}
+                  box={boxFor(baseDims, effectiveScale, page.rotation)}
                   registerRef={registerRef}
                 />
               ))}
@@ -325,8 +339,6 @@ function PageNumberInput({
   onGoTo: (page: number) => void;
 }) {
   const [draft, setDraft] = useState(String(currentPage));
-  // 外部要因（スクロール等）でページが変わったら表示を同期する
-  // （effect ではなくレンダー中の前回値比較で更新）
   const [shownPage, setShownPage] = useState(currentPage);
   if (shownPage !== currentPage) {
     setShownPage(currentPage);
@@ -366,7 +378,6 @@ function ZoomPercentInput({
   onSet: (zoom: number) => void;
 }) {
   const [draft, setDraft] = useState(String(displayPercent));
-  // ズーム率の外部変化（幅合わせ等）をレンダー中の前回値比較で同期する
   const [shown, setShown] = useState(displayPercent);
   if (shown !== displayPercent) {
     setShown(displayPercent);

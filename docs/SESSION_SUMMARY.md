@@ -13,6 +13,49 @@
 
 ---
 
+## 2026-05-29 — P3 編集機能
+
+### 実施内容
+
+- **pdf-lib 実出力ビルダ**（`lib/editor/build.ts`）: `buildPdf(sources, pages)` を中核に、`extractPages`（部分集合）・`splitPdf`（境界分割）。各ページを元ドキュメントからコピーし、ユーザー回転を元の回転に加算して `/Rotate` に反映。並び替え・削除・結合はすべて「PageRef 列からのビルド」に帰着。
+- **多ソース描画への刷新**: 単一プロキシ前提を廃し、`PdfSourcesContext`（sourceId→pdf.js proxy/bytes、`addSource`）を導入。結合した別ファイルのページも正しく描画。サムネ・メインビューアを editor-store の派生ページ駆動に変更。
+- **回転反映**: `renderPageToCanvas` に rotation を追加（`getViewport({rotation: page.rotate + delta})`）。サムネ・メイン双方に反映。回転 90/270 でボックス寸法を入替表示。
+- **並び替え**: `@dnd-kit`（core/sortable/utilities）でサムネをドラッグハンドル D&D → `reorder` 操作発行。
+- **編集 UI**: ページ操作ツールバー（左右回転・削除・抽出・分割・結合）＋右クリック ContextMenu。回転/削除/抽出/分割は選択時のみ活性、結合は常時。削除は AlertDialog で確定（Undo 可）。
+- **抽出/分割**: 生成 PDF を `downloadBytes`（暫定）でダウンロード。**結合**は別ファイルをソース追加し `merge` 操作で取り込み（順序はサムネ D&D で調整）。
+
+### 作成ファイル
+
+- `src/lib/editor/build.ts` + `build.test.ts`、`src/lib/download.ts`
+- `src/features/viewer/pdf-sources-context.tsx`
+- `src/features/editor/{use-edit-actions.ts,edit-toolbar.tsx}`
+- `e2e/edit.spec.ts`
+
+### 変更ファイル
+
+- `src/lib/pdf/render.ts`（rotation）、`src/features/viewer/{pdf-page-canvas,thumbnail,thumbnail-list,page-viewer,viewer-layout}.tsx`（多ソース＋回転＋D&D＋ContextMenu）
+- `src/features/viewer/pdf-document-context.tsx` を削除（`pdf-sources-context` に置換）
+- `package.json`（@dnd-kit 追加）、`e2e/editor.spec.ts`（exact 指定）、`docs/CHANGELOG.md` / `docs/TODO.md`
+
+### 計測結果
+
+- **テスト**: Vitest **73 件**全通過（10 ファイル、うち build 8 件は pdf-lib 実出力をページ幅・`/Rotate`・ページ数で検証）。Playwright E2E（Chromium）**4 件**全通過（空状態 / ビューア / 選択・Undo / 回転・削除・Undo）。`lint`/`tsc`/`prettier --check` クリーン。
+- **ビルド**: 静的エクスポート成功。初期 JS raw 696.7KB / gzip 208.4KB（P2 から実質変化なし＝編集・pdf-lib・dnd-kit は遅延ビューアチャンク内）。全 `_next` チャンク raw 約 1847KB。
+
+### Risks/TODO
+
+- **保存層は P4**: 抽出/分割は暫定で `<a download>`。File System Access API による保存先指定／上書き保存は P4 で `SaveStrategy` 抽象として実装し、置き換える。
+- 「半透明プレビュー→確定」は簡略化（選択ハイライト＋AlertDialog 確認、Undo で復帰）。本格的なプレビュー表示は将来検討。
+- 連続表示のページ寸法は先頭ページ基準の均一近似（回転は入替反映）。サイズ可変 PDF・仮想化は P7。
+- D&D は単一ページ移動（複数選択の一括移動は将来）。E2E は D&D を含めず（unit reorder + store で担保）。
+- パスワード保護 PDF 等の異常系トーストは P8 で拡充。
+
+### 次ステップ
+
+- TODO P4「保存層」: `SaveStrategy` 抽象、`window.showSaveFilePicker` 能力判定、Chromium の File System Access（名前を付けて保存／上書き）、Firefox ダウンロードフォールバック、分割の順次保存、保存後の未保存フラグクリア。
+
+---
+
 ## 2026-05-29 — P2 編集コア + Undo/Redo（★設計の要）
 
 ### 実施内容

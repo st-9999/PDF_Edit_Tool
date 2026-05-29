@@ -13,6 +13,8 @@ interface ThumbnailProps {
   pageNumber: number;
   /** 一覧内の表示位置（1 始まり・ラベル/現在ページ判定用）。 */
   position: number;
+  /** ユーザー適用の追加回転（時計回り度）。サムネに反映する。 */
+  rotation?: number;
   selected: boolean;
   current: boolean;
   onClick: (event: MouseEvent) => void;
@@ -23,6 +25,7 @@ export function Thumbnail({
   pdf,
   pageNumber,
   position,
+  rotation = 0,
   selected,
   current,
   onClick,
@@ -44,7 +47,7 @@ export function Thumbnail({
         if (cancelled) return;
         const base = page.getViewport({ scale: 1 });
         const scale = THUMBNAIL_WIDTH / base.width;
-        const handle = renderPageToCanvas(page, canvas, scale);
+        const handle = renderPageToCanvas(page, canvas, scale, rotation);
         cancelRender = handle.cancel;
         await handle.promise;
       } catch {
@@ -56,7 +59,7 @@ export function Thumbnail({
       cancelled = true;
       cancelRender?.();
     };
-  }, [inView, pdf, pageNumber]);
+  }, [inView, pdf, pageNumber, rotation]);
 
   // 現在ページのサムネは一覧内に見えるようスクロール
   useEffect(() => {

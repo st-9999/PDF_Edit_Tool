@@ -14,6 +14,15 @@
 
 ### Added
 
+<!-- P3 編集機能 -->
+
+- feat(editor): pdf-lib 実出力ビルダ `buildPdf` / `extractPages` / `splitPdf`（並び替え・回転・削除・抽出・分割・結合の実バイト生成）を実装。
+- feat(editor): 編集ツールバー（回転左右・削除・抽出・分割・結合）と右クリック ContextMenu を追加。選択時のみ活性。削除は AlertDialog で確定（Undo 可）。
+- feat(editor): `@dnd-kit` によるサムネイル D&D 並び替え（ドラッグハンドル）→ `reorder` 操作。
+- feat(viewer): 複数ソース描画（`PdfSourcesContext`: sourceId→proxy/bytes）と回転反映（`renderPageToCanvas` に rotation）。サムネ・メインビューアを派生ページ駆動に刷新。
+- feat(editor): 抽出/分割は生成 PDF をダウンロード（P4 で保存層へ置換予定）。結合は別ファイルをソース追加し `merge` 操作で取り込み。
+- test(editor): pdf-lib 実出力の検証 unit（並び順・回転角・ページ数・抽出・分割境界・結合、計 8 件、ページ幅で同定）と、回転/削除/Undo の Chromium E2E を追加。
+
 <!-- P2 編集コア + Undo/Redo -->
 
 - feat(editor): 操作ログ方式の編集エンジンを実装。`PageRef` と `EditOperation`（reorder/rotate/delete/merge）、`applyOperation` / `derivePages`、replay 方式の Undo/Redo 履歴（`history.ts`）。
@@ -45,6 +54,8 @@
 
 ### Changed
 
+- chore(deps): `@dnd-kit/core` / `@dnd-kit/sortable` / `@dnd-kit/utilities` を追加。
+- refactor(viewer): 単一プロキシ前提を廃止し、複数ソース（sourceId→proxy）描画へ刷新（`pdf-document-context` を `pdf-sources-context` に置換）。
 - chore(deps): `pdfjs-dist` / `zustand` / `pdf-lib` を追加。`build`/`dev` 前に `copy:pdfjs` を実行。
 - chore: `.gitignore` に `/public/pdfjs`（生成アセット）を追加。ESLint で `public/**` を除外。
 
