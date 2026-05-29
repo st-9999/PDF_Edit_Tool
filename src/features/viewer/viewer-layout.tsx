@@ -12,6 +12,7 @@ import { editorSelectors, useEditorStore } from "@/store/editor-store";
 import { useUnsavedGuard } from "@/lib/hooks/use-unsaved-guard";
 import { useEditorShortcuts } from "@/lib/hooks/use-editor-shortcuts";
 import { EditToolbar } from "@/features/editor/edit-toolbar";
+import { SearchBar } from "@/features/search/search-bar";
 import { PdfSourcesProvider, usePdfSources } from "./pdf-sources-context";
 import { LeftPane } from "./left-pane";
 import { PageViewer } from "./page-viewer";
@@ -86,22 +87,25 @@ function ViewerShell() {
       <TopBar />
       {pageCount > 0 && <EditToolbar />}
       {pageCount > 0 ? (
-        <ResizablePanelGroup
-          orientation="horizontal"
-          className="min-h-0 flex-1"
-        >
-          <ResizablePanel
-            defaultSize="22%"
-            minSize="12%"
-            className="flex min-h-0 flex-col"
+        <div className="relative flex min-h-0 flex-1">
+          <ResizablePanelGroup
+            orientation="horizontal"
+            className="min-h-0 flex-1"
           >
-            <LeftPane />
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize="78%" className="flex min-h-0 flex-col">
-            <PageViewer />
-          </ResizablePanel>
-        </ResizablePanelGroup>
+            <ResizablePanel
+              defaultSize="22%"
+              minSize="12%"
+              className="flex min-h-0 flex-col"
+            >
+              <LeftPane />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize="78%" className="flex min-h-0 flex-col">
+              <PageViewer />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+          <SearchBar />
+        </div>
       ) : (
         <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
           PDF を読み込んでいます…

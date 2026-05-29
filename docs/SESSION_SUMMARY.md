@@ -13,6 +13,43 @@
 
 ---
 
+## 2026-05-29 — P5 テキスト検索・選択
+
+### 実施内容
+
+- **検索エンジン（純関数）**: `findMatches(pageTexts, query)`（大小無視・非重複・ヒット位置）と `getPageText(page)`（テキスト抽出）を `lib/search/search.ts` に実装。
+- **テキストレイヤ重畳**: `render.ts` に `renderTextLayer` を追加（pdf.js `TextLayer`、canvas と同一 viewport）。`PdfPageView`（canvas＋テキストレイヤ）を新設しメインビューアの単/連続表示で使用。`--total-scale-factor` を表示スケールに設定し、textLayer CSS を `globals.css` に追加。ネイティブ選択・コピー対応。
+- **検索 UI**: `search-store`（open/query/matches/activeIndex）＋ `SearchBar`（Ctrl+F、ヒット件数（現在/総数）、前後移動でページジャンプ、Esc で閉じる）。ハイライトは `applyHighlights`（テキストレイヤ span 内の出現を `<mark class="search-hit">` で囲み、現在位置を強調・スクロール）。
+- **全選択**: TopBar に「検索」「全選択」ボタン。全選択はビューアスクロール領域のテキストを Selection API で選択（描画済みページ対象）。
+
+### 作成ファイル
+
+- `src/lib/search/{search.ts,highlight.ts}` + 各 `.test.ts`
+- `src/store/search-store.ts`、`src/features/search/search-bar.tsx`、`src/features/viewer/pdf-page-view.tsx`
+- `e2e/search.spec.ts`
+
+### 変更ファイル
+
+- `src/lib/pdf/render.ts`（viewport 返却・`renderTextLayer`）、`src/features/viewer/page-viewer.tsx`（`PdfPageView` 採用・検索ハイライト配線・`data-viewer-scroll`）
+- `src/features/viewer/viewer-layout.tsx`（SearchBar 配置）、`src/features/viewer/top-bar.tsx`（検索/全選択）、`src/app/globals.css`（textLayer CSS）
+
+### 計測結果
+
+- **テスト**: Vitest **87 件**全通過（13 ファイル。search 4 / highlight 3 を追加）。Playwright E2E（Chromium）**6 件**全通過（＋テキスト選択・全選択・検索ハイライト・前後移動）。`lint`/`tsc`/`prettier --check` クリーン。
+- **ビルド**: 静的エクスポート成功。初期 JS raw 696.7KB / gzip 208.4KB（P4 から変化なし＝検索/テキストレイヤも遅延ビューアチャンク内）。
+
+### Risks/TODO
+
+- ハイライトは「1 つのテキスト span 内の出現」のみ対象（item をまたぐ一致は未ハイライト）。検索件数も span 連結後のページ文字列基準のため、稀にハイライトと件数が不一致になりうる。高度化（正規表現・ページ横断・item またぎ）は v2。
+- 「全選択」は描画済み（可視）ページのテキストのみ選択（連続表示の遅延描画のため）。全ページ確実な全選択は仮想化方針（P7）と併せて検討。
+- テキストレイヤは表示中ページに対して描画。大量ページでの常時重畳コストは P7 の仮想化で最適化。
+
+### 次ステップ
+
+- TODO P6「しおり表示」: pdf.js アウトライン読取、左ペイン「しおり」タブのツリー表示・ジャンプ、空状態。
+
+---
+
 ## 2026-05-29 — P4 保存層
 
 ### 実施内容

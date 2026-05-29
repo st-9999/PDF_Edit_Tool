@@ -1,4 +1,4 @@
-import type { PDFPageProxy } from "pdfjs-dist";
+import type { PageViewport, PDFPageProxy } from "pdfjs-dist";
 
 export interface PageRenderHandle {
   /** 描画完了の Promise（キャンセル時は RenderingCancelledException で reject）。 */
@@ -8,6 +8,8 @@ export interface PageRenderHandle {
   /** CSS ピクセルでのページ寸法。 */
   cssWidth: number;
   cssHeight: number;
+  /** テキストレイヤと共有するためのビューポート。 */
+  viewport: PageViewport;
 }
 
 /**
@@ -49,7 +51,24 @@ export function renderPageToCanvas(
     cancel: () => task.cancel(),
     cssWidth: viewport.width,
     cssHeight: viewport.height,
+    viewport,
   };
+}
+
+/**
+ * テキストレイヤを描画する。canvas と同一の viewport を渡すこと。
+ * 呼び出し側は container に `--total-scale-factor`（= 表示スケール）を設定しておく。
+ */
+export async function renderTextLayer(
+  page: PDFPageProxy,
+  container: HTMLElement,
+  viewport: PageViewport,
+): Promise<void> {
+  const { TextLayer } = await import("pdfjs-dist");
+  const textContentSource = await page.getTextContent();
+  container.replaceChildren();
+  const layer = new TextLayer({ textContentSource, container, viewport });
+  await layer.render();
 }
 
 /**

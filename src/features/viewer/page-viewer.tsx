@@ -22,10 +22,11 @@ import { computeFitScale } from "@/lib/pdf/render";
 import { ZOOM_MAX, ZOOM_MIN } from "@/lib/pdf/constants";
 import { useViewerStore } from "@/store/viewer-store";
 import { useEditorStore } from "@/store/editor-store";
+import { useSearchStore } from "@/store/search-store";
 import type { PageRef } from "@/lib/editor/operations";
 import { cn } from "@/lib/utils";
 import { usePdfSources } from "./pdf-sources-context";
-import { PdfPageCanvas } from "./pdf-page-canvas";
+import { PdfPageView } from "./pdf-page-view";
 
 const VIEWER_PADDING = 24;
 
@@ -34,12 +35,12 @@ interface BaseDims {
   height: number;
 }
 
-/** 回転を考慮した表示ボックス寸法（90/270 度で幅高さを入れ替え）。 */
 function boxFor(base: BaseDims, scale: number, rotation: number): BaseDims {
   const swap = rotation % 180 === 90;
-  const w = (swap ? base.height : base.width) * scale;
-  const h = (swap ? base.width : base.height) * scale;
-  return { width: w, height: h };
+  return {
+    width: (swap ? base.height : base.width) * scale,
+    height: (swap ? base.width : base.height) * scale,
+  };
 }
 
 /** 連続表示の 1 ページ。可視範囲に入ったら描画する（遅延）。 */
@@ -49,6 +50,8 @@ function ContinuousPage({
   position,
   scale,
   box,
+  query,
+  currentLocalIndex,
   registerRef,
 }: {
   proxy: PDFDocumentProxy | undefined;
@@ -56,6 +59,8 @@ function ContinuousPage({
   position: number;
   scale: number;
   box: BaseDims;
+  query: string;
+  currentLocalIndex: number | null;
   registerRef: (position: number, el: HTMLElement | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -68,18 +73,22 @@ function ContinuousPage({
         registerRef(position, el);
       }}
       data-page={position}
-      className="bg-background relative mx-auto shadow-sm ring-1 ring-black/5"
+      className="relative mx-auto"
       style={{ width: box.width, height: box.height }}
     >
       {inView && proxy ? (
-        <PdfPageCanvas
+        <PdfPageView
           pdf={proxy}
           pageNumber={page.sourceIndex + 1}
           scale={scale}
           rotation={page.rotation}
+          width={box.width}
+          height={box.height}
+          query={query}
+          currentLocalIndex={currentLocalIndex}
         />
       ) : (
-        <div className="text-muted-foreground flex h-full w-full items-center justify-center text-xs">
+        <div className="text-muted-foreground bg-background flex h-full w-full items-center justify-center text-xs shadow-sm ring-1 ring-black/5">
           {position}
         </div>
       )}
@@ -107,6 +116,23 @@ export function PageViewer() {
   const setFitMode = useViewerStore((s) => s.setFitMode);
   const setViewMode = useViewerStore((s) => s.setViewMode);
 
+  const searchOpen = useSearchStore((s) => s.open);
+  const searchQuery = useSearchStore((s) => s.query);
+  const matches = useSearchStore((s) => s.matches);
+  const activeIndex = useSearchStore((s) => s.activeIndex);
+  const query = searchOpen ? searchQuery : "";
+  const activeMatch = activeIndex >= 0 ? matches[activeIndex] : undefined;
+
+  // 指定ページ内で強調する出現位置（active マッチがそのページにある場合）
+  const localCurrentFor = (position: number): number | null => {
+    if (!activeMatch || activeMatch.page !== position) return null;
+    let occ = 0;
+    for (let i = 0; i < activeIndex; i += 1) {
+      if (matches[i]!.page === position) occ += 1;
+    }
+    return occ;
+  };
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(scrollRef);
   const [baseDims, setBaseDims] = useState<BaseDims | null>(null);
@@ -114,7 +140,6 @@ export function PageViewer() {
   const firstPage = pages[0];
   const firstProxy = firstPage ? getProxy(firstPage.sourceId) : undefined;
 
-  // サイズ計算の基準として先頭ページの素のビューポートを使う（v1 は均一サイズ近似）
   useEffect(() => {
     if (!firstPage || !firstProxy) return;
     let cancelled = false;
@@ -141,7 +166,6 @@ export function PageViewer() {
     );
   }, [fitMode, baseDims, size.width, size.height, zoom]);
 
-  // 連続表示: 各ページ要素の可視状態から現在ページを更新（逆方向の自動スクロールはしない）
   const pageEls = useRef(new Map<number, HTMLElement>());
 
   const registerRef = useCallback(
@@ -173,7 +197,6 @@ export function PageViewer() {
     return () => observer.disconnect();
   }, [viewMode, numPages, setCurrentPage]);
 
-  // 明示ナビ（navSeq 更新）に応じて連続表示をスクロール
   useEffect(() => {
     if (navSeq === 0 || viewMode !== "continuous") return;
     pageEls.current.get(navTarget)?.scrollIntoView({ block: "start" });
@@ -184,37 +207,49 @@ export function PageViewer() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div ref={scrollRef} className="bg-muted/40 min-h-0 flex-1 overflow-auto">
+      <div
+        ref={scrollRef}
+        data-viewer-scroll
+        className="bg-muted/40 min-h-0 flex-1 overflow-auto"
+      >
         {viewMode === "single" ? (
           <div className="flex min-h-full items-start justify-center p-6">
             {baseDims && activePage && (
-              <div
-                className="bg-background shadow-sm ring-1 ring-black/5"
-                style={boxFor(baseDims, effectiveScale, activePage.rotation)}
-              >
-                <PdfPageCanvas
-                  pdf={getProxy(activePage.sourceId)!}
-                  pageNumber={activePage.sourceIndex + 1}
-                  scale={effectiveScale}
-                  rotation={activePage.rotation}
-                />
-              </div>
+              <PdfPageView
+                pdf={getProxy(activePage.sourceId)!}
+                pageNumber={activePage.sourceIndex + 1}
+                scale={effectiveScale}
+                rotation={activePage.rotation}
+                width={
+                  boxFor(baseDims, effectiveScale, activePage.rotation).width
+                }
+                height={
+                  boxFor(baseDims, effectiveScale, activePage.rotation).height
+                }
+                query={query}
+                currentLocalIndex={localCurrentFor(currentPage)}
+              />
             )}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4 p-6">
             {baseDims &&
-              pages.map((page, index) => (
-                <ContinuousPage
-                  key={page.id}
-                  proxy={getProxy(page.sourceId)}
-                  page={page}
-                  position={index + 1}
-                  scale={effectiveScale}
-                  box={boxFor(baseDims, effectiveScale, page.rotation)}
-                  registerRef={registerRef}
-                />
-              ))}
+              pages.map((page, index) => {
+                const position = index + 1;
+                return (
+                  <ContinuousPage
+                    key={page.id}
+                    proxy={getProxy(page.sourceId)}
+                    page={page}
+                    position={position}
+                    scale={effectiveScale}
+                    box={boxFor(baseDims, effectiveScale, page.rotation)}
+                    query={query}
+                    currentLocalIndex={localCurrentFor(position)}
+                    registerRef={registerRef}
+                  />
+                );
+              })}
           </div>
         )}
       </div>

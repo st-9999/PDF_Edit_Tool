@@ -14,6 +14,13 @@
 
 ### Added
 
+<!-- P5 テキスト検索・選択 -->
+
+- feat(search): pdf.js テキストレイヤをメインビューアに重畳（`renderTextLayer`・`PdfPageView`）。ネイティブ選択・コピーと「全選択」ボタンに対応。
+- feat(search): 検索バー（Ctrl+F）を追加。純関数 `findMatches`／`getPageText` でヒット件数（現在/総数）・前後移動・ページジャンプ、テキストレイヤへの `<mark>` ハイライト。
+- feat(search): TopBar に「検索」「全選択」、`search-store`（Zustand）を追加。
+- test(search): ヒット件数・位置・全文抽出（node 統合）、ハイライト DOM（jsdom）の unit と、選択・検索の Chromium E2E を追加。
+
 <!-- P4 保存層 -->
 
 - feat(save): `SaveStrategy` 抽象と能力判定（`createSaveStrategy`/`isFileSystemAccessSupported`）を追加。Chromium は File System Access（名前を付けて保存・上書き保存）、Firefox は `<a download>` フォールバック。

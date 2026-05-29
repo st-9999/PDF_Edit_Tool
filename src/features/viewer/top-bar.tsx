@@ -4,6 +4,8 @@ import { useRef } from "react";
 import {
   FileTextIcon,
   RedoIcon,
+  SearchIcon,
+  TextSelectIcon,
   UndoIcon,
   UploadIcon,
   XIcon,
@@ -12,7 +14,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useViewerStore } from "@/store/viewer-store";
 import { editorSelectors, useEditorStore } from "@/store/editor-store";
+import { useSearchStore } from "@/store/search-store";
 import { SaveMenu } from "@/features/save/save-menu";
+
+/** メインビューア内のテキストを全選択する（描画済みページのみ）。 */
+function selectAllViewerText() {
+  const el = document.querySelector("[data-viewer-scroll]");
+  const selection = window.getSelection();
+  if (!el || !selection) return;
+  selection.removeAllRanges();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  selection.addRange(range);
+}
 
 function isPdfFile(file: File): boolean {
   return (
@@ -29,6 +43,7 @@ export function TopBar() {
   const redo = useEditorStore((s) => s.redo);
   const canUndo = useEditorStore(editorSelectors.canUndo);
   const canRedo = useEditorStore(editorSelectors.canRedo);
+  const openSearch = useSearchStore((s) => s.setOpen);
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -77,6 +92,27 @@ export function TopBar() {
             onClick={redo}
           >
             <RedoIcon aria-hidden />
+          </Button>
+
+          <div className="bg-border mx-1 h-5 w-px" aria-hidden />
+
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => openSearch(true)}
+          >
+            <SearchIcon aria-hidden />
+            検索
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={selectAllViewerText}
+          >
+            <TextSelectIcon aria-hidden />
+            全選択
           </Button>
         </div>
       )}
