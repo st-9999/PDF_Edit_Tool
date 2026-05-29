@@ -79,7 +79,11 @@ export function LeftPane() {
       </TabsList>
       <TabsContent value="thumbnails" className="flex min-h-0 flex-1 flex-col">
         <ThumbnailZoomBar />
-        <div ref={thumbZoomRef} className="min-h-0 flex-1 overflow-auto">
+        <div
+          ref={thumbZoomRef}
+          data-thumb-scroll
+          className="min-h-0 flex-1 overflow-auto"
+        >
           <ThumbnailList />
         </div>
       </TabsContent>

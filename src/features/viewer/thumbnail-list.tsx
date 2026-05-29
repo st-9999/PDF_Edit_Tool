@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useViewerStore } from "@/store/viewer-store";
 import { useEditorStore } from "@/store/editor-store";
+import { followScrollDelta } from "@/lib/viewer/follow-scroll";
 import { ROTATION_STEP, type PageRef } from "@/lib/editor/operations";
 import { useEditActions } from "@/features/editor/use-edit-actions";
 import { usePdfSources } from "./pdf-sources-context";
@@ -123,9 +124,25 @@ export function ThumbnailList() {
     [],
   );
 
-  // ビュアー側で currentPage が変わったら、その位置のサムネを一覧内に見えるようスクロール
+  // ビュアー側で currentPage が変わったら、その位置のサムネを一覧内へ自動追従させる。
+  // 表示範囲外なら中央へ寄せ、見えていれば動かさない（ジッタ防止）。
   useEffect(() => {
-    itemRefs.current.get(currentPage)?.scrollIntoView({ block: "nearest" });
+    const el = itemRefs.current.get(currentPage);
+    if (!el) return;
+    const container = el.closest<HTMLElement>("[data-thumb-scroll]");
+    if (!container) {
+      el.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    const cRect = container.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    const delta = followScrollDelta(
+      cRect.top,
+      container.clientHeight,
+      eRect.top,
+      eRect.height,
+    );
+    if (delta !== 0) container.scrollTop += delta;
   }, [currentPage]);
 
   // 右クリック時、対象が未選択ならそのページだけを選択してから操作する

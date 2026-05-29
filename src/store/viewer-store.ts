@@ -91,7 +91,8 @@ const initialDocState = {
   navTarget: 1,
   navSeq: 0,
   zoom: ZOOM_DEFAULT,
-  fitMode: "width" as FitMode,
+  // 読込直後は等倍（100%）で表示する。フィット表示は操作で切替可能。
+  fitMode: "actual" as FitMode,
   status: "idle" as LoadStatus,
   error: null as string | null,
 };
@@ -111,7 +112,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
       numPages: 0,
       currentPage: 1,
       zoom: ZOOM_DEFAULT,
-      fitMode: "width",
+      fitMode: "actual",
       status: "loading",
       error: null,
     }),

@@ -9,9 +9,12 @@ export const ZOOM_DEFAULT = 1;
 /** サムネイルの描画幅（px）。低解像度で生成する。既定値であり、左ペインのサムネ拡大縮小はこの値を起点にする。 */
 export const THUMBNAIL_WIDTH = 140;
 
-/** サムネイル幅の下限・上限・刻み（px）。ビュアー/ブラウザの拡大率とは独立に変化する。 */
-export const THUMBNAIL_WIDTH_MIN = 80;
-export const THUMBNAIL_WIDTH_MAX = 280;
+/**
+ * サムネイル幅の下限・上限・刻み（px）。ビュアー/ブラウザの拡大率とは独立に変化する。
+ * 既定 140px を 100% として、50%（70px）〜300%（420px）の範囲。
+ */
+export const THUMBNAIL_WIDTH_MIN = 70;
+export const THUMBNAIL_WIDTH_MAX = 420;
 export const THUMBNAIL_WIDTH_STEP = 20;
 export const THUMBNAIL_WIDTH_DEFAULT = THUMBNAIL_WIDTH;
 

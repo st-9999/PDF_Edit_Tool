@@ -13,6 +13,46 @@
 
 ---
 
+## 2026-05-29 — サムネ拡大範囲 50〜300%・初期表示 100%・サムネのページ追従堅牢化
+
+### 実施内容
+
+- **サムネ拡大範囲を 50%〜300% に変更**: `THUMBNAIL_WIDTH_MIN/MAX` を 70px（50%）/420px（300%）へ（既定 140px=100%）。クランプ・ズームバーは既存ロジックのまま範囲のみ拡張。
+- **初期表示を 100% に変更**: 既定 `fitMode` を `width`→`actual` に（`initialDocState` と `setFile` の両方）。幅フィットは `availableWidth/baseWidth` で算出されるため、小さめページでは ~350% になっていた。等倍（zoom=1=100%）を初期値とし、フィット表示はツールバーで切替可能。
+- **サムネのページ追従を堅牢化**: 従来の `scrollIntoView({block:"nearest"})` は要素が既に可視だと無動作になりやすく追従が体感しづらかった。純関数 `followScrollDelta(viewTop, viewHeight, elemTop, elemHeight)` を新設し、可視時は 0・範囲外なら中央寄せ差分を返す方式に変更。`ThumbnailList` は対象サムネの `closest('[data-thumb-scroll]')` でコンテナを取得し `scrollTop += delta` で追従。左ペインのスクロール要素に `data-thumb-scroll` を付与。
+- **context7**: base-ui の Tabs/ScrollArea 連携と挙動を確認（追従はライブラリ非依存の DOM 計算で実装するのが妥当と判断）。
+
+### 作成ファイル
+
+- `src/lib/viewer/follow-scroll.ts` — 追従スクロール量の純関数
+- `src/lib/viewer/follow-scroll.test.ts` — 可視/上外れ/下外れ/中央寄せ/超高要素の 5 ケース
+
+### 変更ファイル
+
+- `src/lib/pdf/constants.ts` — `THUMBNAIL_WIDTH_MIN=70` / `MAX=420`
+- `src/store/viewer-store.ts` — 既定 `fitMode` を `actual` に（初期＋`setFile`）
+- `src/features/viewer/thumbnail-list.tsx` — 追従を `followScrollDelta` ベースに置換
+- `src/features/viewer/left-pane.tsx` — スクロール要素へ `data-thumb-scroll` 付与
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）: パス（エラー 0）
+- Lint: パス（警告/エラー 0）
+- Unit（`vitest run`）: **114 / 114 パス**（follow-scroll 5 件を新規追加。前回 109 → 114）
+- 本番ビルド（`next build` / Next 16.2.6 Turbopack）: 成功（静的 4/4 生成）
+
+### Risks/TODO
+
+- 初期 `fitMode=actual`（100%）に変更したため、大きなページ（A3 等）は初期に横スクロールが必要になる場合がある。必要なら「初回のみ幅フィット」等の方針も検討可能。
+- 追従の中央寄せは要素が範囲外のときのみ作動。`behavior` は即時（smooth 未使用）。スムーズ追従が好まれる場合は `scrollTo({behavior:"smooth"})` 化を検討。
+
+### 次ステップ
+
+- 実機で「サムネ 50〜300%」「読込直後 100%」「ビュアー連続スクロールでサムネが中央追従」を目視確認。
+
+---
+
 ## 2026-05-29 — サムネ Ctrl+ホイールのブラウザズーム誤作動修正＆ビュアーのカーソル中心ズーム
 
 ### 実施内容
