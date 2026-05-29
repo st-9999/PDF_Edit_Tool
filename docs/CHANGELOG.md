@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- fix(layout): 左ペイン（サムネイル／しおり）とビュアーのスクロールを完全に独立化。`<body>` が `min-h-full`（最小高）でコンテンツに応じて伸び、ページ全体が一体スクロールしていた問題を、`h-full overflow-hidden` でビューポート高に固定して解消。各ペインの `min-h-0 flex-1 overflow-auto` が個別に効くようになった。
+
 ### Added
 
 <!-- P8 仕上げ・公開 -->

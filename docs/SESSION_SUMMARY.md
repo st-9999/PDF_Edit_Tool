@@ -13,6 +13,39 @@
 
 ---
 
+## 2026-05-29 — 左ペインとビュアーのスクロール独立化（レイアウト修正）
+
+### 実施内容
+
+- **不具合**: 左ペイン（サムネイル／しおり）とビュアーのスクロールが分離されておらず、PDF が縦に長いとページ全体が一体でスクロールしていた。
+- **原因**: 各ペインは `min-h-0 flex-1 overflow-auto` を持ち個別スクロール可能な構造だったが、`<body>` が `min-h-full`（最小高のみ指定）でコンテンツに応じて高さが伸びるため、内側の `flex-1 + overflow-auto` が高さで制約されず、ウィンドウ全体がスクロールしていた。
+- **修正**: `<body>` を `min-h-full` → `h-full overflow-hidden` に変更し、ビューポート高に固定。これにより `min-h-0 flex-1` の連鎖が末端まで効き、左ペインとビュアーが独立スクロールするようになった。
+- **検証**: context7 で `react-resizable-panels` v4 の API を確認。`Group` の `orientation`（"horizontal"/"vertical"）と `Panel` の文字列パーセント指定（`"22%"` / `"12%"`）は v4 で正規のプロパティであり、Resizable 側に問題はないことを確認。空状態（EmptyState）は中央寄せの固定カードのため `overflow-hidden` の影響なし。
+
+### 作成ファイル
+
+- なし
+
+### 変更ファイル
+
+- `src/app/layout.tsx` — `<body>` の className を `flex min-h-full flex-col` → `flex h-full flex-col overflow-hidden`
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 本変更を追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）: パス（エラー 0）
+- Lint（`eslint src/app/layout.tsx`）: パス（警告/エラー 0）
+
+### Risks/TODO
+
+- `h-full` は html（`h-full`＝ビューポート 100%）に依存。将来 body の外側に固定ヘッダ等を追加する場合は高さ計算の見直しが必要。モバイルのアドレスバー伸縮が気になる場合は `h-dvh` の採用を検討。
+
+### 次ステップ
+
+- 実機（Chrome / Firefox）で長尺 PDF を開き、左ペインとビュアーが独立スクロールすることを目視確認。
+
+---
+
 ## 2026-05-29 — P8 仕上げ・公開（本番デプロイはスキップ）
 
 ### 実施内容
