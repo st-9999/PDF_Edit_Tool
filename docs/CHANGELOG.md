@@ -27,6 +27,8 @@
 
 ### Fixed
 
+- fix(viewer): 連続表示でビュアーをスクロールしても現在ページ番号が更新されない不具合を修正。`baseDims` 解決後にマウントされるページ枠が IntersectionObserver に観測されていなかった（observer 生成 effect が再実行されず空観測のままだった）。observer を一度だけ生成し、各ページの ref コールバックで `observe`/`unobserve` する方式に変更（後からマウントするページも確実に観測）。Playwright で再現→修正を確認。
+- fix(layout): PDF 読込後に編集ツールバー等のクリックが妨害される不具合を修正。pdf.js の TextLayer が計測用 `<canvas class="hiddenCanvasElement">` を `document.body` へ append するため、`<body>` を flex/overflow コンテナにしていると当該 canvas がアプリの flex 兄弟となりレイアウトを乱していた。アプリを専用ラッパ div に閉じ込め、`<body>` は単純なブロック（はみ出しは clip）にして解消。
 - fix(zoom): 左ペインのサムネ上で Ctrl+ホイールするとブラウザ画面全体が拡大縮小されていた問題を修正。`useCtrlWheelZoom` を **ref コールバック方式**に変更し、遅延マウントされる base-ui `Tabs.Panel`（`keepMounted=false` 既定）内でも要素マウント時に確実に非 passive リスナを張るようにした（従来は `useEffect` 実行時に `ref.current` が未確定でリスナ未登録だった）。
 - fix(layout): 左ペイン（サムネイル／しおり）とビュアーのスクロールを完全に独立化。`<body>` が `min-h-full`（最小高）でコンテンツに応じて伸び、ページ全体が一体スクロールしていた問題を、`h-full overflow-hidden` でビューポート高に固定して解消。各ペインの `min-h-0 flex-1 overflow-auto` が個別に効くようになった。
 

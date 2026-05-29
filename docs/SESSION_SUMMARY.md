@@ -13,6 +13,47 @@
 
 ---
 
+## 2026-05-29 — スクロール時の現在ページ未更新を修正＋body レイアウト崩れ（pdf.js 隠し canvas）を修正（Playwright 検証）
+
+### 実施内容
+
+- **不具合1（報告）**: 連続表示でビュアーをスクロールしても現在ページ番号が変わらない。
+  - **原因**: 連続ページ枠は `baseDims`（先頭ページ寸法）解決後に初めてマウントされるが、IntersectionObserver を張る effect の依存は `[viewMode, numPages, setCurrentPage]` のみ。初回マウント時（ページ未描画）に observer を生成して空観測し、`baseDims` 解決でページが増えても effect が再実行されず、永遠に観測対象ゼロ＝スクロールしても currentPage が更新されなかった。
+  - **修正（context7 / React 公式の ref コールバック方針）**: observer は一度だけ生成し、各ページの登録コールバック（ref コールバック）で `observe`/`unobserve`。後からマウントするページも確実に観測。`ContinuousPage` の ref を `useCallback`（deps: registerRef, position）で安定化し、再描画ごとの observe/unobserve churn を防止。
+- **不具合2（修正中に Playwright で発覚）**: PDF 読込後、編集ツールバー等のクリックが `<canvas class="hiddenCanvasElement">` / `<header>` に妨害されて全 e2e（編集系）がタイムアウト。
+  - **原因**: pdf.js の `TextLayer.#getCtx` が計測用 canvas を `document.body` へ直接 append する。本セッションで `<body>` を `flex h-full overflow-hidden` 化していたため、その canvas がアプリの flex 兄弟となりレイアウトを乱し・クリックを覆っていた。
+  - **修正**: `<body>` をレイアウトコンテナにしない。アプリを専用ラッパ `div`（`flex h-full flex-col overflow-hidden`）に閉じ込め、`<body>` は単純ブロック（`h-full overflow-hidden`）に。body へ append される stray ノード（pdf.js canvas, ポータル等）の影響を遮断。
+- **Playwright 検証**: 再現用 `e2e/scroll-page.spec.ts`（10 ページ生成→最下部へスクロール→ページ番号が 1 から進み 5 超）を追加。修正前は失敗（"1" のまま）、修正後は通過を確認。
+
+### 作成ファイル
+
+- `e2e/scroll-page.spec.ts` — スクロールによる現在ページ更新の回帰テスト
+
+### 変更ファイル
+
+- `src/features/viewer/page-viewer.tsx` — IntersectionObserver を ref コールバック observe/unobserve 方式へ。`ContinuousPage` の ref を安定化
+- `src/app/layout.tsx` — アプリを専用ラッパ div に隔離し、`<body>` を非 flex のブロックに
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）: パス（エラー 0）
+- Lint: パス（警告/エラー 0）
+- Unit（`vitest run`）: **114 / 114 パス**
+- E2E（Playwright）: **chromium 全通過**。firefox は単体/直列で全通過（`scroll-page` 含む）。並列フルラン時のみ firefox の一部が PDF 読込タイムアウトで flaky（後述）
+- 本番ビルド（`next build` / Next 16.2.6 Turbopack）: 成功（静的 4/4）
+
+### Risks/TODO
+
+- **firefox の並列 e2e flaky**: dev サーバ＋4 worker 並列で pdf.js worker/wasm 取得が既定 5s タイムアウトに掛かることがある（`toBeVisible("N ページ")` 段階で失敗）。直列（`--workers=1`）では全通過。CI は既に `workers:1`。必要なら読込待ちのタイムアウト延長で緩和可能。本修正に起因する回帰ではない。
+- observe/unobserve は position 安定化で churn を抑制済み。大規模 PDF でも観測対象は実マウント分のみ。
+
+### 次ステップ
+
+- 実機でビュアー連続スクロール時のページ番号更新と、各種ツールバー操作（読込後）を目視確認。
+
+---
+
 ## 2026-05-29 — サムネ拡大範囲 50〜300%・初期表示 100%・サムネのページ追従堅牢化
 
 ### 実施内容

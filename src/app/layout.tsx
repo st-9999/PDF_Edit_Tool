@@ -31,14 +31,21 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex h-full flex-col overflow-hidden">
+      {/*
+        body 自体はレイアウト用の flex/overflow コンテナにしない。
+        pdf.js の TextLayer は計測用 <canvas class="hiddenCanvasElement"> を
+        document.body へ直接 append するため、body を flex 化すると、その canvas が
+        アプリの flex 兄弟になりレイアウト崩れ・クリック妨害を起こす。
+        アプリは専用ラッパ div に閉じ込め、body は単純なブロック（はみ出しは clip）にする。
+      */}
+      <body className="h-full overflow-hidden">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <div className="flex h-full flex-col overflow-hidden">{children}</div>
           <Toaster richColors closeButton />
         </ThemeProvider>
       </body>

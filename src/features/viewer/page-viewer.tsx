@@ -73,12 +73,18 @@ function ContinuousPage({
   const ref = useRef<HTMLDivElement>(null);
   const visible = useVisible(ref);
 
+  // position が変わらない限り同一参照を保ち、再描画ごとの observe/unobserve churn を防ぐ
+  const setRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      ref.current = el;
+      registerRef(position, el);
+    },
+    [registerRef, position],
+  );
+
   return (
     <div
-      ref={(el) => {
-        ref.current = el;
-        registerRef(position, el);
-      }}
+      ref={setRef}
       data-page={position}
       className="relative mx-auto"
       style={{ width: box.width, height: box.height }}
@@ -222,11 +228,26 @@ export function PageViewer() {
   }, [effectiveScale]);
 
   const pageEls = useRef(new Map<number, HTMLElement>());
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const visiblePages = useRef(new Set<number>());
 
+  // ページ枠は baseDims 解決後（=この effect 実行後）にマウントされるため、
+  // effect 内で ref を読むと観測対象が空になる。代わりに登録コールバックで
+  // 都度 observe/unobserve し、後からマウントするページも確実に観測する。
   const registerRef = useCallback(
     (position: number, el: HTMLElement | null) => {
-      if (el) pageEls.current.set(position, el);
-      else pageEls.current.delete(position);
+      const prev = pageEls.current.get(position);
+      if (prev && prev !== el) {
+        observerRef.current?.unobserve(prev);
+        visiblePages.current.delete(position);
+      }
+      if (el) {
+        pageEls.current.set(position, el);
+        observerRef.current?.observe(el);
+      } else {
+        pageEls.current.delete(position);
+        visiblePages.current.delete(position);
+      }
     },
     [],
   );
@@ -236,21 +257,28 @@ export function PageViewer() {
     const root = scrollRef.current;
     if (!root || typeof IntersectionObserver === "undefined") return;
 
-    const visible = new Set<number>();
+    visiblePages.current.clear();
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           const pos = Number((entry.target as HTMLElement).dataset.page ?? "0");
-          if (entry.isIntersecting) visible.add(pos);
-          else visible.delete(pos);
+          if (entry.isIntersecting) visiblePages.current.add(pos);
+          else visiblePages.current.delete(pos);
         }
-        if (visible.size > 0) setCurrentPage(Math.min(...visible));
+        if (visiblePages.current.size > 0) {
+          setCurrentPage(Math.min(...visiblePages.current));
+        }
       },
       { root, threshold: 0.1 },
     );
+    observerRef.current = observer;
+    // この effect 実行前に既にマウント済みの要素も観測する
     for (const el of pageEls.current.values()) observer.observe(el);
-    return () => observer.disconnect();
-  }, [viewMode, numPages, setCurrentPage]);
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+    };
+  }, [viewMode, setCurrentPage]);
 
   useEffect(() => {
     if (navSeq === 0 || viewMode !== "continuous") return;
