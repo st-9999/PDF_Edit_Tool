@@ -2,6 +2,7 @@
 
 import { toast } from "sonner";
 import { createInitialPages } from "@/lib/editor/operations";
+import { checkLimits, RECOMMENDED_MAX_PAGES } from "@/lib/perf/limits";
 import { useEditorStore } from "@/store/editor-store";
 import { usePdfSources } from "@/features/viewer/pdf-sources-context";
 import { useSave } from "@/features/save/use-save";
@@ -31,6 +32,12 @@ export function useEditActions() {
       const { pages, mergePages } = useEditorStore.getState();
       mergePages(pages.length, newPages);
       toast.success(`${numPages} ページを結合しました`);
+      const total = pages.length + numPages;
+      if (checkLimits(total, 0).exceedsPages) {
+        toast.warning(
+          `合計 ${total} ページになりました（推奨 約 ${RECOMMENDED_MAX_PAGES} ページ）。動作が重くなる場合があります。`,
+        );
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "結合に失敗しました");
     }

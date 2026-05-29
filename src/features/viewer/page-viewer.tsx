@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Toggle } from "@/components/ui/toggle";
 import { useElementSize } from "@/lib/hooks/use-element-size";
-import { useInView } from "@/lib/hooks/use-in-view";
+import { useVisible } from "@/lib/hooks/use-visible";
 import { computeFitScale } from "@/lib/pdf/render";
 import { ZOOM_MAX, ZOOM_MIN } from "@/lib/pdf/constants";
 import { useViewerStore } from "@/store/viewer-store";
@@ -64,7 +64,7 @@ function ContinuousPage({
   registerRef: (position: number, el: HTMLElement | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref);
+  const visible = useVisible(ref);
 
   return (
     <div
@@ -76,7 +76,7 @@ function ContinuousPage({
       className="relative mx-auto"
       style={{ width: box.width, height: box.height }}
     >
-      {inView && proxy ? (
+      {visible && proxy ? (
         <PdfPageView
           pdf={proxy}
           pageNumber={page.sourceIndex + 1}

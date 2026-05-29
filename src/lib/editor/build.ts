@@ -17,6 +17,13 @@ async function loadSourceDocs(
   return map;
 }
 
+export interface BuildOptions {
+  /** ページ追加ごとに進捗を通知（done/total）。 */
+  onProgress?: (done: number, total: number) => void;
+  /** 中断シグナル（worker 終了の代替として本スレッド実行で使用）。 */
+  signal?: AbortSignal;
+}
+
 /**
  * PageRef 列から新しい PDF を構築する（並び替え・回転・削除・結合の実出力）。
  * 各ページを元ドキュメントからコピーし、ユーザー回転を元の回転に加算して適用する。
@@ -24,6 +31,7 @@ async function loadSourceDocs(
 export async function buildPdf(
   sources: SourceBytes,
   pages: PageRef[],
+  options: BuildOptions = {},
 ): Promise<Uint8Array> {
   if (pages.length === 0) {
     throw new Error("出力するページがありません");
@@ -32,12 +40,17 @@ export async function buildPdf(
   const sourceIds = [...new Set(pages.map((p) => p.sourceId))];
   const docs = await loadSourceDocs(sources, sourceIds);
 
-  for (const page of pages) {
+  for (let i = 0; i < pages.length; i += 1) {
+    if (options.signal?.aborted) {
+      throw new DOMException("キャンセルされました", "AbortError");
+    }
+    const page = pages[i]!;
     const srcDoc = docs.get(page.sourceId)!;
     const [copied] = await out.copyPages(srcDoc, [page.sourceIndex]);
-    const total = normalizeRotation(copied.getRotation().angle + page.rotation);
-    copied.setRotation(degrees(total));
+    const angle = normalizeRotation(copied.getRotation().angle + page.rotation);
+    copied.setRotation(degrees(angle));
     out.addPage(copied);
+    options.onProgress?.(i + 1, pages.length);
   }
   return out.save();
 }

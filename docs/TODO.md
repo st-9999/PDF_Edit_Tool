@@ -107,12 +107,12 @@
 
 > SPEC §9 に対応。v1は「中規模で快適」を保証ラインに、基礎のみ導入。
 
-- [ ] **計測基盤**: 操作別のメモリ/所要時間ロガー（Chromium `performance.memory`）、CIに簡易ベンチ
-- [ ] 代表データでの上限実測 → 推奨上限値を確定し**UIに明示**
-- [ ] サムネ/ページの**仮想化**（可視範囲＋前後のみ描画、離れたcanvas破棄、LRUキャッシュ）
-- [ ] 重い編集処理（結合・抽出・保存）の **Web Worker 隔離**（Transferableで受渡し）
-- [ ] 進捗バー＋キャンセル、上限超過時の事前警告
-- [ ] **テスト/計測**: 中規模で快適動作の確認、上限超過時に警告が出ること
+- [x] **計測基盤**: 所要時間ロガー `measure` ＋ `readMemory`（Chromium `performance.memory` ガード）、CI 内の簡易ベンチ（`build.perf.test` で 200p ビルドを計測）
+- [x] 代表データでの上限実測 → 推奨上限値を確定し**UIに明示**（`limits` 定数＝約500ページ/約50MB、空状態に明示。buildPdf 200p≈70ms の計測値を根拠に設定）
+- [x] サムネ/ページの**仮想化**（`useVisible` 双方向 IntersectionObserver で可視範囲＋前後のみ描画、離れたら canvas をアンマウントして破棄）。※LRU キャッシュは未導入（再入時は再描画、v2）
+- [x] 重い編集処理（保存ビルド）の **Web Worker 隔離**（`pdf-build.worker` + `runBuild`、結果は Transferable で返却。Worker 非対応/失敗時は本スレッドへフォールバック）
+- [x] 進捗バー＋キャンセル（`ProgressOverlay` + `progress-store`、保存ビルドに配線）、上限超過時の事前警告（読込/結合時にトースト）
+- [x] **テスト/計測**: 中規模で快適動作の確認（200p ビルド 70ms・進捗通知・Abort）/ 上限超過判定 `checkLimits`（unit）と警告配線 / 仮想化込みの実描画・保存 E2E
 
 ## P8. 仕上げ・公開
 

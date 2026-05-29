@@ -13,6 +13,48 @@
 
 ---
 
+## 2026-05-29 — P7 性能・大規模対策（基礎）
+
+### 実施内容
+
+- **計測基盤**: `lib/perf/metrics.ts`（`measure(label, fn)` で所要時間、`readMemory()` で Chromium `performance.memory` をガード付き取得）。簡易ベンチは `build.perf.test`（200p ビルドの ms を記録）。
+- **推奨上限・警告**: `lib/perf/limits.ts`（`RECOMMENDED_MAX_PAGES=500` / `RECOMMENDED_MAX_BYTES=50MB`、`checkLimits` 純関数）。空状態に上限を明示し、読込（ページ数/サイズ）・結合（合計ページ）で超過時に警告トースト。
+- **仮想化**: `useVisible`（双方向 IntersectionObserver、rootMargin で前後バッファ）に切替。連続表示ページとサムネは可視範囲＋前後のみ描画し、離れると canvas をアンマウントして破棄（メモリ抑制）。旧 `useInView`（一度きり）は削除。
+- **Worker 隔離**: `workers/pdf-build.worker.ts` で保存用 `buildPdf` を UI スレッドから隔離（進捗通知、結果は Transferable）。`lib/pdf/build-runner.ts` の `runBuild` が Worker を試行し、非対応/失敗時は本スレッド `buildPdf` にフォールバック。`buildPdf` に `onProgress`/`signal`（Abort）を追加。
+- **進捗＋キャンセル**: `progress-store` + `ProgressOverlay`（バー＋キャンセル）を保存ビルドに配線。キャンセルは AbortController（本スレッド）/ worker 終了で実現。
+
+### 作成ファイル
+
+- `src/lib/perf/{metrics,limits}.ts` + `metrics.test.ts`、`src/lib/editor/build.perf.test.ts`
+- `src/lib/hooks/use-visible.ts`、`src/workers/pdf-build.worker.ts`、`src/lib/pdf/build-runner.ts`
+- `src/store/progress-store.ts`、`src/features/progress/progress-overlay.tsx`
+
+### 変更ファイル
+
+- `src/lib/editor/build.ts`（`BuildOptions` onProgress/signal）、`src/features/save/use-save.ts`（runBuild + 進捗 + Abort 処理）
+- `src/features/viewer/{thumbnail,page-viewer}.tsx`（`useVisible` 仮想化）、`viewer-layout.tsx`（ProgressOverlay・超過警告）、`empty-state.tsx`（上限明示）、`features/editor/use-edit-actions.ts`（結合時警告）
+- `src/lib/hooks/use-in-view.ts` を削除（`use-visible` に置換）
+- `docs/CHANGELOG.md` / `docs/TODO.md`
+
+### 計測結果
+
+- **ベンチ**: buildPdf 200 ページ ≈ **70ms**（node）。500 ページでも数百 ms 想定 → 推奨上限「約500ページ」は build 面で十分快適。
+- **テスト**: Vitest **100 件**全通過（16 ファイル。perf/limits 6・build.perf 2 を追加）。Playwright E2E（Chromium）**8 件**全通過（仮想化下でも描画・保存＝Worker 経路が機能）。`lint`/`tsc`/`prettier --check` クリーン。
+- **ビルド**: 静的エクスポート成功。**Worker チャンクが out/\_next に emit**（Turbopack が `new Worker(new URL(...))` をバンドル）。初期 JS raw 697.1KB / gzip 208.7KB（ほぼ横ばい）。
+
+### Risks/TODO
+
+- 仮想化の **LRU キャッシュは未導入**。可視範囲外へ出た canvas は破棄、再入時は再描画（rootMargin バッファで緩和）。本格 LRU は v2。
+- Worker への入力（ソースバイト列）は構造化クローン（コピー）で渡し、**結果のみ Transferable**。入力も Transferable 化するとメインの再保存用バイトが detach されるため意図的にクローン。メモリ最適化（バイトを worker 常駐）は v2。
+- 「中規模 PDF の初回**描画**時間・メモリ」（ブラウザ実測）は計測基盤を整備済みだが formal 計測は未実施（render は仮想化で可視分のみ）。`performance.memory` ロガーで今後取得可能。
+- 上限超過の警告はトースト。事前見積り（時間/メモリ）提示は未実装（v2）。
+
+### 次ステップ
+
+- TODO P8「仕上げ・公開」: ライト/ダークテーマ、アクセシビリティ（キーボード/フォーカス）、破損/パスワード PDF のエラートースト、Chrome/Firefox の通し E2E、最終バンドル/Lighthouse 計測、README、（公開はユーザー判断）。
+
+---
+
 ## 2026-05-29 — P6 しおり表示
 
 ### 実施内容

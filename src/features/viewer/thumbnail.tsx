@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type MouseEvent } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { useInView } from "@/lib/hooks/use-in-view";
+import { useVisible } from "@/lib/hooks/use-visible";
 import { renderPageToCanvas } from "@/lib/pdf/render";
 import { THUMBNAIL_WIDTH } from "@/lib/pdf/constants";
 import { cn } from "@/lib/utils";
@@ -32,10 +32,10 @@ export function Thumbnail({
 }: ThumbnailProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const inView = useInView(buttonRef);
+  const visible = useVisible(buttonRef);
 
   useEffect(() => {
-    if (!inView) return;
+    if (!visible) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
@@ -59,7 +59,7 @@ export function Thumbnail({
       cancelled = true;
       cancelRender?.();
     };
-  }, [inView, pdf, pageNumber, rotation]);
+  }, [visible, pdf, pageNumber, rotation]);
 
   // 現在ページのサムネは一覧内に見えるようスクロール
   useEffect(() => {
@@ -90,7 +90,7 @@ export function Thumbnail({
           minHeight: Math.round(THUMBNAIL_WIDTH * 1.414),
         }}
       >
-        <canvas ref={canvasRef} className="block w-full" />
+        {visible ? <canvas ref={canvasRef} className="block w-full" /> : null}
       </div>
       <span className="text-muted-foreground text-xs">{position}</span>
     </button>

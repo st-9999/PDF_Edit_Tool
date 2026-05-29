@@ -14,6 +14,14 @@
 
 ### Added
 
+<!-- P7 性能・大規模対策（基礎） -->
+
+- feat(perf): 計測基盤（`measure`／`readMemory`）と推奨上限 `limits`（約500ページ/約50MB）を追加。空状態に上限を明示し、読込/結合で超過時に警告トースト。
+- feat(perf): ページ/サムネの仮想化（`useVisible` 双方向 IntersectionObserver）。可視範囲＋前後のみ描画し、離れた canvas をアンマウントして破棄。
+- feat(perf): 重い保存ビルドを Web Worker（`pdf-build.worker` + `runBuild`、Transferable 返却）へ隔離。非対応時は本スレッドへフォールバック。`buildPdf` に `onProgress`/`signal` を追加。
+- feat(perf): 進捗オーバーレイ（`ProgressOverlay` + `progress-store`）とキャンセルを保存処理に配線。
+- test(perf): metrics/limits の unit、200p ビルドの簡易ベンチ（≈70ms・進捗・Abort）を追加。
+
 <!-- P6 しおり表示 -->
 
 - feat(bookmark): pdf.js のアウトラインを解決済みツリーへ変換する `buildOutline`（名前付き/明示 dest → ページ解決）を追加。

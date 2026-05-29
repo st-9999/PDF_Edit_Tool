@@ -5,6 +5,7 @@ import { UploadIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useViewerStore } from "@/store/viewer-store";
+import { recommendedLimitsLabel } from "@/lib/perf/limits";
 import { cn } from "@/lib/utils";
 
 function isPdfFile(file: File): boolean {
@@ -90,6 +91,9 @@ export function EmptyState() {
         />
         <p className="text-muted-foreground text-xs">
           ファイルはブラウザ内で処理され、サーバーに送信されません。
+        </p>
+        <p className="text-muted-foreground text-xs">
+          {recommendedLimitsLabel()}
         </p>
       </div>
     </main>

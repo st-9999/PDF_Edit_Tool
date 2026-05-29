@@ -11,8 +11,10 @@ import { useViewerStore } from "@/store/viewer-store";
 import { editorSelectors, useEditorStore } from "@/store/editor-store";
 import { useUnsavedGuard } from "@/lib/hooks/use-unsaved-guard";
 import { useEditorShortcuts } from "@/lib/hooks/use-editor-shortcuts";
+import { checkLimits, recommendedLimitsLabel } from "@/lib/perf/limits";
 import { EditToolbar } from "@/features/editor/edit-toolbar";
 import { SearchBar } from "@/features/search/search-bar";
+import { ProgressOverlay } from "@/features/progress/progress-overlay";
 import { PdfSourcesProvider, usePdfSources } from "./pdf-sources-context";
 import { LeftPane } from "./left-pane";
 import { PageViewer } from "./page-viewer";
@@ -54,6 +56,11 @@ function ViewerShell() {
         if (cancelled) return;
         initDocument(numPages, sourceId);
         setStatus("ready");
+        if (checkLimits(numPages, file.size).exceeded) {
+          toast.warning(
+            `大きなファイルです（${numPages} ページ）。${recommendedLimitsLabel()} を超えており、動作が重くなる場合があります。`,
+          );
+        }
       } catch (err) {
         if (cancelled) return;
         const message =
@@ -105,6 +112,7 @@ function ViewerShell() {
             </ResizablePanel>
           </ResizablePanelGroup>
           <SearchBar />
+          <ProgressOverlay />
         </div>
       ) : (
         <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">

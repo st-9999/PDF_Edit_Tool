@@ -2,10 +2,12 @@
 
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { buildPdf, extractPages, splitPdf } from "@/lib/editor/build";
+import { extractPages, splitPdf } from "@/lib/editor/build";
+import { runBuild } from "@/lib/pdf/build-runner";
 import { createSaveStrategy, type SaveStrategy } from "@/lib/save/strategy";
 import { useEditorStore } from "@/store/editor-store";
 import { useViewerStore } from "@/store/viewer-store";
+import { useProgressStore } from "@/store/progress-store";
 import { usePdfSources } from "@/features/viewer/pdf-sources-context";
 
 function suggestedName(fileName: string | null, suffix = ""): string {
@@ -18,8 +20,22 @@ export function useSave() {
   const { getAllBytes } = usePdfSources();
   const strategy = useMemo<SaveStrategy>(() => createSaveStrategy(), []);
 
-  const buildCurrent = () =>
-    buildPdf(getAllBytes(), useEditorStore.getState().pages);
+  // 現在のドキュメントを Worker で生成（進捗オーバーレイ＋キャンセル付き）
+  const buildCurrent = async () => {
+    const controller = new AbortController();
+    useProgressStore
+      .getState()
+      .begin("PDF を生成中…", () => controller.abort());
+    try {
+      return await runBuild(getAllBytes(), useEditorStore.getState().pages, {
+        signal: controller.signal,
+        onProgress: (done, total) =>
+          useProgressStore.getState().progress(done, total),
+      });
+    } finally {
+      useProgressStore.getState().end();
+    }
+  };
 
   const saveAs = async () => {
     try {
@@ -30,6 +46,10 @@ export function useSave() {
       useEditorStore.getState().markSaved(target.handle);
       toast.success(`保存しました: ${target.name}`);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        toast.info("保存をキャンセルしました");
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "保存に失敗しました");
     }
   };
@@ -46,6 +66,10 @@ export function useSave() {
       useEditorStore.getState().markSaved(fileHandle);
       toast.success("上書き保存しました");
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        toast.info("保存をキャンセルしました");
+        return;
+      }
       toast.error(
         err instanceof Error ? err.message : "上書き保存に失敗しました",
       );
