@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import { ZoomInIcon, ZoomOutIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -63,8 +62,7 @@ export function LeftPane() {
   const thumbnailZoomOut = useViewerStore((s) => s.thumbnailZoomOut);
 
   // サムネ一覧上の Ctrl+ホイールはサムネ幅のズームに割り当てる（ビュアーとは独立）
-  const thumbScrollRef = useRef<HTMLDivElement>(null);
-  useCtrlWheelZoom(thumbScrollRef, {
+  const thumbZoomRef = useCtrlWheelZoom({
     onZoomIn: thumbnailZoomIn,
     onZoomOut: thumbnailZoomOut,
   });
@@ -81,7 +79,7 @@ export function LeftPane() {
       </TabsList>
       <TabsContent value="thumbnails" className="flex min-h-0 flex-1 flex-col">
         <ThumbnailZoomBar />
-        <div ref={thumbScrollRef} className="min-h-0 flex-1 overflow-auto">
+        <div ref={thumbZoomRef} className="min-h-0 flex-1 overflow-auto">
           <ThumbnailList />
         </div>
       </TabsContent>

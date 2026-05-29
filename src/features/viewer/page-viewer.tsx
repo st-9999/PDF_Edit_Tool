@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -18,7 +25,6 @@ import { Slider } from "@/components/ui/slider";
 import { Toggle } from "@/components/ui/toggle";
 import { useElementSize } from "@/lib/hooks/use-element-size";
 import { useVisible } from "@/lib/hooks/use-visible";
-import { useCtrlWheelZoom } from "@/lib/hooks/use-ctrl-wheel-zoom";
 import { computeFitScale } from "@/lib/pdf/render";
 import { ZOOM_MAX, ZOOM_MIN } from "@/lib/pdf/constants";
 import { useViewerStore } from "@/store/viewer-store";
@@ -138,8 +144,42 @@ export function PageViewer() {
   const size = useElementSize(scrollRef);
   const [baseDims, setBaseDims] = useState<BaseDims | null>(null);
 
-  // ビュアー上の Ctrl+ホイールはページ表示ズーム（既存の ± と同じ刻み）に割り当てる
-  useCtrlWheelZoom(scrollRef, { onZoomIn: zoomIn, onZoomOut: zoomOut });
+  // Ctrl+ホイールズーム時、カーソル下のコンテンツ位置を保持するためのアンカー。
+  // ホイール発火時（ズーム前）に記録し、再レイアウト後に scroll を補正する。
+  const zoomAnchor = useRef<{
+    offsetX: number;
+    offsetY: number;
+    ratioX: number;
+    ratioY: number;
+  } | null>(null);
+
+  // ビュアー上の Ctrl+ホイールはページ表示ズーム（既存の ± と同じ刻み）に割り当てる。
+  // React の onWheel は passive のため、preventDefault を効かせるには非 passive の
+  // ネイティブリスナを直接張る必要がある。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const handler = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      // ズーム前のスクロール状態から、カーソル位置のコンテンツ内比率を記録する
+      const rect = el.getBoundingClientRect();
+      const offsetX = event.clientX - rect.left;
+      const offsetY = event.clientY - rect.top;
+      zoomAnchor.current = {
+        offsetX,
+        offsetY,
+        ratioX:
+          el.scrollWidth > 0 ? (el.scrollLeft + offsetX) / el.scrollWidth : 0,
+        ratioY:
+          el.scrollHeight > 0 ? (el.scrollTop + offsetY) / el.scrollHeight : 0,
+      };
+      if (event.deltaY < 0) zoomIn();
+      else if (event.deltaY > 0) zoomOut();
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [zoomIn, zoomOut]);
 
   const firstPage = pages[0];
   const firstProxy = firstPage ? getProxy(firstPage.sourceId) : undefined;
@@ -169,6 +209,17 @@ export function PageViewer() {
       VIEWER_PADDING,
     );
   }, [fitMode, baseDims, size.width, size.height, zoom]);
+
+  // 拡大率が変わって再レイアウトされた直後（描画前）に、記録した比率位置が
+  // 同じカーソル座標へ来るよう scroll を補正する＝カーソル中心のズーム。
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const anchor = zoomAnchor.current;
+    if (!el || !anchor) return;
+    zoomAnchor.current = null;
+    el.scrollLeft = anchor.ratioX * el.scrollWidth - anchor.offsetX;
+    el.scrollTop = anchor.ratioY * el.scrollHeight - anchor.offsetY;
+  }, [effectiveScale]);
 
   const pageEls = useRef(new Map<number, HTMLElement>());
 

@@ -13,6 +13,48 @@
 
 ---
 
+## 2026-05-29 — サムネ Ctrl+ホイールのブラウザズーム誤作動修正＆ビュアーのカーソル中心ズーム
+
+### 実施内容
+
+- **不具合1**: 左ペインのサムネ上で Ctrl+ホイールするとブラウザ画面全体が拡大縮小された。
+  - **原因（context7 / base-ui で確認）**: `Tabs.Panel` は `keepMounted=false` が既定で、active パネルの子も初回コミット後の状態確定で遅延マウントされる。そのため `LeftPane` の `useEffect` 実行時には `thumbScrollRef.current` がまだ null で、非 passive の wheel リスナが張られず、Ctrl+ホイールがブラウザ標準ズームに素通りしていた。
+  - **修正**: `useCtrlWheelZoom` を **ref コールバック方式**へ変更（戻り値を要素の `ref` に渡す）。ノードの実マウント時に確実にリスナを張り、アンマウント時に解除する（React 19 の ref クリーンアップ）。遅延マウントに依存しないため確実に発火。
+- **不具合2（要望）**: ビュアーの Ctrl+ホイールズームが左上基準だったのを、**カーソル位置中心**にする。
+  - **実装**: `page-viewer.tsx` でビュアー用の wheel 処理を内製。ホイール発火時（ズーム前）にカーソル位置のコンテンツ内比率 `ratioX/Y = (scroll + offset) / scrollSize` とカーソルの要素内オフセットを記録 → `zoomIn/zoomOut` → `effectiveScale` 変化を契機に `useLayoutEffect`（描画前）で `scrollLeft/Top = ratio * 新 scrollSize − offset` に補正し、カーソル下の点を固定。
+  - ページ寸法は `PdfPageView` の明示 `width/height` でレイアウトが即時確定するため、`useLayoutEffect` 時点で新しい `scrollWidth/Height` を読める。
+
+### 作成ファイル
+
+- なし
+
+### 変更ファイル
+
+- `src/lib/hooks/use-ctrl-wheel-zoom.ts` — RefObject+useEffect → ref コールバック方式に変更
+- `src/lib/hooks/use-ctrl-wheel-zoom.test.tsx` — 新 API（ref コールバック）に合わせて更新
+- `src/features/viewer/left-pane.tsx` — サムネスクロール要素に ref コールバックを適用（`useRef` 削除）
+- `src/features/viewer/page-viewer.tsx` — ビュアー用 Ctrl+ホイール処理＋カーソル中心の scroll 補正（`useLayoutEffect`）を内製。共通フックの利用を停止
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）: パス（エラー 0）
+- Lint: パス（警告/エラー 0）
+- Unit（`vitest run`）: **109 / 109 パス**（フックのテストは新 API に更新、件数据え置き）
+- 本番ビルド（`next build` / Next 16.2.6 Turbopack）: 成功（Compiled in 2.4s、TypeScript 2.8s、静的 4/4 生成）
+
+### Risks/TODO
+
+- ビュアーのカーソル中心ズームは比率法のため、ページ間 gap・余白（`p-6`）が拡大率に比例しない分わずかに誤差が出る（実用上は問題ない範囲）。厳密な等倍追従が必要なら要素ごとの座標計算に切替。
+- 既に最大/最小ズームかつ `fitMode='actual'` の状態で Ctrl+ホイールすると `effectiveScale` が変わらず、記録したアンカーが次の拡大率変化（例: フィット中のリサイズ）まで残り得る。実害は軽微なスクロールの一度きりのズレ。
+- ホイール 1 ノッチ = 1 ステップ。トラックパッドのピンチは速くなる（前回からの既知事項）。
+
+### 次ステップ
+
+- 実機で「サムネ上 Ctrl+ホイール＝サムネのみ拡大」「ビュアー上 Ctrl+ホイール＝カーソル中心に拡大」「領域外＝ブラウザズーム」を目視確認。
+
+---
+
 ## 2026-05-29 — Ctrl+ホイールのスコープ別ズーム＆サムネのページ追従スクロール
 
 ### 実施内容

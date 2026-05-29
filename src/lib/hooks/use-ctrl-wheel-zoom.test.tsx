@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { useRef } from "react";
 import { render, cleanup } from "@testing-library/react";
 import { useCtrlWheelZoom } from "./use-ctrl-wheel-zoom";
 
@@ -12,9 +11,8 @@ function Harness({
   onZoomIn: () => void;
   onZoomOut: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useCtrlWheelZoom(ref, { onZoomIn, onZoomOut });
-  return <div ref={ref} data-testid="zone" />;
+  const zoomRef = useCtrlWheelZoom({ onZoomIn, onZoomOut });
+  return <div ref={zoomRef} data-testid="zone" />;
 }
 
 /** Ctrl/⌘ を押した wheel イベントを生成する（cancelable で preventDefault を検証可能に）。 */

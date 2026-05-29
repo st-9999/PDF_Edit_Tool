@@ -18,8 +18,13 @@
 - feat(zoom): Ctrl/⌘ + マウスホイールによるズームをカーソル位置でスコープ。左ペイン上ならサムネ幅、ビュアー上ならページ表示ズームが変化する（`useCtrlWheelZoom`：`{ passive: false }` のネイティブ wheel リスナでブラウザ標準ズームを抑止）。両領域外では従来どおりブラウザのページズームが効く。
 - feat(thumbnail): ビュアーの現在ページに追従してサムネ一覧が自動スクロール（`block: "nearest"`）。同期を `ThumbnailList` 側に集約し、ページ要素の ref マップで確実に追従。
 
+### Changed
+
+- feat(zoom): ビュアーの Ctrl+ホイールズームを**カーソル位置中心**に変更（従来は左上基準で拡大縮小していた）。ズーム前のカーソル位置のコンテンツ内比率を記録し、再レイアウト直後（`useLayoutEffect`）に `scrollLeft/Top` を補正してカーソル下の点を固定する。
+
 ### Fixed
 
+- fix(zoom): 左ペインのサムネ上で Ctrl+ホイールするとブラウザ画面全体が拡大縮小されていた問題を修正。`useCtrlWheelZoom` を **ref コールバック方式**に変更し、遅延マウントされる base-ui `Tabs.Panel`（`keepMounted=false` 既定）内でも要素マウント時に確実に非 passive リスナを張るようにした（従来は `useEffect` 実行時に `ref.current` が未確定でリスナ未登録だった）。
 - fix(layout): 左ペイン（サムネイル／しおり）とビュアーのスクロールを完全に独立化。`<body>` が `min-h-full`（最小高）でコンテンツに応じて伸び、ページ全体が一体スクロールしていた問題を、`h-full overflow-hidden` でビューポート高に固定して解消。各ペインの `min-h-0 flex-1 overflow-auto` が個別に効くようになった。
 
 ### Added
