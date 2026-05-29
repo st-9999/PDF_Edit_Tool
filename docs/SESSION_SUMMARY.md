@@ -13,6 +13,46 @@
 
 ---
 
+## 2026-05-29 — P8 仕上げ・公開（本番デプロイはスキップ）
+
+### 実施内容
+
+- **テーマ**: next-themes を導入（`ThemeProvider` クライアント境界、`<html suppressHydrationWarning>`、attribute=class）。`ThemeToggle`（CSS の dark: でアイコン出し分け＝mounted 不要・ハイドレーション差異なし）を TopBar と空状態に配置。Sonner も連動。
+- **アクセシビリティ**: 主要領域に aria-label（ページ表示領域・ドロップゾーン・各ボタン）。フォーカスリングは shadcn 既定。キーボードはショートカット中心（Ctrl+Z/Y/S/F、入力中は無効）、空状態は Enter/Space で起動。
+- **エラーハンドリング**: 破損 PDF / パスワード保護 PDF は読込（addSource→loadPdfDocument）の catch でトースト通知し、空状態へ復帰（`PdfLoadError` / `PdfPasswordError`）。非対応操作（Firefox 上書き保存）は保存メニューで無効化＋「Chrome/Edge のみ」明示。
+- **通し E2E（Chrome / Firefox）**: 読込→単ページ→ページ2回転→ページ3削除→保存（ダウンロード）→ダウンロードバイトを pdf-lib で再読込し「4 ページ・元ページ2が 90 度回転」を検証。破損 PDF のエラートースト E2E も追加。
+- **README**: 使い方・ショートカット・ブラウザ別対応表・既知の制限・計測値を整備。
+- **本番デプロイ**: ユーザー指示によりスキップ（ローカルテスト後に実施）。CI（`deploy.yml`）と `.guardrails` は整備済み。
+
+### 作成ファイル
+
+- `src/components/theme-provider.tsx`、`src/features/viewer/theme-toggle.tsx`
+- `e2e/finish.spec.ts`、`README.md`（刷新）
+
+### 変更ファイル
+
+- `src/app/layout.tsx`（ThemeProvider + suppressHydrationWarning）、`src/features/viewer/{top-bar,empty-state,page-viewer}.tsx`（トグル配置・領域ラベル）
+- `docs/CHANGELOG.md` / `docs/TODO.md`
+
+### 計測結果
+
+- **テスト**: Vitest **100 件**全通過（16 ファイル）。Playwright E2E **Chromium 10 件**全通過、**Firefox で通しシナリオ 2 件**（通し＋破損）通過。`lint`/`tsc`/`prettier --check` クリーン。
+- **最終バンドル**: 初期 JS raw 700.7KB / **gzip 209.9KB**（P0 ベースライン 181KB から +約 29KB＝テーマ/ストア/Sonner 等）。全チャンク raw 約 2295KB（pdf.js・pdf-lib・dnd-kit・base-ui・worker 含む、いずれも遅延）。
+- **Lighthouse（ローカル `serve out`・空状態）**: Performance **97** / FCP 0.8s / **LCP 2.7s** / **CLS 0** / TBT 30ms（P0: 97 / 2.5s / 0 と同等）。
+
+### Risks/TODO
+
+- **本番デプロイ未実施**（ユーザー判断）。公開時は GitHub へ push → Pages を「GitHub Actions」ソースに設定 → `.guardrails` の URL 確定（リポジトリ名 = `NEXT_PUBLIC_BASE_PATH`）→ ヘルス確認。
+- パスワード保護 PDF は未対応（エラー表示のみ）。暗号化 PDF を pdf-lib で生成できないため password の自動 E2E は未追加（破損系のみ E2E、パスワードは catch 経路で同等処理）。
+- Firefox は全 10 E2E ではなく通しシナリオ＋破損の 2 件で確認（他機能は Chromium で担保）。
+- v1 スコープ完了。v2（しおり編集・操作ログ遅延適用・検索高度化）/ v3（しおり自動生成・OCR）は未着手。
+
+### 次ステップ
+
+- v1 完了。ユーザーによるローカル確認 → 問題なければ GitHub push / Pages 公開。以降は v2 バックログへ。
+
+---
+
 ## 2026-05-29 — P7 性能・大規模対策（基礎）
 
 ### 実施内容

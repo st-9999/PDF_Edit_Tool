@@ -210,6 +210,7 @@ export function PageViewer() {
       <div
         ref={scrollRef}
         data-viewer-scroll
+        aria-label="ページ表示領域"
         className="bg-muted/40 min-h-0 flex-1 overflow-auto"
       >
         {viewMode === "single" ? (

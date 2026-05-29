@@ -116,14 +116,14 @@
 
 ## P8. 仕上げ・公開
 
-- [ ] ライト/ダークテーマ
-- [ ] 基本的なキーボード操作・フォーカス管理（アクセシビリティ）
-- [ ] エラーハンドリング（破損PDF・パスワード保護PDF・非対応操作）のトースト
-- [ ] E2E シナリオ（読込→編集一式→保存→再読込で検証）を Chrome / Firefox で実行
-- [ ] **計測**: 最終バンドルサイズ（JS total）・Lighthouse（LCP/CLS）を記録
-- [ ] `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` 更新
-- [ ] 本番デプロイ（GitHub Pages）→ ヘルス確認まで監視
-- [ ] README（使い方・ブラウザ別対応表・既知の制限）
+- [x] ライト/ダークテーマ（next-themes、TopBar・空状態にトグル、Sonner と連動）
+- [x] 基本的なキーボード操作・フォーカス管理（ショートカット Ctrl+Z/Y/S/F、領域 aria-label、shadcn フォーカスリング、空状態の Enter/Space 起動）
+- [x] エラーハンドリング（破損PDF・パスワード保護PDFは読込 catch でトースト＋空状態復帰、非対応操作は UI で無効化・明示）のトースト
+- [x] E2E シナリオ（読込→回転→削除→保存→ダウンロードを再読込で検証）を **Chrome / Firefox 両方で実行**
+- [x] **計測**: 最終バンドルサイズ（初期 JS gzip 約 210KB）・Lighthouse（Perf 97 / LCP ≈2.7s / CLS 0）を記録
+- [x] `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` 更新
+- [~] 本番デプロイ（GitHub Pages）→ ヘルス確認まで監視 — **ユーザー指示によりスキップ（ローカルテスト後に実施）。CI/`.guardrails` は整備済み**
+- [x] README（使い方・ショートカット・ブラウザ別対応表・既知の制限・計測値）
 
 ---
 

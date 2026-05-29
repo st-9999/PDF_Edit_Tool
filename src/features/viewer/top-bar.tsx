@@ -16,6 +16,7 @@ import { useViewerStore } from "@/store/viewer-store";
 import { editorSelectors, useEditorStore } from "@/store/editor-store";
 import { useSearchStore } from "@/store/search-store";
 import { SaveMenu } from "@/features/save/save-menu";
+import { ThemeToggle } from "./theme-toggle";
 
 /** メインビューア内のテキストを全選択する（描画済みページのみ）。 */
 function selectAllViewerText() {
@@ -117,14 +118,15 @@ export function TopBar() {
         </div>
       )}
 
-      {fileName && (
-        <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-3">
+        {fileName && (
           <span className="text-muted-foreground max-w-[32ch] truncate text-sm">
             {fileName}
           </span>
-          <SaveMenu />
-        </div>
-      )}
+        )}
+        {fileName && <SaveMenu />}
+        <ThemeToggle />
+      </div>
 
       <input
         ref={inputRef}

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useViewerStore } from "@/store/viewer-store";
 import { recommendedLimitsLabel } from "@/lib/perf/limits";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "./theme-toggle";
 
 function isPdfFile(file: File): boolean {
   return (
@@ -36,7 +37,10 @@ export function EmptyState() {
   const openPicker = () => inputRef.current?.click();
 
   return (
-    <main className="flex flex-1 items-center justify-center p-8">
+    <main className="relative flex flex-1 items-center justify-center p-8">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div
         role="button"
         tabIndex={0}

@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PDF ビューア＆エディタ
 
-## Getting Started
+ブラウザ内で完結する PDF の閲覧・編集ツール。**ファイルはサーバーに送信されず、すべての処理がブラウザ内（クライアントサイド）で行われます**。機密文書も安心して扱えます。
 
-First, run the development server:
+> 技術構成: Next.js（静的エクスポート）/ TypeScript / Tailwind CSS v4 / shadcn/ui / pdf.js（描画・テキスト・アウトライン）/ pdf-lib（編集出力）/ Zustand / Web Worker。
+
+---
+
+## 主な機能
+
+- **閲覧**: ドラッグ&ドロップ / ファイル選択で読み込み、ページ送り・ジャンプ、ズーム（スライダー / % 入力 / 幅合わせ / 全体表示）、単ページ / 連続スクロール切替、サムネイル一覧
+- **編集**: ページの並び替え（D&D）・回転・削除・抽出・分割・複数 PDF の結合、Undo / Redo（Ctrl+Z / Ctrl+Y）
+- **保存**: 名前を付けて保存 / 上書き保存（Chrome・Edge）、分割して保存。Firefox はダウンロード保存
+- **検索・選択**: テキストの選択・コピー・全選択、検索バー（Ctrl+F、ハイライト・件数・前後移動）
+- **しおり**: 既存 PDF のアウトラインをツリー表示し、クリックでジャンプ
+- **テーマ**: ライト / ダーク / システム追従
+
+## 使い方
+
+1. 中央のドロップゾーンに PDF をドラッグ、または「ファイルを選択」から開く
+2. 左ペインのサムネイルでページを選択（クリック / Shift 範囲 / Ctrl 個別）し、ツールバーや右クリックメニューで回転・削除・抽出・分割
+3. サムネイルのハンドル（⠿）をドラッグして並び替え。「結合」で別 PDF を追加
+4. 「保存」メニューから保存（Ctrl+S）。Ctrl+F で検索、左ペイン「しおり」タブで目次ジャンプ
+
+### ショートカット
+
+| キー                           | 動作     |
+| ------------------------------ | -------- |
+| Ctrl/Cmd + Z                   | 元に戻す |
+| Ctrl/Cmd + Y（または Shift+Z） | やり直す |
+| Ctrl/Cmd + S                   | 保存     |
+| Ctrl/Cmd + F                   | 検索     |
+
+## ブラウザ別対応表
+
+| 機能                               | Chrome / Edge     | Firefox                            |
+| ---------------------------------- | ----------------- | ---------------------------------- |
+| 閲覧・編集・検索・しおり           | ✅                | ✅                                 |
+| 名前を付けて保存（保存先指定）     | ✅ 保存ダイアログ | △ ダウンロード保存（場所指定不可） |
+| 上書き保存（元ファイルへ）         | ✅                | ❌ 非対応（再ダウンロードで代替）  |
+| メモリ計測（`performance.memory`） | ✅                | ❌                                 |
+
+> 保存系は File System Access API を使用するため Chromium 系のみフル対応。Firefox は `<a download>` にフォールバックします。
+
+## 既知の制限
+
+- **推奨上限**: 約 500 ページ / 約 50 MB（「中規模で快適」の目安。超過時は警告を表示）。完全クライアント処理のため物理的な上限があります。
+- **パスワード保護 PDF** は未対応（読み込み時にエラー表示）。
+- 検索ハイライトは 1 テキスト要素内の一致が対象（要素をまたぐ一致は未ハイライト）。
+- 「全選択」は描画済み（表示中）ページのテキストが対象。
+- しおりは最初に開いた文書のアウトラインのみ表示（結合した別ファイルのしおりは未統合）。v1 は閲覧のみ。
+- 上書き保存はハンドル取得後に有効（初回は「名前を付けて保存」が必要）。
+
+## 開発
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev          # 開発サーバ
+npm run build        # 静的エクスポート（out/）
+npm run preview      # out/ をローカル配信
+npm test             # ユニット（Vitest）
+npm run e2e          # E2E（Playwright・要 npx playwright install）
+npm run lint         # ESLint
+npm run typecheck    # tsc --noEmit
+npm run format       # Prettier
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### デプロイ（GitHub Pages）
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`.github/workflows/deploy.yml` が `main` への push でビルド→ Pages へデプロイします。サブパス配信のため、ビルド時に `NEXT_PUBLIC_BASE_PATH=/<リポジトリ名>` を設定します（CI ではリポジトリ名から自動導出）。
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 計測（参考値）
 
-## Learn More
+- 初期 JS: 約 210 KB（gzip）。pdf.js・編集・保存などは遅延ロード／Web Worker 隔離。
+- Lighthouse（ローカル配信・空状態）: Performance 97 / LCP 約 2.7s / CLS 0。
+- buildPdf 200 ページ ≈ 70ms。
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+詳細は [`docs/SPEC.md`](./docs/SPEC.md) / [`docs/TODO.md`](./docs/TODO.md) / [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) を参照。
