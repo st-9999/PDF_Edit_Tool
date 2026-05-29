@@ -35,6 +35,7 @@ function SortableThumbnail({
   pdf,
   page,
   position,
+  width,
   selected,
   current,
   onClick,
@@ -42,6 +43,7 @@ function SortableThumbnail({
   pdf: PDFDocumentProxy | undefined;
   page: PageRef;
   position: number;
+  width: number;
   selected: boolean;
   current: boolean;
   onClick: (event: MouseEvent) => void;
@@ -84,6 +86,7 @@ function SortableThumbnail({
           pageNumber={page.sourceIndex + 1}
           position={position}
           rotation={page.rotation}
+          width={width}
           selected={selected}
           current={current}
           onClick={onClick}
@@ -104,6 +107,7 @@ export function ThumbnailList() {
   const reorder = useEditorStore((s) => s.reorder);
   const currentPage = useViewerStore((s) => s.currentPage);
   const requestPage = useViewerStore((s) => s.requestPage);
+  const thumbnailWidth = useViewerStore((s) => s.thumbnailWidth);
   const actions = useEditActions();
 
   // 右クリック時、対象が未選択ならそのページだけを選択してから操作する
@@ -152,6 +156,7 @@ export function ThumbnailList() {
                     pdf={getProxy(page.sourceId)}
                     page={page}
                     position={position}
+                    width={thumbnailWidth}
                     selected={selected.has(page.id)}
                     current={position === currentPage}
                     onClick={(event) => handleClick(event, page.id, position)}

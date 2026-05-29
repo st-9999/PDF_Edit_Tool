@@ -1,6 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useViewerStore, clampPage, clampZoom } from "./viewer-store";
 import {
+  useViewerStore,
+  clampPage,
+  clampZoom,
+  clampThumbnailWidth,
+} from "./viewer-store";
+import {
+  THUMBNAIL_WIDTH_DEFAULT,
+  THUMBNAIL_WIDTH_MAX,
+  THUMBNAIL_WIDTH_MIN,
+  THUMBNAIL_WIDTH_STEP,
   ZOOM_DEFAULT,
   ZOOM_MAX,
   ZOOM_MIN,
@@ -18,6 +27,7 @@ beforeEach(() => {
     fitMode: "width",
     status: "idle",
     error: null,
+    thumbnailWidth: THUMBNAIL_WIDTH_DEFAULT,
   });
 });
 
@@ -49,6 +59,54 @@ describe("clampZoom", () => {
   it("非有限値は既定値にフォールバックする", () => {
     expect(clampZoom(Number.NaN)).toBe(ZOOM_DEFAULT);
     expect(clampZoom(Number.POSITIVE_INFINITY)).toBe(ZOOM_MAX);
+  });
+});
+
+describe("clampThumbnailWidth", () => {
+  it("下限・上限にクランプする", () => {
+    expect(clampThumbnailWidth(10)).toBe(THUMBNAIL_WIDTH_MIN);
+    expect(clampThumbnailWidth(9999)).toBe(THUMBNAIL_WIDTH_MAX);
+    expect(clampThumbnailWidth(THUMBNAIL_WIDTH_DEFAULT)).toBe(
+      THUMBNAIL_WIDTH_DEFAULT,
+    );
+  });
+
+  it("小数は丸め、NaN は既定値にする", () => {
+    expect(clampThumbnailWidth(140.4)).toBe(140);
+    expect(clampThumbnailWidth(Number.NaN)).toBe(THUMBNAIL_WIDTH_DEFAULT);
+  });
+});
+
+describe("サムネイル拡大縮小（ビュアー zoom と独立）", () => {
+  it("thumbnailZoomIn / Out は STEP 分だけ増減する", () => {
+    useViewerStore.setState({ thumbnailWidth: THUMBNAIL_WIDTH_DEFAULT });
+    useViewerStore.getState().thumbnailZoomIn();
+    expect(useViewerStore.getState().thumbnailWidth).toBe(
+      THUMBNAIL_WIDTH_DEFAULT + THUMBNAIL_WIDTH_STEP,
+    );
+    useViewerStore.getState().thumbnailZoomOut();
+    expect(useViewerStore.getState().thumbnailWidth).toBe(
+      THUMBNAIL_WIDTH_DEFAULT,
+    );
+  });
+
+  it("上限・下限を超えない", () => {
+    useViewerStore.setState({ thumbnailWidth: THUMBNAIL_WIDTH_MAX });
+    useViewerStore.getState().thumbnailZoomIn();
+    expect(useViewerStore.getState().thumbnailWidth).toBe(THUMBNAIL_WIDTH_MAX);
+
+    useViewerStore.setState({ thumbnailWidth: THUMBNAIL_WIDTH_MIN });
+    useViewerStore.getState().thumbnailZoomOut();
+    expect(useViewerStore.getState().thumbnailWidth).toBe(THUMBNAIL_WIDTH_MIN);
+  });
+
+  it("サムネイル幅の変更はビュアー zoom に影響しない（独立）", () => {
+    useViewerStore.setState({
+      zoom: ZOOM_DEFAULT,
+      thumbnailWidth: THUMBNAIL_WIDTH_DEFAULT,
+    });
+    useViewerStore.getState().thumbnailZoomIn();
+    expect(useViewerStore.getState().zoom).toBe(ZOOM_DEFAULT);
   });
 });
 

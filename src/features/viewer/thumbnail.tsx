@@ -7,6 +7,9 @@ import { renderPageToCanvas } from "@/lib/pdf/render";
 import { THUMBNAIL_WIDTH } from "@/lib/pdf/constants";
 import { cn } from "@/lib/utils";
 
+/** A4 縦相当の概算アスペクト比（高さ = 幅 × 1.414）。プレースホルダ高さに使う。 */
+const THUMBNAIL_ASPECT = 1.414;
+
 interface ThumbnailProps {
   pdf: PDFDocumentProxy;
   /** 描画する元ページ（1 始まり）。 */
@@ -15,6 +18,8 @@ interface ThumbnailProps {
   position: number;
   /** ユーザー適用の追加回転（時計回り度）。サムネに反映する。 */
   rotation?: number;
+  /** サムネイル描画幅（px）。左ペインの拡大縮小で変化する。 */
+  width?: number;
   selected: boolean;
   current: boolean;
   onClick: (event: MouseEvent) => void;
@@ -26,6 +31,7 @@ export function Thumbnail({
   pageNumber,
   position,
   rotation = 0,
+  width = THUMBNAIL_WIDTH,
   selected,
   current,
   onClick,
@@ -46,7 +52,7 @@ export function Thumbnail({
         const page = await pdf.getPage(pageNumber);
         if (cancelled) return;
         const base = page.getViewport({ scale: 1 });
-        const scale = THUMBNAIL_WIDTH / base.width;
+        const scale = width / base.width;
         const handle = renderPageToCanvas(page, canvas, scale, rotation);
         cancelRender = handle.cancel;
         await handle.promise;
@@ -59,7 +65,7 @@ export function Thumbnail({
       cancelled = true;
       cancelRender?.();
     };
-  }, [visible, pdf, pageNumber, rotation]);
+  }, [visible, pdf, pageNumber, rotation, width]);
 
   // 現在ページのサムネは一覧内に見えるようスクロール
   useEffect(() => {
@@ -86,8 +92,8 @@ export function Thumbnail({
       <div
         className="bg-background overflow-hidden ring-1 ring-black/5"
         style={{
-          width: THUMBNAIL_WIDTH,
-          minHeight: Math.round(THUMBNAIL_WIDTH * 1.414),
+          width,
+          minHeight: Math.round(width * THUMBNAIL_ASPECT),
         }}
       >
         {visible ? <canvas ref={canvasRef} className="block w-full" /> : null}

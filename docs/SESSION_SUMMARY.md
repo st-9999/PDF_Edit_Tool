@@ -13,6 +13,52 @@
 
 ---
 
+## 2026-05-29 — サムネイルの独立拡大縮小（3 系統のズームを分離）
+
+### 実施内容
+
+- **要望**: 「左ペインのサムネ」「ビュアー表示」「ブラウザ自体」の拡大縮小をそれぞれ独立させたい。
+- **現状調査の結論**:
+  - **ビュアー表示ズーム** — 既に独立（`viewer-store` の `zoom` + フッターのスライダ/±ボタン）。
+  - **ブラウザ拡大率** — アプリのキーボードハンドラは `Ctrl+Z/Y`・`Ctrl+S`・`Ctrl+F` のみを捕捉し、`Ctrl + +/−/0` や `Ctrl+ホイール` は素通し。ネイティブのブラウザズームは既に独立して機能する。
+  - **サムネイル** — `THUMBNAIL_WIDTH=140` の固定値で、拡大縮小手段が無かった（← 唯一の不足）。
+- **実装**: サムネイル幅を独立した状態として持たせ、左ペインに専用ズームバーを追加。
+  - `viewer-store` に `thumbnailWidth` 状態と `setThumbnailWidth` / `thumbnailZoomIn` / `thumbnailZoomOut`、純関数 `clampThumbnailWidth`（80〜280px・小数丸め・NaN は既定値）を追加。UI 設定として `initialDocState` には含めず、ファイル切替後も保持。
+  - `Thumbnail` に `width` prop を追加し、描画スケール（`width / base.width`）・コンテナ寸法・再描画依存配列に反映。`ThumbnailList` がストアの `thumbnailWidth` を各サムネへ伝播。
+  - `LeftPane` のサムネタブを「固定ズームバー（−／％／＋）＋スクロール領域」に再構成。スクロール独立化（前項の修正）を維持。
+  - 拡大率表示は既定 140px を 100% とした百分率。下限/上限でボタンを無効化。
+
+### 作成ファイル
+
+- なし
+
+### 変更ファイル
+
+- `src/lib/pdf/constants.ts` — `THUMBNAIL_WIDTH_MIN/MAX/STEP/DEFAULT` を追加
+- `src/store/viewer-store.ts` — `thumbnailWidth` 状態・アクション・`clampThumbnailWidth` を追加
+- `src/store/viewer-store.test.ts` — クランプ・増減・上下限・ビュアー zoom 非干渉のテストを追加
+- `src/features/viewer/thumbnail.tsx` — `width` prop 対応
+- `src/features/viewer/thumbnail-list.tsx` — `thumbnailWidth` を伝播
+- `src/features/viewer/left-pane.tsx` — `ThumbnailZoomBar` を追加し、サムネタブを再構成
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）: パス（エラー 0）
+- Lint: パス（警告/エラー 0）
+- Unit（`vitest run`）: **105 / 105 パス**（viewer-store は 19 件、うちサムネ関連 5 件を新規追加）
+
+### Risks/TODO
+
+- サムネ幅は session 内メモリのみ。リロードで既定（140px）に戻る。永続化が必要なら localStorage 化を検討。
+- 拡大時は再描画でメモリ/CPU が増える。上限 280px で頭打ちにしているが、超大規模 PDF では仮想化と併せて要観察。
+
+### 次ステップ
+
+- 実機で「サムネ／ビュアー／ブラウザ」3 系統のズームが相互に独立して効くことを目視確認。
+
+---
+
 ## 2026-05-29 — 左ペインとビュアーのスクロール独立化（レイアウト修正）
 
 ### 実施内容

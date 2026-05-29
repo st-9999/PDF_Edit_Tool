@@ -1,5 +1,9 @@
 import { create } from "zustand";
 import {
+  THUMBNAIL_WIDTH_DEFAULT,
+  THUMBNAIL_WIDTH_MAX,
+  THUMBNAIL_WIDTH_MIN,
+  THUMBNAIL_WIDTH_STEP,
   ZOOM_DEFAULT,
   ZOOM_MAX,
   ZOOM_MIN,
@@ -18,6 +22,18 @@ export type LoadStatus = "idle" | "loading" | "ready" | "error";
 export function clampZoom(zoom: number): number {
   if (Number.isNaN(zoom)) return ZOOM_DEFAULT;
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
+}
+
+/**
+ * サムネイル幅を [THUMBNAIL_WIDTH_MIN, THUMBNAIL_WIDTH_MAX] にクランプする純関数（px）。
+ * 解釈不能な NaN は既定値へフォールバックし、小数は丸める。
+ */
+export function clampThumbnailWidth(width: number): number {
+  if (Number.isNaN(width)) return THUMBNAIL_WIDTH_DEFAULT;
+  return Math.min(
+    THUMBNAIL_WIDTH_MAX,
+    Math.max(THUMBNAIL_WIDTH_MIN, Math.round(width)),
+  );
 }
 
 /** ページ番号を [1, numPages] にクランプする純関数（1 始まり）。 */
@@ -41,6 +57,8 @@ interface ViewerState {
   status: LoadStatus;
   error: string | null;
   leftTab: LeftTab;
+  /** 左ペインのサムネイル描画幅（px）。ビュアー zoom / ブラウザ拡大率とは独立。 */
+  thumbnailWidth: number;
 
   setFile: (file: File) => void;
   clearFile: () => void;
@@ -59,6 +77,9 @@ interface ViewerState {
   setFitMode: (mode: FitMode) => void;
   setViewMode: (mode: ViewMode) => void;
   setLeftTab: (tab: LeftTab) => void;
+  setThumbnailWidth: (width: number) => void;
+  thumbnailZoomIn: () => void;
+  thumbnailZoomOut: () => void;
 }
 
 const initialDocState = {
@@ -79,6 +100,8 @@ export const useViewerStore = create<ViewerState>((set) => ({
   ...initialDocState,
   viewMode: "continuous",
   leftTab: "thumbnails",
+  // UI 設定はファイル切替で保持する（initialDocState には含めない）
+  thumbnailWidth: THUMBNAIL_WIDTH_DEFAULT,
 
   setFile: (file) =>
     set({
@@ -146,4 +169,21 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setViewMode: (mode) => set({ viewMode: mode }),
 
   setLeftTab: (tab) => set({ leftTab: tab }),
+
+  setThumbnailWidth: (width) =>
+    set({ thumbnailWidth: clampThumbnailWidth(width) }),
+
+  thumbnailZoomIn: () =>
+    set((state) => ({
+      thumbnailWidth: clampThumbnailWidth(
+        state.thumbnailWidth + THUMBNAIL_WIDTH_STEP,
+      ),
+    })),
+
+  thumbnailZoomOut: () =>
+    set((state) => ({
+      thumbnailWidth: clampThumbnailWidth(
+        state.thumbnailWidth - THUMBNAIL_WIDTH_STEP,
+      ),
+    })),
 }));
