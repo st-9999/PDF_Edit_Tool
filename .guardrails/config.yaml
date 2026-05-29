@@ -1,0 +1,24 @@
+# デプロイ先・ヘルス確認の定義（Claude Code メタの監視対象）
+# 注: 現状はローカル git 管理のみ。GitHub push / Pages 公開時に url を確定すること。
+
+project: pdf-edit-tool
+
+deploy:
+  provider: github-pages
+  workflow: .github/workflows/deploy.yml
+  branch: main
+  # 公開URL。basePath（NEXT_PUBLIC_BASE_PATH）= リポジトリ名と一致させる。
+  # リポジトリ名が確定したら以下を更新する。
+  url: https://st-9999.github.io/pdf-edit-tool/
+
+health_check:
+  url: https://st-9999.github.io/pdf-edit-tool/
+  expect_status: 200
+  expect_text: "PDF ビューア＆エディタ"
+  timeout_seconds: 120
+  interval_seconds: 10
+
+notes:
+  - "完全クライアント処理のため秘密情報・環境変数は不要（.env なし）"
+  - "保存系（File System Access API）は Chromium 系のみ。Firefox はダウンロードへフォールバック"
+  - "P0 時点ではローカル git のみ。GitHub への push と Pages 有効化は未実施"
