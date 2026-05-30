@@ -131,7 +131,7 @@
 
 ### v2
 
-- [x] しおり編集（追加・リネーム・階層変更・削除 → Outline書き戻し） — `outline-store` ＋純関数モデル（`lib/outline/edit.ts`）＋`bookmark-panel` 編集UI。保存時に編集後ツリーを `buildPdf`/`applyOutline` で /Outlines へ書き戻し。単体18＋統合1＋ストア6件。**Undo/Redo・E2E は未対応（次セッション）**
+- [x] しおり編集（追加・リネーム・階層変更・削除 → Outline書き戻し） — 既定は閲覧、「しおり編集」ボタンで編集モード。編集モードは**ドラッグで並べ替え（縦）＋階層変更（横）**＋⋮メニュー（追加/改名/上下/インデント/アウトデント/削除）。`outline-store`＋純関数モデル（`lib/outline/edit.ts`・`tree-dnd.ts`）。保存時に編集後ツリーを `buildPdf`/`applyOutline` で /Outlines へ書き戻し。単体: edit18＋tree-dnd12＋ストア7＋統合1。**Undo/Redo・E2E は未対応（次セッション）**
 - [ ] 大規模最適化の本命: **操作ログ＋遅延適用**を保存パスに統合、結合のページ単位ストリーム処理
 - [x] テキスト検索の高度化（正規表現・ページ横断ナビ） — `buildMatcher` で正規表現／大小区別に対応（`findMatches`/`applyHighlights` 共通化）、検索バーにトグル＋無効式表示。可変長一致が複数ページを横断ナビ可能。単体 +14 件。**正規表現 E2E は未追加**
 

@@ -13,6 +13,44 @@
 
 ---
 
+## 2026-05-30 — しおり編集を「閲覧/編集モード切替」＋ツリー DnD（上下・階層）に拡張
+
+### 実施内容
+
+- **閲覧/編集モード切替**: しおりタブを既定**閲覧モード**（ジャンプのみ、編集 UI 非表示）にし、ヘッダの「**しおり編集**」ボタンで編集モードへ。「完了」で閲覧へ戻る。ドキュメント切替（`docKey` 変化）時は描画時リセットで編集モード/編集中状態を自動解除（`set-state-in-effect` を避け、React 推奨の「描画中に前回値と比較して state を調整」パターンを使用）。
+- **ツリー DnD**: 編集モードで各しおりをドラッグ可能に。**縦移動＝並べ替え / 横移動＝階層変更（インデント/アウトデント）**。`@dnd-kit/core`＋`@dnd-kit/sortable`（既存サムネと同じクラシック API）で、平坦化リストに対し横移動量から投下後の深さ・親を投影（`getProjection`）、`[minDepth,maxDepth]` にクランプ。ドラッグ中はつかんだ枝の子孫を一覧から除外（自分の中へ落とせない）。ドロップ時は元ツリーを再平坦化→active の depth/parent を更新→`arrayMove`→`buildTree` で再構築し `outline-store.replaceTree` へ反映。
+- DnD は純関数（`flattenTree`/`buildTree`/`getProjection`/`getDescendantIds`/`removeChildrenOf`）として `lib/outline/tree-dnd.ts` に分離し単体テスト。⋮メニューの 上/下/インデント/アウトデント はキーボード操作の代替手段として併存。
+
+### 作成ファイル
+
+- `src/lib/outline/tree-dnd.ts` — ツリー平坦化・再構築・ドラッグ投影の純関数
+- `src/lib/outline/tree-dnd.test.ts` — 平坦化往復・投影クランプ・子孫除外・ドラッグ再構築の統合（12 件）
+
+### 変更ファイル
+
+- `src/features/bookmark/bookmark-panel.tsx` — 閲覧/編集モード分岐、編集モードを DnD ツリーに刷新
+- `src/store/outline-store.ts` / `src/store/outline-store.test.ts` — `replaceTree` 追加（+1 件）
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md`
+
+### 計測結果
+
+- **テスト**: `vitest run` 全 **183 件 passed**（前回 170 → tree-dnd 12 / replaceTree 1）。テストファイル 22。
+- **typecheck**: `tsc --noEmit` エラーなし。**lint**: `eslint` 警告・エラーなし（`react-hooks/set-state-in-effect` 対応済み）。
+- **ビルド**: `next build`（静的エクスポート）成功。
+
+### Risks/TODO
+
+- 編集モードでは**折りたたみ非対応**（DnD 投影の整合のため常時展開）。閲覧モードは従来どおり折りたたみ可。大規模アウトラインでは編集モードの一覧が長くなる点に留意。
+- DnD は**ポインタ操作のみ**（`PointerSensor`）。キーボードでの階層変更は ⋮ メニュー（上/下/インデント/アウトデント）で代替。
+- しおり編集の **Undo/Redo・E2E は引き続き未対応**（次セッション候補）。
+
+### 次ステップ
+
+- しおり編集（モード切替・DnD・改名・削除→保存）の **Playwright E2E** 追加。
+- v2 残: 大規模最適化の計測フェーズ。
+
+---
+
 ## 2026-05-30 — v2 着手: しおり編集 と テキスト検索の高度化
 
 ### 実施内容

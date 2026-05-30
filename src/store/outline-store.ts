@@ -48,6 +48,8 @@ interface OutlineState {
   moveDown: (id: string) => void;
   indent: (id: string) => void;
   outdent: (id: string) => void;
+  /** ツリー全体を差し替える（ドラッグ並べ替え/階層変更の結果反映）。 */
+  replaceTree: (nodes: EditableOutlineNode[]) => void;
 }
 
 export const useOutlineStore = create<OutlineState>((set) => ({
@@ -79,6 +81,7 @@ export const useOutlineStore = create<OutlineState>((set) => ({
   moveDown: (id) => set((s) => ({ nodes: moveDown(s.nodes, id), dirty: true })),
   indent: (id) => set((s) => ({ nodes: indent(s.nodes, id), dirty: true })),
   outdent: (id) => set((s) => ({ nodes: outdent(s.nodes, id), dirty: true })),
+  replaceTree: (nodes) => set({ nodes, dirty: true }),
 }));
 
 /** ページ列から現在ドキュメントの docKey（ソース ID の初出順連結）を作る。 */

@@ -2,14 +2,35 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  CheckIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  GripVerticalIcon,
   IndentIncreaseIcon,
   IndentDecreaseIcon,
   MoreVerticalIcon,
-  PlusIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
   PencilIcon,
+  PencilLineIcon,
+  PlusIcon,
   Trash2Icon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,54 +54,51 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { EditableOutlineNode } from "@/lib/outline/edit";
 import { collectEditableOutline } from "@/lib/outline/collect";
+import {
+  buildTree,
+  flattenTree,
+  getProjection,
+  removeChildrenOf,
+} from "@/lib/outline/tree-dnd";
 import { useEditorStore } from "@/store/editor-store";
 import { useViewerStore } from "@/store/viewer-store";
 import { docKeyFromSourceIds, useOutlineStore } from "@/store/outline-store";
 import { usePdfSources } from "@/features/viewer/pdf-sources-context";
 import { cn } from "@/lib/utils";
 
+/** ドラッグ 1 段あたりのインデント幅(px)。横移動量を深さ変化へ換算する基準。 */
+const INDENT_WIDTH = 16;
+
 /** 子孫を含むノード数を数える（削除確認の文言用）。 */
 function countDescendants(node: EditableOutlineNode): number {
   return node.children.reduce((n, c) => n + 1 + countDescendants(c), 0);
 }
 
-function TreeItem({
+/** 宛先なし見出しのサフィックス表示。 */
+function NoDestTag({ show }: { show: boolean }) {
+  return show ? (
+    <span className="text-muted-foreground ml-1 text-xs">—</span>
+  ) : null;
+}
+
+/* ------------------------------- 閲覧モード ------------------------------- */
+
+function ReadonlyItem({
   node,
   level,
-  editingId,
   onJump,
-  onStartRename,
-  onCommitRename,
-  onCancelRename,
-  onAddSub,
-  onMoveUp,
-  onMoveDown,
-  onIndent,
-  onOutdent,
-  onRequestDelete,
 }: {
   node: EditableOutlineNode;
   level: number;
-  editingId: string | null;
   onJump: (node: EditableOutlineNode) => void;
-  onStartRename: (id: string) => void;
-  onCommitRename: (id: string, title: string) => void;
-  onCancelRename: () => void;
-  onAddSub: (parentId: string) => void;
-  onMoveUp: (id: string) => void;
-  onMoveDown: (id: string) => void;
-  onIndent: (id: string) => void;
-  onOutdent: (id: string) => void;
-  onRequestDelete: (node: EditableOutlineNode) => void;
 }) {
   const [open, setOpen] = useState(true);
   const hasChildren = node.children.length > 0;
-  const editing = editingId === node.id;
 
   return (
     <li>
       <div
-        className="group hover:bg-muted/60 flex items-center gap-0.5 rounded"
+        className="flex items-center gap-0.5"
         style={{ paddingLeft: level * 12 }}
       >
         {hasChildren ? (
@@ -99,105 +117,25 @@ function TreeItem({
         ) : (
           <span className="size-4 shrink-0" aria-hidden />
         )}
-
-        {editing ? (
-          <RenameInput
-            initial={node.title}
-            onCommit={(title) => onCommitRename(node.id, title)}
-            onCancel={onCancelRename}
-          />
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => onJump(node)}
-              onDoubleClick={() => onStartRename(node.id)}
-              disabled={node.sourceIndex === null}
-              title={
-                node.sourceIndex === null
-                  ? `${node.title}（宛先なし）`
-                  : node.title
-              }
-              className="hover:text-foreground flex-1 truncate rounded px-1 py-0.5 text-left text-sm disabled:opacity-60"
-            >
-              {node.title}
-              {node.sourceIndex === null && (
-                <span className="text-muted-foreground ml-1 text-xs">—</span>
-              )}
-            </button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`「${node.title}」の操作`}
-                    className="size-6 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100"
-                  />
-                }
-              >
-                <MoreVerticalIcon className="size-4" aria-hidden />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={() => onStartRename(node.id)}>
-                  <PencilIcon aria-hidden />
-                  名前を変更
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onAddSub(node.id)}>
-                  <PlusIcon aria-hidden />
-                  サブ項目を追加（現在のページ）
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onMoveUp(node.id)}>
-                  <ChevronUpIcon aria-hidden />
-                  上へ移動
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onMoveDown(node.id)}>
-                  <ChevronDownIcon aria-hidden />
-                  下へ移動
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onIndent(node.id)}>
-                  <IndentIncreaseIcon aria-hidden />
-                  階層を下げる
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onOutdent(node.id)}>
-                  <IndentDecreaseIcon aria-hidden />
-                  階層を上げる
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => onRequestDelete(node)}
-                >
-                  <Trash2Icon aria-hidden />
-                  削除
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        )}
+        <button
+          type="button"
+          onClick={() => onJump(node)}
+          disabled={node.sourceIndex === null}
+          title={node.title}
+          className="hover:bg-muted truncate rounded px-1 py-0.5 text-left text-sm disabled:opacity-50"
+        >
+          {node.title}
+          <NoDestTag show={node.sourceIndex === null} />
+        </button>
       </div>
-
       {hasChildren && open && (
         <ul>
           {node.children.map((child) => (
-            <TreeItem
+            <ReadonlyItem
               key={child.id}
               node={child}
               level={level + 1}
-              editingId={editingId}
               onJump={onJump}
-              onStartRename={onStartRename}
-              onCommitRename={onCommitRename}
-              onCancelRename={onCancelRename}
-              onAddSub={onAddSub}
-              onMoveUp={onMoveUp}
-              onMoveDown={onMoveDown}
-              onIndent={onIndent}
-              onOutdent={onOutdent}
-              onRequestDelete={onRequestDelete}
             />
           ))}
         </ul>
@@ -205,6 +143,8 @@ function TreeItem({
     </li>
   );
 }
+
+/* ------------------------------- 編集モード ------------------------------- */
 
 /** インライン名称変更入力。Enter/blur で確定、Escape で取消。 */
 function RenameInput({
@@ -239,7 +179,236 @@ function RenameInput({
   );
 }
 
-/** 左ペイン「しおり」タブ。アウトラインの表示・ジャンプ・編集（追加/改名/移動/削除）。 */
+interface RowActions {
+  onJump: (node: EditableOutlineNode) => void;
+  onStartRename: (id: string) => void;
+  onCommitRename: (id: string, title: string) => void;
+  onCancelRename: () => void;
+  onAddSub: (parentId: string) => void;
+  onMoveUp: (id: string) => void;
+  onMoveDown: (id: string) => void;
+  onIndent: (id: string) => void;
+  onOutdent: (id: string) => void;
+  onRequestDelete: (node: EditableOutlineNode) => void;
+}
+
+/** 編集モードの 1 行（ドラッグ並べ替え＋横ドラッグで階層変更＋⋮メニュー）。 */
+function SortableRow({
+  node,
+  depth,
+  editing,
+  actions,
+}: {
+  node: EditableOutlineNode;
+  /** 表示インデント深さ（ドラッグ中はプロジェクション深さ）。 */
+  depth: number;
+  editing: boolean;
+  actions: RowActions;
+}) {
+  const {
+    setNodeRef,
+    setActivatorNodeRef,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: node.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
+  return (
+    <li ref={setNodeRef} style={style}>
+      <div
+        className="group hover:bg-muted/60 flex items-center gap-0.5 rounded"
+        style={{ paddingLeft: depth * INDENT_WIDTH }}
+      >
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          aria-label={`「${node.title}」をドラッグで移動`}
+          className="text-muted-foreground hover:text-foreground flex size-5 shrink-0 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVerticalIcon className="size-4" aria-hidden />
+        </button>
+
+        {editing ? (
+          <RenameInput
+            initial={node.title}
+            onCommit={(title) => actions.onCommitRename(node.id, title)}
+            onCancel={actions.onCancelRename}
+          />
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => actions.onJump(node)}
+              onDoubleClick={() => actions.onStartRename(node.id)}
+              disabled={node.sourceIndex === null}
+              title={
+                node.sourceIndex === null
+                  ? `${node.title}（宛先なし）`
+                  : node.title
+              }
+              className="hover:text-foreground flex-1 truncate rounded px-1 py-0.5 text-left text-sm disabled:opacity-60"
+            >
+              {node.title}
+              <NoDestTag show={node.sourceIndex === null} />
+            </button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`「${node.title}」の操作`}
+                    className="size-6 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100"
+                  />
+                }
+              >
+                <MoreVerticalIcon className="size-4" aria-hidden />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  onClick={() => actions.onStartRename(node.id)}
+                >
+                  <PencilIcon aria-hidden />
+                  名前を変更
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => actions.onAddSub(node.id)}>
+                  <PlusIcon aria-hidden />
+                  サブ項目を追加（現在のページ）
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => actions.onMoveUp(node.id)}>
+                  <ChevronUpIcon aria-hidden />
+                  上へ移動
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => actions.onMoveDown(node.id)}>
+                  <ChevronDownIcon aria-hidden />
+                  下へ移動
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => actions.onIndent(node.id)}>
+                  <IndentIncreaseIcon aria-hidden />
+                  階層を下げる
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => actions.onOutdent(node.id)}>
+                  <IndentDecreaseIcon aria-hidden />
+                  階層を上げる
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => actions.onRequestDelete(node)}
+                >
+                  <Trash2Icon aria-hidden />
+                  削除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function EditTree({
+  nodes,
+  editingId,
+  actions,
+}: {
+  nodes: EditableOutlineNode[];
+  editingId: string | null;
+  actions: RowActions;
+}) {
+  const replaceTree = useOutlineStore((s) => s.replaceTree);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [offsetLeft, setOffsetLeft] = useState(0);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  // ドラッグ中はつかんだ枝の子孫を一覧から除外（自身の中へは落とせない）
+  const flattened = useMemo(() => {
+    const all = flattenTree(nodes);
+    return activeId ? removeChildrenOf(all, [activeId]) : all;
+  }, [nodes, activeId]);
+
+  const projected =
+    activeId && overId
+      ? getProjection(flattened, activeId, overId, offsetLeft, INDENT_WIDTH)
+      : null;
+
+  const resetDrag = () => {
+    setActiveId(null);
+    setOverId(null);
+    setOffsetLeft(0);
+  };
+
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    setActiveId(String(active.id));
+    setOverId(String(active.id));
+  };
+  const handleDragMove = ({ delta }: DragMoveEvent) => setOffsetLeft(delta.x);
+  const handleDragOver = ({ over }: DragOverEvent) =>
+    setOverId(over ? String(over.id) : null);
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    resetDrag();
+    if (!projected || !over) return;
+    const { depth, parentId } = projected;
+    const clone = flattenTree(nodes);
+    const activeIndex = clone.findIndex((i) => i.id === active.id);
+    const overIndex = clone.findIndex((i) => i.id === over.id);
+    if (activeIndex < 0 || overIndex < 0) return;
+    clone[activeIndex] = { ...clone[activeIndex]!, depth, parentId };
+    replaceTree(buildTree(arrayMove(clone, activeIndex, overIndex)));
+  };
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      onDragCancel={resetDrag}
+    >
+      <SortableContext
+        items={flattened.map((f) => f.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <ul className="flex-1 overflow-auto p-2">
+          {flattened.map((f) => (
+            <SortableRow
+              key={f.id}
+              node={f.node}
+              depth={activeId === f.id && projected ? projected.depth : f.depth}
+              editing={editingId === f.id}
+              actions={actions}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+/* --------------------------------- パネル --------------------------------- */
+
+/** 左ペイン「しおり」タブ。既定は閲覧（ジャンプのみ）、「しおり編集」で編集モード。 */
 export function BookmarkPanel() {
   const pages = useEditorStore((s) => s.pages);
   const currentPage = useViewerStore((s) => s.currentPage);
@@ -259,6 +428,7 @@ export function BookmarkPanel() {
   const indent = useOutlineStore((s) => s.indent);
   const outdent = useOutlineStore((s) => s.outdent);
 
+  const [editMode, setEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] =
     useState<EditableOutlineNode | null>(null);
@@ -286,6 +456,15 @@ export function BookmarkPanel() {
     };
   }, [sourceIds, docKey, ready, load, getProxy]);
 
+  // ドキュメントが変わったら編集モード・編集中状態を解除する（描画時リセット）
+  const [shownDocKey, setShownDocKey] = useState(docKey);
+  if (shownDocKey !== docKey) {
+    setShownDocKey(docKey);
+    setEditMode(false);
+    setEditingId(null);
+    setPendingDelete(null);
+  }
+
   /** 現在の表示ページの宛先（sourceId/sourceIndex）。 */
   const currentTarget = () => {
     const ref = pages[currentPage - 1];
@@ -306,14 +485,9 @@ export function BookmarkPanel() {
     if (position > 0) requestPage(position);
   };
 
-  const addCurrent = () => {
-    const id = addBookmark(null, currentTarget());
-    setEditingId(id);
-  };
-  const addSub = (parentId: string) => {
-    const id = addSubBookmark(parentId, currentTarget());
-    setEditingId(id);
-  };
+  const addCurrent = () => setEditingId(addBookmark(null, currentTarget()));
+  const addSub = (parentId: string) =>
+    setEditingId(addSubBookmark(parentId, currentTarget()));
 
   const commitRename = (id: string, title: string) => {
     rename(id, title);
@@ -321,11 +495,21 @@ export function BookmarkPanel() {
   };
 
   const requestDelete = (node: EditableOutlineNode) => {
-    if (node.children.length > 0) {
-      setPendingDelete(node); // 子があるとき確認
-    } else {
-      remove(node.id);
-    }
+    if (node.children.length > 0) setPendingDelete(node);
+    else remove(node.id);
+  };
+
+  const actions: RowActions = {
+    onJump: jump,
+    onStartRename: setEditingId,
+    onCommitRename: commitRename,
+    onCancelRename: () => setEditingId(null),
+    onAddSub: addSub,
+    onMoveUp: moveUp,
+    onMoveDown: moveDown,
+    onIndent: indent,
+    onOutdent: outdent,
+    onRequestDelete: requestDelete,
   };
 
   if (!ready) {
@@ -336,44 +520,61 @@ export function BookmarkPanel() {
     <div className="flex min-h-0 flex-col">
       <div className="flex items-center justify-between gap-1 border-b px-2 py-1.5">
         <span className="text-muted-foreground text-xs">
-          しおり {nodes.length > 0 ? "" : "（なし）"}
+          しおり{nodes.length === 0 ? "（なし）" : ` (${nodes.length})`}
         </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7"
-          onClick={addCurrent}
-          disabled={pages.length === 0}
-        >
-          <PlusIcon aria-hidden />
-          現在のページを追加
-        </Button>
+        {editMode ? (
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7"
+              onClick={addCurrent}
+              disabled={pages.length === 0}
+            >
+              <PlusIcon aria-hidden />
+              現在のページを追加
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-7"
+              onClick={() => {
+                setEditMode(false);
+                setEditingId(null);
+              }}
+            >
+              <CheckIcon aria-hidden />
+              完了
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7"
+            onClick={() => setEditMode(true)}
+          >
+            <PencilLineIcon aria-hidden />
+            しおり編集
+          </Button>
+        )}
       </div>
 
       {nodes.length === 0 ? (
         <p className="text-muted-foreground p-4 text-sm">
-          しおりがありません。「現在のページを追加」から作成できます。
+          {editMode
+            ? "しおりがありません。「現在のページを追加」から作成できます。"
+            : "この PDF にはしおり（アウトライン）がありません。「しおり編集」から追加できます。"}
         </p>
+      ) : editMode ? (
+        <EditTree nodes={nodes} editingId={editingId} actions={actions} />
       ) : (
         <ul className="flex-1 overflow-auto p-2">
           {nodes.map((node) => (
-            <TreeItem
-              key={node.id}
-              node={node}
-              level={0}
-              editingId={editingId}
-              onJump={jump}
-              onStartRename={setEditingId}
-              onCommitRename={commitRename}
-              onCancelRename={() => setEditingId(null)}
-              onAddSub={addSub}
-              onMoveUp={moveUp}
-              onMoveDown={moveDown}
-              onIndent={indent}
-              onOutdent={outdent}
-              onRequestDelete={requestDelete}
-            />
+            <ReadonlyItem key={node.id} node={node} level={0} onJump={jump} />
           ))}
         </ul>
       )}

@@ -66,6 +66,14 @@ describe("outline-store", () => {
     expect(s.nodes).toEqual([]);
   });
 
+  it("replaceTree はツリーを差し替え dirty を立てる", () => {
+    useOutlineStore.getState().load([], "S");
+    const next = [createNode({ title: "新", sourceId: "S", sourceIndex: 0 })];
+    useOutlineStore.getState().replaceTree(next);
+    expect(useOutlineStore.getState().nodes).toBe(next);
+    expect(useOutlineStore.getState().dirty).toBe(true);
+  });
+
   it("docKeyFromSourceIds は順序付きで連結する", () => {
     expect(docKeyFromSourceIds(["a", "b"])).toBe("a|b");
     expect(docKeyFromSourceIds(["b", "a"])).toBe("b|a");
