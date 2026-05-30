@@ -39,6 +39,7 @@ function SortableThumbnail({
   width,
   selected,
   current,
+  multiSelectMode,
   onClick,
   registerRef,
 }: {
@@ -48,6 +49,7 @@ function SortableThumbnail({
   width: number;
   selected: boolean;
   current: boolean;
+  multiSelectMode: boolean;
   onClick: (event: MouseEvent) => void;
   registerRef: (el: HTMLButtonElement | null) => void;
 }) {
@@ -92,6 +94,7 @@ function SortableThumbnail({
           width={width}
           selected={selected}
           current={current}
+          multiSelectMode={multiSelectMode}
           onClick={onClick}
           registerRef={registerRef}
         />
@@ -105,6 +108,7 @@ export function ThumbnailList() {
   const { getProxy } = usePdfSources();
   const pages = useEditorStore((s) => s.pages);
   const selected = useEditorStore((s) => s.selection.selected);
+  const multiSelect = useEditorStore((s) => s.multiSelect);
   const selectClick = useEditorStore((s) => s.selectClick);
   const selectToggle = useEditorStore((s) => s.selectToggle);
   const selectRangeTo = useEditorStore((s) => s.selectRangeTo);
@@ -163,9 +167,14 @@ export function ThumbnailList() {
   );
 
   const handleClick = (event: MouseEvent, id: string, position: number) => {
-    if (event.shiftKey) selectRangeTo(id);
-    else if (event.ctrlKey || event.metaKey) selectToggle(id);
-    else selectClick(id);
+    // 複数選択モード: クリックで加除トグル / Shift で範囲選択。
+    // 既定（単一選択モード）: 修飾キーは無視し、常に 1 ページだけ選択する。
+    if (multiSelect) {
+      if (event.shiftKey) selectRangeTo(id);
+      else selectToggle(id);
+    } else {
+      selectClick(id);
+    }
     requestPage(position);
   };
 
@@ -202,6 +211,7 @@ export function ThumbnailList() {
                     width={thumbnailWidth}
                     selected={selected.has(page.id)}
                     current={position === currentPage}
+                    multiSelectMode={multiSelect}
                     onClick={(event) => handleClick(event, page.id, position)}
                     registerRef={(el) => registerItem(position, el)}
                   />
