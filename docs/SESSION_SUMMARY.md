@@ -13,6 +13,202 @@
 
 ---
 
+## 2026-05-30 — サムネ回転表示を「短辺フィット」に変更（横長ページが回転で縮小しない）
+
+### 実施内容
+
+- **回転時の縮小を解消（`thumbnail.tsx`）**: 直前の「枠固定＋contain」方式では、横長ページを回転すると横長枠の中に縦長ページが収まり小さく表示されていた。ユーザー要望により**「縦横で短い方の辺」をサムネ基準幅に合わせる**方式へ変更。
+  - `scale = width / Math.min(rotated.width, rotated.height)`（短辺＝基準幅）。短辺は回転不変（90/270° で幅高さが入れ替わるだけ）なので、**回転してもスケールが一定＝ページが縮小しない**。
+  - 枠は描画実寸（`handle.cssWidth/cssHeight`）に一致させ余白なし。回転で枠の向き（縦長⇔横長）だけが入れ替わる。`box` state に実寸を保持し、未描画時のみ縦長プレースホルダ。
+  - canvas は枠に実寸で敷き詰め（`absolute top-0 left-0`）。中央寄せラッパは不要になり削除。
+  - pdf.js `getViewport({ rotation })` の絶対回転・90/270° の幅高さ入れ替わりは context7（`src/display/page_viewport.js` / `api.js`）で確認。
+
+### 変更ファイル
+
+- `src/features/viewer/thumbnail.tsx` — 短辺フィット描画（`boxAspect`→実寸 `box`、contain/中央寄せを撤廃）
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）・ESLint・Prettier: エラーなし。
+- 単体テスト: **121 passed**（18 files、回帰なし）。本番ビルド（`next build`）: 成功（静的生成 4/4）。
+- E2E: `editor.spec.ts` **2 passed**（chromium / firefox, 6.5s）。
+- **数値検証（Playwright）**:
+  - 横長 PDF(600×350): 枠は 0/180°=240×140、90/270°=140×240。**短辺=140px・長辺=240px が全回転で一定**（回転で縮小しないことを確認）。
+  - 縦長 PDF(300×400): 140×187⇔187×140、短辺=140px 一定。
+  - 90° 回転した横長ページが余白なしで枠を満たす（縮小しない）ことを目視確認。
+
+### Risks/TODO
+
+- 横長ページのサムネは長辺方向に基準幅より大きくなる（例: 240px 幅）。左ペインが狭いと横スクロールが出る可能性がある（短辺フィットの要望に伴う仕様）。
+- `git push` は未実施（運用ルールに従い手動）。
+
+### 次ステップ
+
+- 複数選択モード ON 時の「全選択／全解除」操作の提供可否を検討（継続項目）。
+
+---
+
+## 2026-05-30 — サムネ回転時の表示サイズ伸縮を修正（枠固定＋contain 中央寄せ）
+
+### 実施内容
+
+- **回転で表示サイズが伸縮する不具合を修正（`thumbnail.tsx`）**: 直前の修正では枠の `aspect-ratio` を実描画寸法に追従させていたため、回転 90/270° で枠の形・ページの表示サイズが変わってしまっていた（「基準が横幅」のため長辺が幅に合わさり伸縮）。
+  - **枠サイズはページ本来の向き（ユーザー回転を含まない `getViewport({ rotation: page.rotate })`）で固定**し、回転しても枠の縦横を変えない（`boxAspect` は自然な向きの比率のみで決定）。
+  - 回転後のページは `scale = Math.min(boxW/rotated.width, boxH/rotated.height)` の **contain スケールで描画し、固定枠の中央に配置**（`absolute inset-0 flex items-center justify-center` 内の `block` canvas）。回転時は余白（レターボックス）が出るが、サムネのスロットサイズは一定。
+  - 合算回転は既存の `totalRotation()` を使用。pdf.js の `getViewport({ rotation })` が絶対回転（`page.rotate` を上書き）である点は context7／既存 `renderPageToCanvas` で確認。
+
+### 作成ファイル
+
+- なし（検証用 `e2e/_shot.spec.ts` を一時作成 → 計測・スクショ後に削除）
+
+### 変更ファイル
+
+- `src/features/viewer/thumbnail.tsx` — 枠固定＋contain 中央寄せ描画（`aspect`→`boxAspect`、canvas を中央寄せ）
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）・ESLint・Prettier: エラーなし。
+- 単体テスト: **121 passed**（18 files、回帰なし）。
+- 本番ビルド（`next build`）: 成功（静的生成 4/4）。
+- E2E: `editor.spec.ts` **2 passed**（chromium / firefox, 4.4s）。
+- **数値検証（Playwright）**: ページ2の枠 boundingBox が回転 0/90/180/270° すべてで **140×187px**（誤差 0px）で一定であることを確認。90° 回転時は横長ページが縦長枠の中央に contain 表示されることを目視確認。
+
+### Risks/TODO
+
+- 回転時はレターボックス（余白）が生じる仕様（枠サイズ一定を優先）。これは要望どおりの挙動。
+- `git push` は未実施（運用ルールに従い手動）。
+
+### 次ステップ
+
+- 複数選択モード ON 時の「全選択／全解除」操作の提供可否を検討（継続項目）。
+
+---
+
+## 2026-05-30 — サムネの回転/横長表示バグ修正＋単一選択時のチェック非表示
+
+### 実施内容
+
+- **チェックマークの表示条件変更（`thumbnail.tsx`）**: サムネ右上のチェックボックスを**複数選択モード中のみ**表示するよう変更（`(multiSelectMode || selected)` → `multiSelectMode`）。単一選択モード（既定）では選択の目印を太枠＋薄いオーバーレイのみとし、チェックは出さない。
+- **回転・横長でサムネが崩れる不具合を修正（`thumbnail.tsx`）**: 原因は ① コンテナ高さを固定の縦長比（`THUMBNAIL_ASPECT=1.414`）で決めていた、② スケールを**未回転**の `base.width` から算出していた、の 2 点。回転 90/270° や横長ページでは表示上の幅・高さが入れ替わるため破綻していた。
+  - 修正: 回転反映済みビューポート `page.getViewport({ scale: 1, rotation: page.rotate + userRotation })` の幅から `scale = width / rotated.width` を算出し、サムネ幅にちょうど収める。
+  - コンテナの高さは固定比をやめ、描画実寸（`handle.cssWidth/cssHeight`）から求めた `aspect-ratio` に追従（未描画時のみ縦長プレースホルダで代用）。
+  - canvas はメインビュアー（`PdfPageView`）と同様に絶対配置（`absolute top-0 left-0`）にし、`w-full` のインライン上書き競合を解消してコンテナにフィット。
+  - 合算回転の正規化を `totalRotation(pageRotate, userRotation)` に切り出し。
+
+### 作成ファイル
+
+- なし（検証用 `e2e/_shot.spec.ts` を一時作成 → スクショ取得後に削除）
+
+### 変更ファイル
+
+- `src/features/viewer/thumbnail.tsx` — チェック表示条件・回転/横長対応（アスペクト追従・絶対配置 canvas・回転反映スケール）
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）・ESLint・Prettier: エラーなし。
+- 単体テスト: **121 passed**（18 files、回帰なし）。
+- 本番ビルド（`next build`）: 成功（静的生成 4/4）。
+- E2E: `editor.spec.ts` **2 passed**（chromium / firefox, 5.7s）。
+- 視覚確認（Playwright・`tmp/` に保存、gitignore 済）:
+  - 縦長ページを 90° 回転 → 横長サムネとして幅に収まりはみ出しなし。未回転ページは縦長のまま。
+  - 横長 PDF（600×350）→ 全ページが横長サムネとして実比率で表示（過大な余白が解消）。
+  - 単一選択モードで選択ページにチェックマークが出ないことを確認。
+
+### Risks/TODO
+
+- アスペクト比はサムネが可視化（描画）された後に確定するため、初回スクロールインで縦長プレースホルダ→実比率への軽微なリフローが発生しうる（offscreen のため実用上の影響は小）。
+- `git push` は未実施（運用ルールに従い手動）。
+
+### 次ステップ
+
+- 複数選択モード ON 時の「全選択／全解除」操作の提供可否を検討（継続項目）。
+
+---
+
+## 2026-05-30 — 複数選択の視認性デザイン改善（トグルの ON/OFF・選択中サムネ）
+
+### 実施内容
+
+- **複数選択トグルの ON/OFF を明確化（`left-pane.tsx`）**: 従来は ON 時も淡い `bg-muted` で判別しづらかったため、ON 時を **primary 塗りつぶし＋文字色反転＋枠 primary**（`aria-pressed:` 状態でスタイル）に変更。アイコンとラベルも切替（OFF: `ListChecksIcon`＋「複数選択」/ ON: `CheckCheckIcon`＋「複数選択中」）。`title` にモード説明を付与。context7 で Base UI `Toggle` が `aria-pressed`/`data-pressed` を出すこと・`className` が状態関数を取れることを確認して `aria-pressed:` で実装（tailwind-merge で cva 既定の `aria-pressed:bg-muted` を上書き）。
+- **選択中サムネの強調（`thumbnail.tsx`）**: 右上チェックを size-4→**size-5** に拡大し、選択中は **太枠（`ring-primary ring-[3px]`）＋外側グロー（`shadow-[0_0_0_4px] shadow-primary/30`）＋ページ全体への薄い primary オーバーレイ（`bg-primary/10`）** を追加。実 PDF の可読性を保つためオーバーレイは薄め（主シグナルは枠＋チェック）。
+- **複数選択モードの可視化**: モード ON 中は**未選択ページにも空のチェックボックス（空丸）を常時表示**し、「選択できる状態」であることを明示。閲覧中ページの sky リング（青）と選択中の primary（黒系）を色で区別。`multiSelectMode` を `ThumbnailList`→`SortableThumbnail`→`Thumbnail` へ伝搬。
+
+### 作成ファイル
+
+- なし（検証用に一時 `e2e/_shot.spec.ts` を作成しスクリーンショット取得後に削除）
+
+### 変更ファイル
+
+- `src/features/viewer/left-pane.tsx` — `MultiSelectToggle` の ON/OFF デザイン強化（塗りつぶし・アイコン/ラベル切替・title）
+- `src/features/viewer/thumbnail.tsx` — 選択中の太枠＋グロー＋オーバーレイ＋拡大チェック、複数選択モード時の空チェックボックス表示（`multiSelectMode` prop 追加）
+- `src/features/viewer/thumbnail-list.tsx` — `multiSelectMode` を伝搬
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）・ESLint・Prettier: エラーなし。
+- 本番ビルド（`next build`）: 成功（静的生成 4/4）。
+- E2E: `editor.spec.ts` **2 passed**（chromium / firefox, 5.9s）。トグルの `aria-pressed` 連動も継続して成立。
+- 視覚確認: Playwright で 3 状態のスクショを取得し目視確認（選択・閲覧中・未選択が色/枠/チェックで判別可能）。画像は `tmp/`（gitignore 済）。
+
+### Risks/TODO
+
+- `bg-primary/10` 等の濃度はテーマの `primary`（本テーマでは黒系）前提。テーマ変更時に選択オーバーレイの見え方が変わる点に留意。
+- `git push` は未実施（運用ルールに従い手動）。
+
+### 次ステップ
+
+- 複数選択モード ON 時の「全選択／全解除」操作の提供可否を検討（前回からの継続項目）。
+
+---
+
+## 2026-05-30 — サムネイルに「複数選択モード」を導入（既定は単一選択）
+
+### 実施内容
+
+- **複数選択モードの導入**: 左ペインのサムネイル複数選択を、ツールバーの **複数選択** トグルで明示的に ON にしている間だけ可能にした。既定（OFF）ではクリックは常に単一選択＋ページ移動で、Ctrl/Shift による複数選択は無効化。複数ページへの一括操作（回転・削除・抽出・分割）の起点を、モードでガードする仕様。
+- **クリック挙動のモード分岐（`thumbnail-list.tsx`）**: `handleClick` を `multiSelect` 状態で分岐。ON 時はプレーンクリック=加除トグル / Shift=範囲選択、OFF 時は修飾キーを無視し `selectClick`（単一）。いずれも `requestPage` でビュアーを当該ページへ移動。
+- **状態とアクション（`editor-store.ts`）**: `multiSelect: boolean`（既定 false）と `setMultiSelect(on, preferId?)` を追加。OFF にするとき選択を 1 件へ畳む。`initDocument`/`reset` でも false に初期化。
+- **畳み込みロジック（`selection.ts`）**: 純関数 `collapseToSingle(state, orderedIds, preferId?)` を追加。残す 1 件は「preferId（選択中なら）→ anchor（選択中なら）→ 並び順で最初の選択」の優先順。選択が 1 件以下なら現状維持。
+- **トグル UI（`left-pane.tsx`）**: サムネツールバーを `justify-between` 化し、左に Base UI `Toggle`（context7 で API 確認：制御 props は `pressed`/`onPressedChange`）の **複数選択** ボタン、右に既存のズーム操作を配置。OFF 操作時は現在の閲覧ページ（`viewer-store.currentPage` → 当該ページ id）を `preferId` として渡す。ページ未読込時は無効化。
+
+### 作成ファイル
+
+- なし
+
+### 変更ファイル
+
+- `src/lib/editor/selection.ts` — `collapseToSingle` を追加
+- `src/lib/editor/selection.test.ts` — `collapseToSingle` のテスト 4 件追加
+- `src/store/editor-store.ts` — `multiSelect` 状態＋ `setMultiSelect` アクション追加
+- `src/store/editor-store.test.ts` — 複数選択モードのテスト 3 件追加
+- `src/features/viewer/thumbnail-list.tsx` — クリック挙動をモード依存に変更
+- `src/features/viewer/left-pane.tsx` — `MultiSelectToggle` を追加しツールバーを再構成
+- `e2e/editor.spec.ts` — モード切替フロー（既定の単一選択ガード→ON で複数選択→OFF で畳み込み）に更新
+- `docs/SPEC.md` / `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記
+
+### 計測結果
+
+- 単体テスト: **121 passed**（18 files）。うち `selection.test.ts` 12 件・`editor-store.test.ts` 11 件。
+- E2E: `editor.spec.ts` **2 passed**（chromium / firefox, 7.2s）。他スペックは単一選択クリックのみ依存のため影響なし。
+- 型チェック（`tsc --noEmit`）・ESLint: エラーなし。
+- 本番ビルド（`next build`）: 成功（Compiled 3.3s / TypeScript 3.0s / 静的生成 4/4）。
+
+### Risks/TODO
+
+- 既存の選択操作系の **キーボードショートカット（例: Ctrl+A 全選択）は未配線のまま**で、今回のモード導入でも追加していない。全選択を複数選択モード限定で提供するかは別途検討。
+- `git push` は未実施（CLAUDE.md の運用ルールに従い手動）。コミットも本メッセージ時点では未実施。
+
+### 次ステップ
+
+- 複数選択モード ON 時の「全選択／全解除」ボタンの提供可否を検討（現状はトグルのみ）。
+- モード状態の視覚的フィードバック強化（ツールバーのヘルプ文言など）を要否判断。
+
+---
+
 ## 2026-05-30 — サムネの「閲覧中／選択中」状態表示を刷新＋ページ追従をスムーズスクロール化
 
 ### 実施内容
