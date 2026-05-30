@@ -1,7 +1,7 @@
 "use client";
 
 import { useViewerStore } from "@/store/viewer-store";
-import { editorSelectors, useEditorStore } from "@/store/editor-store";
+import { useIsDirty } from "@/lib/hooks/use-is-dirty";
 import { formatFileSize } from "@/lib/format";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -17,7 +17,7 @@ export function StatusBar() {
   const fileSize = useViewerStore((s) => s.fileSize);
   const status = useViewerStore((s) => s.status);
   const error = useViewerStore((s) => s.error);
-  const dirty = useEditorStore(editorSelectors.isDirty);
+  const dirty = useIsDirty();
 
   return (
     <footer

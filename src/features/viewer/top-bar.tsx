@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useViewerStore } from "@/store/viewer-store";
 import { editorSelectors, useEditorStore } from "@/store/editor-store";
+import { useIsDirty } from "@/lib/hooks/use-is-dirty";
 import { useSearchStore } from "@/store/search-store";
 import { SaveMenu } from "@/features/save/save-menu";
 import { ThemeToggle } from "./theme-toggle";
@@ -42,7 +43,7 @@ export function TopBar() {
   const redo = useEditorStore((s) => s.redo);
   const canUndo = useEditorStore(editorSelectors.canUndo);
   const canRedo = useEditorStore(editorSelectors.canRedo);
-  const isDirty = useEditorStore(editorSelectors.isDirty);
+  const isDirty = useIsDirty();
   const openSearch = useSearchStore((s) => s.setOpen);
   const inputRef = useRef<HTMLInputElement>(null);
   // 未保存の変更がある状態で「開く / 閉じる」を選んだときの確認対象。

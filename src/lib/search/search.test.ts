@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { findMatches, getPageText } from "./search";
+import { buildMatcher, findMatches, getPageText } from "./search";
 
 describe("findMatches", () => {
   it("ヒット件数と位置を返す（大小無視・非重複）", () => {
@@ -24,6 +24,65 @@ describe("findMatches", () => {
       { page: 1, start: 0, end: 2 },
       { page: 1, start: 2, end: 4 },
     ]);
+  });
+
+  it("プレーン検索は正規表現メタ文字をリテラル扱いする", () => {
+    // "a.c" は正規表現でなければ文字列 "a.c" にのみ一致（"abc" には一致しない）
+    expect(findMatches(["abc a.c"], "a.c")).toEqual([
+      { page: 1, start: 4, end: 7 },
+    ]);
+  });
+});
+
+describe("findMatches（オプション）", () => {
+  it("caseSensitive=true は大文字小文字を区別する", () => {
+    const pages = ["Hello hello HELLO"];
+    expect(findMatches(pages, "hello", { caseSensitive: true })).toEqual([
+      { page: 1, start: 6, end: 11 },
+    ]);
+  });
+
+  it("regex=true でパターン一致（可変長・複数ページ）", () => {
+    const pages = ["order 12 and 345", "no digits here"];
+    const matches = findMatches(pages, "\\d+", { regex: true });
+    expect(matches).toEqual([
+      { page: 1, start: 6, end: 8 }, // "12"
+      { page: 1, start: 13, end: 16 }, // "345"
+    ]);
+  });
+
+  it("regex=true は既定で大小無視、caseSensitive 併用で区別", () => {
+    expect(findMatches(["Cat cat"], "c.t", { regex: true })).toHaveLength(2);
+    expect(
+      findMatches(["Cat cat"], "c.t", { regex: true, caseSensitive: true }),
+    ).toEqual([{ page: 1, start: 4, end: 7 }]);
+  });
+
+  it("不正な正規表現は空配列（例外を投げない）", () => {
+    expect(findMatches(["abc"], "(", { regex: true })).toEqual([]);
+  });
+
+  it("0 幅一致（例: a*）でも無限ループせず空白以外のみ返す", () => {
+    // "a*" は 0 幅にも一致しうるが、0 幅は除外され実体のある "a" 群のみ
+    const matches = findMatches(["baab"], "a*", { regex: true });
+    expect(matches).toEqual([{ page: 1, start: 1, end: 3 }]);
+  });
+});
+
+describe("buildMatcher", () => {
+  it("空・空白のみクエリは null", () => {
+    expect(buildMatcher("")).toBeNull();
+    expect(buildMatcher("   ")).toBeNull();
+  });
+
+  it("不正な正規表現は null、正しい式は RegExp", () => {
+    expect(buildMatcher("[", { regex: true })).toBeNull();
+    expect(buildMatcher("\\d+", { regex: true })).toBeInstanceOf(RegExp);
+  });
+
+  it("フラグは caseSensitive に従う", () => {
+    expect(buildMatcher("a")!.flags).toBe("gi");
+    expect(buildMatcher("a", { caseSensitive: true })!.flags).toBe("g");
   });
 });
 

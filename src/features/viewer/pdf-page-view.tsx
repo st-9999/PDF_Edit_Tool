@@ -18,6 +18,10 @@ interface PdfPageViewProps {
   query?: string;
   /** このページ内で強調する出現位置（0 始まり、無ければ null）。 */
   currentLocalIndex?: number | null;
+  /** クエリを正規表現として解釈する。 */
+  regex?: boolean;
+  /** 大文字小文字を区別する。 */
+  caseSensitive?: boolean;
 }
 
 /** メインビューア用ページ: canvas ＋ テキストレイヤ（選択・コピー・検索ハイライト）。 */
@@ -30,6 +34,8 @@ export function PdfPageView({
   height,
   query = "",
   currentLocalIndex = null,
+  regex = false,
+  caseSensitive = false,
 }: PdfPageViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -37,9 +43,11 @@ export function PdfPageView({
   // ハイライト適用に最新値を使うための参照（canvas 再描画を避けるため依存に含めない）
   const queryRef = useRef(query);
   const currentRef = useRef(currentLocalIndex);
+  const optionsRef = useRef({ regex, caseSensitive });
   useEffect(() => {
     queryRef.current = query;
     currentRef.current = currentLocalIndex;
+    optionsRef.current = { regex, caseSensitive };
   });
 
   useEffect(() => {
@@ -59,7 +67,12 @@ export function PdfPageView({
         if (cancelled) return;
         await renderTextLayer(page, textContainer, handle.viewport);
         if (cancelled) return;
-        applyHighlights(textContainer, queryRef.current, currentRef.current);
+        applyHighlights(
+          textContainer,
+          queryRef.current,
+          currentRef.current,
+          optionsRef.current,
+        );
       } catch {
         // RenderingCancelled 等は無視
       }
@@ -72,12 +85,15 @@ export function PdfPageView({
     };
   }, [pdf, pageNumber, scale, rotation]);
 
-  // 検索語・現在位置の変化でハイライトのみ再適用
+  // 検索語・現在位置・オプションの変化でハイライトのみ再適用
   useEffect(() => {
     const textContainer = textRef.current;
     if (!textContainer) return;
-    applyHighlights(textContainer, query, currentLocalIndex);
-  }, [query, currentLocalIndex]);
+    applyHighlights(textContainer, query, currentLocalIndex, {
+      regex,
+      caseSensitive,
+    });
+  }, [query, currentLocalIndex, regex, caseSensitive]);
 
   // 現在ヒットを表示範囲へスクロール
   useEffect(() => {

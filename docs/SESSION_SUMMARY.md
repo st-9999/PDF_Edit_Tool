@@ -13,6 +13,66 @@
 
 ---
 
+## 2026-05-30 — v2 着手: しおり編集 と テキスト検索の高度化
+
+### 実施内容
+
+- **しおり編集（TODO v2-1）**:
+  - 編集モデルを純関数で実装（`src/lib/outline/edit.ts`）。`EditableOutlineNode`（`sourceId`+`sourceIndex` で宛先ページを保持、`null` は宛先なし見出し）と、不変ツリー操作 `renameNode` / `removeNode`（子孫ごと）/ `addNode`（兄弟挿入・ルート追加）/ `addChild` / `moveUp` / `moveDown` / `indent` / `outdent`、変換 `fromResolved`（read 用 `OutlineNode`→編集ツリー）/ `toBuildNodes`（→保存用 `BuildOutlineNode`）。
+  - 複数ソース収集 `collectEditableOutline`（`src/lib/outline/collect.ts`）でソース初出順に連結。
+  - 状態管理 `outline-store`（`src/store/outline-store.ts`）。`docKey`（ソース ID 列）で別ドキュメントとの取り違えを防止、`dirty` で未保存判定、`load`/`markSaved`/`reset` でライフサイクル管理。
+  - UI 刷新 `bookmark-panel.tsx`: しおりタブ表示時に baseline を収集して `outline-store` へロード。「現在のページを追加」ボタン、各項目の `DropdownMenu`（⋮）操作、インライン改名（ダブルクリック/メニュー）、子ありノード削除は `AlertDialog` 確認、ジャンプは従来どおり。
+  - 保存配線: `use-save.ts` の `collectOutline` を「同一ドキュメントで編集済みなら `outline-store` の編集ツリー、未編集なら pdf.js から収集」に変更し `toBuildNodes` で書き戻し。保存成功で `outline-store.markSaved()`。
+  - 未保存統合: `useIsDirty()`（`src/lib/hooks/use-is-dirty.ts`）でページ編集＋しおり編集の dirty を OR。`top-bar` / `status-bar` / `viewer-layout`（`beforeunload` ガード）に配線。ドキュメント切替時に `outline-store.reset()`。
+  - **書き戻しの実体（`buildPdf`/`applyOutline`）は既存資産を再利用**（前回セッションで実装済み）。`use context7` で pdf-lib にアウトライン用の高レベル API が無い（低レベル `PDFDict`/`PDFName`/`context` のみ）ことを確認し、低レベル書き戻しが正攻法であることを再確認。
+- **テキスト検索の高度化（TODO v2-3）**:
+  - `src/lib/search/search.ts` に `SearchOptions`（`regex`/`caseSensitive`）と共通 `buildMatcher` を追加。`findMatches` を正規表現対応（可変長・複数ページ横断、0 幅一致は無限ループ回避でスキップ、不正な式は空配列）。プレーン検索はメタ文字エスケープで後方互換。
+  - `highlight.ts` を同一 `buildMatcher` 経由に統一（検索結果とハイライトの一致を担保）。
+  - `search-store` に `regex`/`caseSensitive` フラグ。`search-bar` に `Aa`/`.*` トグル＋無効な正規表現の表示。`pdf-page-view`/`page-viewer` にオプションを配線。
+
+### 作成ファイル
+
+- `src/lib/outline/edit.ts` — 編集ツリー型・純関数操作・変換
+- `src/lib/outline/edit.test.ts` — 編集操作の単体テスト（18 件）
+- `src/lib/outline/edit.integration.test.ts` — 編集→`toBuildNodes`→`buildPdf`→/Outlines 読み出しの統合（1 件）
+- `src/lib/outline/collect.ts` — 複数ソースの編集ツリー収集
+- `src/store/outline-store.ts` — しおり編集ストア
+- `src/store/outline-store.test.ts` — ストアの単体テスト（6 件）
+- `src/lib/hooks/use-is-dirty.ts` — ページ編集＋しおり編集の統合 dirty フック
+
+### 変更ファイル
+
+- `src/lib/search/search.ts` / `src/lib/search/search.test.ts`（+10 件）
+- `src/lib/search/highlight.ts` / `src/lib/search/highlight.test.ts`（+4 件）
+- `src/store/search-store.ts` — regex/caseSensitive フラグ
+- `src/features/search/search-bar.tsx` — トグル・無効式表示
+- `src/features/viewer/pdf-page-view.tsx` / `page-viewer.tsx` — 検索オプション配線
+- `src/features/bookmark/bookmark-panel.tsx` — 編集 UI へ刷新
+- `src/features/save/use-save.ts` — 編集ツリー優先の書き戻し・保存後 markSaved
+- `src/features/viewer/viewer-layout.tsx` / `top-bar.tsx` / `status-bar.tsx` — 統合 dirty・outline reset
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` / `docs/TODO.md`
+
+### 計測結果
+
+- **テスト**: `vitest run` 全 **170 件 passed**（前回 136 → 検索 +14 / しおり編集 18 / ストア 6 / 統合 1）。テストファイル 21。
+- **typecheck**: `tsc --noEmit` エラーなし。
+- **lint**: `eslint` 警告・エラーなし。
+- **ビルド**: `next build`（静的エクスポート）成功。`out/` 生成。
+
+### Risks/TODO
+
+- **しおり編集に Undo/Redo は未対応**（ページ編集の操作ログとは別管理）。削除は保存まで取り消し可能（再読込で baseline へ戻る）旨を確認ダイアログに明記。必要なら v2 後続で操作ログ統合を検討。
+- **しおり編集の E2E 未追加**（追加/改名/移動/削除→保存→/Outlines 検証）。検索の正規表現 E2E も未追加。いずれも単体・統合で論理は担保済み。Playwright 追加は次ステップ候補。
+- **しおりの宛先は (sourceId, sourceIndex)**。新規しおりは追加時の現在表示ページに固定（以後ページを並べ替えても出力時に現在位置へ再マッピングされるが、しおりが指す「論理ページ」自体の変更 UI は無し）。
+- TODO v2 の残り **大規模最適化（操作ログ＋遅延適用の保存統合 / ページ単位ストリーム結合）** は未着手。計測駆動の設計が必要（前回確認のとおり一気実装は非推奨）。
+
+### 次ステップ
+
+- しおり編集・正規表現検索の **Playwright E2E** 追加。
+- v2 残: 大規模最適化の **計測フェーズ**（代表データでメモリ/時間を実測 → 方式 A〜D を選定）。
+
+---
+
 ## 2026-05-30 — しおり付き PDF を保存するとしおりが消える不具合を修正（Playwright 検証）
 
 ### 実施内容

@@ -8,8 +8,10 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { useViewerStore } from "@/store/viewer-store";
-import { editorSelectors, useEditorStore } from "@/store/editor-store";
+import { useEditorStore } from "@/store/editor-store";
+import { useOutlineStore } from "@/store/outline-store";
 import { useUnsavedGuard } from "@/lib/hooks/use-unsaved-guard";
+import { useIsDirty } from "@/lib/hooks/use-is-dirty";
 import { useEditorShortcuts } from "@/lib/hooks/use-editor-shortcuts";
 import { checkLimits, recommendedLimitsLabel } from "@/lib/perf/limits";
 import { EditToolbar } from "@/features/editor/edit-toolbar";
@@ -42,7 +44,8 @@ function ViewerShell() {
   const initDocument = useEditorStore((s) => s.initDocument);
   const initMergedDocument = useEditorStore((s) => s.initMergedDocument);
   const resetEditor = useEditorStore((s) => s.reset);
-  const dirty = useEditorStore(editorSelectors.isDirty);
+  const resetOutline = useOutlineStore((s) => s.reset);
+  const dirty = useIsDirty();
   const pageCount = useEditorStore((s) => s.pages.length);
   const { addSource } = usePdfSources();
 
@@ -101,6 +104,7 @@ function ViewerShell() {
     return () => {
       cancelled = true;
       resetEditor();
+      resetOutline();
     };
   }, [
     file,
@@ -112,6 +116,7 @@ function ViewerShell() {
     setError,
     clearFile,
     resetEditor,
+    resetOutline,
   ]);
 
   // 編集でページ数が変わったらステータス/ナビ境界に反映する

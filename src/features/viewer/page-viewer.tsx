@@ -68,6 +68,8 @@ function ContinuousPage({
   onMeasured,
   query,
   currentLocalIndex,
+  regex,
+  caseSensitive,
   registerRef,
 }: {
   proxy: PDFDocumentProxy | undefined;
@@ -81,6 +83,8 @@ function ContinuousPage({
   onMeasured: (key: string, dims: BaseDims) => void;
   query: string;
   currentLocalIndex: number | null;
+  regex: boolean;
+  caseSensitive: boolean;
   registerRef: (position: number, el: HTMLElement | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -136,6 +140,8 @@ function ContinuousPage({
           height={box.height}
           query={query}
           currentLocalIndex={currentLocalIndex}
+          regex={regex}
+          caseSensitive={caseSensitive}
         />
       ) : (
         <div className="text-muted-foreground bg-background flex h-full w-full items-center justify-center text-xs shadow-sm ring-1 ring-black/5">
@@ -168,6 +174,8 @@ export function PageViewer() {
 
   const searchOpen = useSearchStore((s) => s.open);
   const searchQuery = useSearchStore((s) => s.query);
+  const regex = useSearchStore((s) => s.regex);
+  const caseSensitive = useSearchStore((s) => s.caseSensitive);
   const matches = useSearchStore((s) => s.matches);
   const activeIndex = useSearchStore((s) => s.activeIndex);
   const query = searchOpen ? searchQuery : "";
@@ -390,6 +398,8 @@ export function PageViewer() {
                 height={activeBox.height}
                 query={query}
                 currentLocalIndex={localCurrentFor(currentPage)}
+                regex={regex}
+                caseSensitive={caseSensitive}
               />
             )}
           </div>
@@ -410,6 +420,8 @@ export function PageViewer() {
                     onMeasured={reportDims}
                     query={query}
                     currentLocalIndex={localCurrentFor(position)}
+                    regex={regex}
+                    caseSensitive={caseSensitive}
                     registerRef={registerRef}
                   />
                 );

@@ -8,25 +8,14 @@ import {
   type BuildOutlineNode,
 } from "@/lib/editor/build";
 import { runBuild } from "@/lib/pdf/build-runner";
-import { buildOutline, type OutlineNode } from "@/lib/pdf/outline";
+import { collectEditableOutline } from "@/lib/outline/collect";
+import { toBuildNodes } from "@/lib/outline/edit";
 import { createSaveStrategy, type SaveStrategy } from "@/lib/save/strategy";
 import { useEditorStore } from "@/store/editor-store";
 import { useViewerStore } from "@/store/viewer-store";
 import { useProgressStore } from "@/store/progress-store";
+import { docKeyFromSourceIds, useOutlineStore } from "@/store/outline-store";
 import { usePdfSources } from "@/features/viewer/pdf-sources-context";
-
-/** OutlineNode（ソース内ページ基準）に sourceId を付与し、ビルド用ツリーへ変換する。 */
-function tagWithSource(
-  nodes: OutlineNode[],
-  sourceId: string,
-): BuildOutlineNode[] {
-  return nodes.map((n) => ({
-    title: n.title,
-    sourceId,
-    sourceIndex: n.sourceIndex,
-    children: tagWithSource(n.children, sourceId),
-  }));
-}
 
 function suggestedName(fileName: string | null, suffix = ""): string {
   const base = (fileName ?? "document.pdf").replace(/\.pdf$/i, "");
@@ -38,23 +27,20 @@ export function useSave() {
   const { getAllBytes, getProxy } = usePdfSources();
   const strategy = useMemo<SaveStrategy>(() => createSaveStrategy(), []);
 
-  // 現在の全ソースのしおりを pdf.js で収集し、保存時に出力へ書き戻す（保存でしおりが
-  // 消えないように）。複数ソース（結合）はソースの初出順に連結する。失敗時はしおり無し。
+  // 保存時に出力へ書き戻すしおりを決める（保存でしおりが消えないように）。
+  // しおりタブで編集済み（同一ドキュメント）なら編集ツリーを優先し、
+  // 未編集なら pdf.js から全ソースのしおりを収集する（従来どおり）。
   const collectOutline = async (): Promise<BuildOutlineNode[]> => {
     const pages = useEditorStore.getState().pages;
     const sourceIds = [...new Set(pages.map((p) => p.sourceId))];
-    const result: BuildOutlineNode[] = [];
-    for (const id of sourceIds) {
-      const proxy = getProxy(id);
-      if (!proxy) continue;
-      try {
-        const tree = await buildOutline(proxy);
-        result.push(...tagWithSource(tree, id));
-      } catch {
-        // 当該ソースのしおりはスキップ
-      }
-    }
-    return result;
+    const docKey = docKeyFromSourceIds(sourceIds);
+    const outline = useOutlineStore.getState();
+
+    const editable =
+      outline.loaded && outline.docKey === docKey
+        ? outline.nodes
+        : await collectEditableOutline(sourceIds, getProxy);
+    return toBuildNodes(editable);
   };
 
   // 現在のドキュメントを Worker で生成（進捗オーバーレイ＋キャンセル付き）
@@ -83,6 +69,7 @@ export function useSave() {
       const target = await strategy.saveAs(bytes, name);
       if (!target) return; // キャンセル
       useEditorStore.getState().markSaved(target.handle);
+      useOutlineStore.getState().markSaved();
       toast.success(`保存しました: ${target.name}`);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -103,6 +90,7 @@ export function useSave() {
       const bytes = await buildCurrent();
       await strategy.overwrite(fileHandle, bytes);
       useEditorStore.getState().markSaved(fileHandle);
+      useOutlineStore.getState().markSaved();
       toast.success("上書き保存しました");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {

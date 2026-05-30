@@ -4,12 +4,18 @@ import type { SearchMatch } from "@/lib/search/search";
 interface SearchState {
   open: boolean;
   query: string;
+  /** クエリを正規表現として解釈する。 */
+  regex: boolean;
+  /** 大文字小文字を区別する。 */
+  caseSensitive: boolean;
   matches: SearchMatch[];
   /** matches 内の現在位置。ヒット無しは -1。 */
   activeIndex: number;
 
   setOpen: (open: boolean) => void;
   setQuery: (query: string) => void;
+  setRegex: (regex: boolean) => void;
+  setCaseSensitive: (caseSensitive: boolean) => void;
   setResults: (matches: SearchMatch[]) => void;
   next: () => void;
   prev: () => void;
@@ -19,11 +25,15 @@ interface SearchState {
 export const useSearchStore = create<SearchState>((set) => ({
   open: false,
   query: "",
+  regex: false,
+  caseSensitive: false,
   matches: [],
   activeIndex: -1,
 
   setOpen: (open) => set({ open }),
   setQuery: (query) => set({ query }),
+  setRegex: (regex) => set({ regex }),
+  setCaseSensitive: (caseSensitive) => set({ caseSensitive }),
   setResults: (matches) =>
     set({ matches, activeIndex: matches.length > 0 ? 0 : -1 }),
 
@@ -43,5 +53,13 @@ export const useSearchStore = create<SearchState>((set) => ({
           },
     ),
 
-  reset: () => set({ open: false, query: "", matches: [], activeIndex: -1 }),
+  reset: () =>
+    set({
+      open: false,
+      query: "",
+      regex: false,
+      caseSensitive: false,
+      matches: [],
+      activeIndex: -1,
+    }),
 }));
