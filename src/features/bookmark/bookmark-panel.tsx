@@ -31,6 +31,7 @@ import {
   PencilIcon,
   PencilLineIcon,
   PlusIcon,
+  SparklesIcon,
   Trash2Icon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,10 @@ import { useEditorStore } from "@/store/editor-store";
 import { useViewerStore } from "@/store/viewer-store";
 import { docKeyFromSourceIds, useOutlineStore } from "@/store/outline-store";
 import { usePdfSources } from "@/features/viewer/pdf-sources-context";
+import {
+  AutoBookmarkDialog,
+  type MergeMode,
+} from "@/features/bookmark/auto-bookmark-dialog";
 import { cn } from "@/lib/utils";
 
 /** ドラッグ 1 段あたりのインデント幅(px)。横移動量を深さ変化へ換算する基準。 */
@@ -427,9 +432,11 @@ export function BookmarkPanel() {
   const moveDown = useOutlineStore((s) => s.moveDown);
   const indent = useOutlineStore((s) => s.indent);
   const outdent = useOutlineStore((s) => s.outdent);
+  const replaceTree = useOutlineStore((s) => s.replaceTree);
 
   const [editMode, setEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [autoOpen, setAutoOpen] = useState(false);
   const [pendingDelete, setPendingDelete] =
     useState<EditableOutlineNode | null>(null);
 
@@ -463,6 +470,7 @@ export function BookmarkPanel() {
     setEditMode(false);
     setEditingId(null);
     setPendingDelete(null);
+    setAutoOpen(false);
   }
 
   /** 現在の表示ページの宛先（sourceId/sourceIndex）。 */
@@ -499,6 +507,15 @@ export function BookmarkPanel() {
     else remove(node.id);
   };
 
+  /** 自動作成の結果を反映する（上書き / 末尾追加）。生成後は編集モードへ。 */
+  const handleAutoGenerate = (
+    generated: EditableOutlineNode[],
+    mode: MergeMode,
+  ) => {
+    replaceTree(mode === "append" ? [...nodes, ...generated] : generated);
+    setEditMode(true);
+  };
+
   const actions: RowActions = {
     onJump: jump,
     onStartRename: setEditingId,
@@ -522,45 +539,60 @@ export function BookmarkPanel() {
         <span className="text-muted-foreground text-xs">
           しおり{nodes.length === 0 ? "（なし）" : ` (${nodes.length})`}
         </span>
-        {editMode ? (
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7"
-              onClick={addCurrent}
-              disabled={pages.length === 0}
-            >
-              <PlusIcon aria-hidden />
-              現在のページを追加
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="h-7"
-              onClick={() => {
-                setEditMode(false);
-                setEditingId(null);
-              }}
-            >
-              <CheckIcon aria-hidden />
-              完了
-            </Button>
-          </div>
-        ) : (
+        <div className="flex items-center gap-1">
           <Button
             type="button"
             size="sm"
             variant="ghost"
             className="h-7"
-            onClick={() => setEditMode(true)}
+            aria-label="報告書しおり自動作成"
+            title="報告書しおり自動作成"
+            onClick={() => setAutoOpen(true)}
+            disabled={pages.length === 0}
           >
-            <PencilLineIcon aria-hidden />
-            しおり編集
+            <SparklesIcon aria-hidden />
+            自動作成
           </Button>
-        )}
+          {editMode ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7"
+                onClick={addCurrent}
+                disabled={pages.length === 0}
+              >
+                <PlusIcon aria-hidden />
+                現在のページを追加
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7"
+                onClick={() => {
+                  setEditMode(false);
+                  setEditingId(null);
+                }}
+              >
+                <CheckIcon aria-hidden />
+                完了
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7"
+              onClick={() => setEditMode(true)}
+            >
+              <PencilLineIcon aria-hidden />
+              しおり編集
+            </Button>
+          )}
+        </div>
       </div>
 
       {nodes.length === 0 ? (
@@ -578,6 +610,18 @@ export function BookmarkPanel() {
           ))}
         </ul>
       )}
+
+      <AutoBookmarkDialog
+        open={autoOpen}
+        onOpenChange={setAutoOpen}
+        pages={pages}
+        getSource={getProxy}
+        existingCount={nodes.reduce(
+          (n, node) => n + 1 + countDescendants(node),
+          0,
+        )}
+        onGenerate={handleAutoGenerate}
+      />
 
       <AlertDialog
         open={pendingDelete !== null}

@@ -13,6 +13,50 @@
 
 ---
 
+## 2026-05-30 — 報告書しおり自動作成（v3：本文見出しからしおりを自動生成）
+
+### 実施内容
+
+- **報告書しおり自動作成**を実装。しおりタブ右上「**自動作成**」ボタン →（参考資料の他システム実装を本プロジェクトのデータモデルに適応した）3 ステップダイアログ（`config`→`running`→`result`）。本文テキストから **章（第N章）/ 節（N.N）/ 項（N.N.N）** を検出し、最大 3 階層の編集可能しおりツリー（`EditableOutlineNode[]`）を生成する。
+- **データモデル適応**: 参考資料の `BookmarkNode + pageNumber` ではなく、本プロジェクトの **`{sourceId, sourceIndex}`** 宛先を採用。対象は単一ファイルではなく**現在の表示ページ列 `pages: PageRef[]` 全体**（複数 PDF 結合にも自然対応）で、検出ページは表示位置（1 始まり）。
+- **純ロジックと pdf.js 連携を分離**して単体テスト可能化:
+  - `reconstructLines`（フォントサイズ中央値ベースの動的 `yTolerance` で行復元）/ `normalizeDigits`・`normalizeTitle`（全角数字・抽出スペース正規化）/ `compilePatterns`（level 降順＝項→節→章で誤検出防止）/ `matchHeading`（TOC リーダー線除外）/ `SequenceTracker`（番号後退フィルタ、上位出現で下位リセット）/ `detectHeadings` / `buildBookmarkTree`（スタックベース、宛先は表示ページから解決）。
+  - pdf.js 連携: `extractPageLines`（`getTextContent` の `TextItem` → x/y/フォントサイズへ写像）/ `autoGenerateBookmarks`（表示順に逐次抽出・`onProgress` 通知・`AbortSignal` 即応・`startPage` スキップ）。
+- **UI**: `AutoBookmarkDialog`（開始ページ指定、パターン一覧のチェック切替、カスタムパターン追加＝`new RegExp` で妥当性検証、進捗バー＋中止、階層プレビュー＋既存しおりの上書き/追加選択）。パターン設定は `localStorage`（`pdf-edit:auto-bookmark-patterns`）へ永続化（純関数 `mergeStoredPatterns` で合成）。チェックボックスは Base UI ベースの `components/ui/checkbox` を新設。
+- 適用は既存 `outline-store.replaceTree`（replace / append）で反映し、生成後は編集モードへ。Undo/Redo 非対象（保存まで取り消し可）は既存編集操作と同方針。
+
+### 作成ファイル
+
+- `src/types/heading-pattern.ts` — `HeadingPattern` / `ExtractionProgress` 型
+- `src/lib/outline/auto-bookmark.ts` — パターン定義・正規化・検出・行復元・ツリー構築・pdf.js 連携・永続化合成
+- `src/lib/outline/auto-bookmark.test.ts` — 純関数の単体（33 件）
+- `src/lib/outline/auto-bookmark.integration.test.ts` — 実 PDF×pdf.js(node) の統合（5 件）
+- `src/features/bookmark/auto-bookmark-dialog.tsx` — 自動作成ダイアログ（3 ステップ）
+- `src/components/ui/checkbox.tsx` — Base UI チェックボックス
+
+### 変更ファイル
+
+- `src/features/bookmark/bookmark-panel.tsx` — 「自動作成」ボタン＋ダイアログ配線＋適用（`replaceTree`）
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` / `docs/TODO.md`
+
+### 計測結果
+
+- **テスト**: `vitest run` 全 **221 件** 通過（24 ファイル）。うち本機能の新規 **38 件**（単体 33＋統合 5）。
+- **型/Lint**: `tsc --noEmit` エラー 0 ／ `eslint` エラー 0。
+- **ビルド**: `next build`（静的エクスポート）成功（Compiled 3.8s、静的ページ 4/4 生成）。
+
+### Risks/TODO
+
+- E2E（Playwright）は本セッションでは未追加（単体＋実 PDF 統合で検出経路は担保）。実 UI の自動作成フロー E2E は次セッション候補。
+- 検出はテキスト埋め込み PDF が前提（画像のみ PDF は検出 0 件として通知）。フォントサイズベース検出・英語パターン・パターンの import/export は将来拡張（参考資料 §6）。
+- 自動生成の適用は Undo/Redo 非対象（保存まで取り消し可）。
+
+### 次ステップ
+
+- 自動作成フローの E2E（読込→自動作成→適用→保存で /Outlines 反映）を追加。
+
+---
+
 ## 2026-05-30 — しおり編集を「閲覧/編集モード切替」＋ツリー DnD（上下・階層）に拡張
 
 ### 実施内容
