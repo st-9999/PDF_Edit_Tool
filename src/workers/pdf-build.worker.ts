@@ -1,9 +1,14 @@
-import { buildPdf, type SourceBytes } from "@/lib/editor/build";
+import {
+  buildPdf,
+  type BuildOutlineNode,
+  type SourceBytes,
+} from "@/lib/editor/build";
 import type { PageRef } from "@/lib/editor/operations";
 
 interface BuildMessage {
   sources: SourceBytes;
   pages: PageRef[];
+  outline?: BuildOutlineNode[];
 }
 
 const ctx = self as unknown as {
@@ -13,8 +18,9 @@ const ctx = self as unknown as {
 
 // 重い PDF ビルドを UI スレッドから隔離する。進捗を逐次通知し、結果は Transferable で返す。
 ctx.onmessage = (event) => {
-  const { sources, pages } = event.data;
+  const { sources, pages, outline } = event.data;
   buildPdf(sources, pages, {
+    outline,
     onProgress: (done, total) =>
       ctx.postMessage({ type: "progress", done, total }),
   })

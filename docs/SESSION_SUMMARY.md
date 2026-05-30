@@ -13,6 +13,81 @@
 
 ---
 
+## 2026-05-30 — しおり付き PDF を保存するとしおりが消える不具合を修正（Playwright 検証）
+
+### 実施内容
+
+- **原因**: 保存の実体 `buildPdf`（`src/lib/editor/build.ts`）が pdf-lib の `copyPages`＋`addPage` でページのみ複製し、ドキュメントのアウトライン（/Outlines）を出力に書き戻していなかった。アウトラインは `bookmark-panel` が pdf.js で読むだけで保存経路へ渡っていなかった。
+- **修正**:
+  - `build.ts` に `BuildOutlineNode` 型と `applyOutline()` を追加。`buildPdf` の `outline` オプション指定時、ページ追加後に各ノードの (sourceId, sourceIndex) を**現在のページ並びの出力ページへ再マッピング**して /Dest を張り直し、/Outlines（First/Last/Next/Prev/Parent/Count/Dest）を pdf-lib 低レベルで再構築。宛先ページが削除済みの項目は /Dest なしの見出しとして残す。
+  - 保存経路へアウトラインを受け渡し: `pdf-build.worker.ts`・`build-runner.ts`（`RunOptions.outline`）・`use-save.ts`（`buildCurrent` 内で全ソースのアウトラインを pdf.js `buildOutline` で収集→ sourceId 付与 → `runBuild` に渡す）。複数ソース（結合）は初出順に連結。
+  - 抽出/分割（extract/split）は従来どおりアウトライン非対象（部分集合のため）。
+
+### 作成ファイル
+
+- `e2e/bookmark-save.spec.ts` — しおり付き PDF を生成→読込（しおりタブ表示確認）→保存（ダウンロード）→保存後の /Outlines にタイトル `[Chapter 1, Section 1.1, Chapter 2]` が保持されることを検証。
+
+### 変更ファイル
+
+- `src/lib/editor/build.ts` — `applyOutline`／`BuildOutlineNode`／`BuildOptions.outline`。
+- `src/workers/pdf-build.worker.ts` / `src/lib/pdf/build-runner.ts` / `src/features/save/use-save.ts` — アウトラインの受け渡し・収集。
+- `src/lib/editor/build.test.ts` — しおり保存の round-trip テスト追加。
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記。
+
+### 計測結果
+
+- 型チェック・ESLint・Prettier: エラーなし。単体: **132 passed**（+4：しおり保存／並べ替え追従／削除時の見出し残し／未指定時）。本番ビルド: 成功（4/4）。
+- E2E（chromium）: **全 23 passed**（新規 `bookmark-save` 含む）。
+- **検証**: ユニットで出力 /Outlines のタイトル・階層・宛先ページ（並べ替え追従、削除時 null）を確認。E2E で実保存経路（worker→buildPdf→applyOutline）がしおりを保持することを確認。
+
+### Risks/TODO
+
+- 宛先タイプは /XYZ（位置指定 null）固定。元の表示倍率・座標（/FitH 等）は再現しない（ページ先頭へジャンプ）。
+- 名前付き宛先（Named Destinations）は pdf.js で 0 始まりページに解決してから書き出すため、出力は明示 /Dest になる（リンク自体は機能）。
+- 抽出/分割の出力はしおり非対象（必要なら別途対応）。
+- `git push` は未実施。本変更は未コミット。
+
+### 次ステップ
+
+- 必要に応じて抽出/分割時のしおり引き継ぎ（範囲内のみ）を検討。
+
+---
+
+## 2026-05-30 — サイズ混在 PDF のページ中央寄せ修正（Playwright 検証）
+
+### 実施内容
+
+- **原因**: `page-viewer.tsx` は全ページの表示枠（`box`）を**先頭ページ寸法（`baseDims`）**で計算していた。canvas は各ページの実寸で描画され `absolute top-0 left-0` 配置のため、寸法の異なるページは枠とズレて左寄せに見えていた。
+- **修正**: ページごとの実寸（`getViewport({scale:1})` の幅高さ）を**遅延測定してキャッシュ**（state `pageDims`、キー=`sourceId:sourceIndex`）。各ページは自身の実寸で枠を作る（未測定は先頭ページ寸法で仮置き→測定後に確定）。これにより canvas と枠が一致し、`items-center`/`mx-auto` で中央寄せされる。連続表示は `ContinuousPage` が可視時に自測、単ページ表示は対象ページを測定。表示スケール（`effectiveScale`）は従来どおり全ページ共通。
+- 寸法キャッシュは ref ではなく **state** で保持（`react-hooks/refs`：レンダー中の ref 読み取り禁止に準拠）。
+
+### 作成ファイル
+
+- `e2e/mixed-size.spec.ts` — 幅の異なる 3 ページ（300/560/300px）で各ページがビュアー中央（中心ずれ 2px 以内）に表示されることの E2E。
+
+### 変更ファイル
+
+- `src/features/viewer/page-viewer.tsx` — ページ別実寸キャッシュ＋各ページ実寸で枠計算。
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記。
+
+### 計測結果
+
+- 型チェック・ESLint・Prettier: エラーなし。単体: **128 passed**。本番ビルド: 成功（4/4、ビルド CSS に該当ルール含むことも確認）。
+- E2E（chromium）: **全 22 passed**（新規 `mixed-size` 含む）。
+- **Playwright 実測**: 幅 300/560/300px の混在ページで、各ページの中心ずれ（centerDelta）が **0px**（leftGap=rightGap）。スクショで目視確認。
+
+### Risks/TODO
+
+- 各ページ実寸は可視時に遅延測定するため、初回スクロール時にごく僅かな高さ補正が入りうる（プレースホルダは先頭ページ寸法）。
+- 検証中、長時間稼働の dev サーバ（Turbopack）で `globals.css` のコンパイル済みチャンクが陳腐化し `.textLayer br` ルールが欠落 → `text-selection` E2E が一時失敗。dev サーバ再起動で解消（本番ビルド CSS には含まれ、コードは正常）。今後 CSS 起因の不審な E2E 失敗時は dev サーバ再起動を先に試す。
+- `git push` は未実施。本変更は未コミット（前回コミット 7ef79f3 の後の追加）。
+
+### 次ステップ
+
+- サイズ混在時のフィット表示（幅に合わせる/全体表示）を各ページ基準にするか要検討（現状は先頭ページ基準で全ページ共通スケール）。
+
+---
+
 ## 2026-05-30 — 「ページを一覧整理」（グリッド整理画面）を追加（Playwright 検証）
 
 ### 実施内容

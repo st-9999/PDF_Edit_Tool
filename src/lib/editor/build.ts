@@ -1,8 +1,106 @@
-import { degrees, PDFDocument } from "pdf-lib";
+import {
+  degrees,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFNull,
+  PDFNumber,
+  type PDFRef,
+} from "pdf-lib";
 import { normalizeRotation, type PageRef } from "./operations";
 
 /** sourceId → 元 PDF のバイト列。 */
 export type SourceBytes = Record<string, Uint8Array>;
+
+/**
+ * 出力へ書き戻すしおり（アウトライン）ノード。`sourceIndex` は元ソース内 0 始まりページ。
+ * 出力時に (sourceId, sourceIndex) を出力ページへ再マッピングして /Dest を張り直す。
+ */
+export interface BuildOutlineNode {
+  title: string;
+  sourceId: string;
+  sourceIndex: number | null;
+  children: BuildOutlineNode[];
+}
+
+/** ノード群の可視（開いた状態の）総数を数える（PDF アウトラインの /Count 用）。 */
+function countVisible(nodes: BuildOutlineNode[]): number {
+  let n = 0;
+  for (const node of nodes) n += 1 + countVisible(node.children);
+  return n;
+}
+
+/**
+ * 構築済み出力 PDF にしおり（/Outlines）を書き戻す。
+ * 各ノードの (sourceId, sourceIndex) を現在のページ並びの出力ページへ対応付け、
+ * 見つかったページへの /Dest を張る（削除等で見つからない場合は宛先なしの見出しとして残す）。
+ */
+function applyOutline(
+  out: PDFDocument,
+  pages: PageRef[],
+  outline: BuildOutlineNode[],
+): void {
+  if (outline.length === 0) return;
+  const context = out.context;
+  const outPages = out.getPages();
+
+  const refForTarget = (node: BuildOutlineNode): PDFRef | null => {
+    if (node.sourceIndex == null) return null;
+    const idx = pages.findIndex(
+      (p) => p.sourceId === node.sourceId && p.sourceIndex === node.sourceIndex,
+    );
+    if (idx < 0 || idx >= outPages.length) return null;
+    return outPages[idx]!.ref;
+  };
+
+  // 子から参照を確保しつつ、Parent / Prev / Next を相互リンクして 1 レベル分を構築する。
+  const buildLevel = (
+    nodes: BuildOutlineNode[],
+    parentRef: PDFRef,
+  ): { first: PDFRef; last: PDFRef; count: number } | null => {
+    if (nodes.length === 0) return null;
+    const refs = nodes.map(() => context.nextRef());
+    nodes.forEach((node, i) => {
+      const ref = refs[i]!;
+      const childRes = buildLevel(node.children, ref);
+      const dict = PDFDict.withContext(context);
+      dict.set(PDFName.of("Title"), PDFHexString.fromText(node.title));
+      dict.set(PDFName.of("Parent"), parentRef);
+      if (i > 0) dict.set(PDFName.of("Prev"), refs[i - 1]!);
+      if (i < nodes.length - 1) dict.set(PDFName.of("Next"), refs[i + 1]!);
+      if (childRes) {
+        dict.set(PDFName.of("First"), childRes.first);
+        dict.set(PDFName.of("Last"), childRes.last);
+        dict.set(PDFName.of("Count"), PDFNumber.of(childRes.count));
+      }
+      const target = refForTarget(node);
+      if (target) {
+        dict.set(
+          PDFName.of("Dest"),
+          context.obj([target, PDFName.of("XYZ"), PDFNull, PDFNull, PDFNull]),
+        );
+      }
+      context.assign(ref, dict);
+    });
+    return {
+      first: refs[0]!,
+      last: refs[refs.length - 1]!,
+      count: countVisible(nodes),
+    };
+  };
+
+  const outlinesRef = context.nextRef();
+  const top = buildLevel(outline, outlinesRef);
+  if (!top) return;
+  const outlinesDict = PDFDict.withContext(context);
+  outlinesDict.set(PDFName.of("Type"), PDFName.of("Outlines"));
+  outlinesDict.set(PDFName.of("First"), top.first);
+  outlinesDict.set(PDFName.of("Last"), top.last);
+  outlinesDict.set(PDFName.of("Count"), PDFNumber.of(top.count));
+  context.assign(outlinesRef, outlinesDict);
+  out.catalog.set(PDFName.of("Outlines"), outlinesRef);
+}
 
 async function loadSourceDocs(
   sources: SourceBytes,
@@ -22,6 +120,8 @@ export interface BuildOptions {
   onProgress?: (done: number, total: number) => void;
   /** 中断シグナル（worker 終了の代替として本スレッド実行で使用）。 */
   signal?: AbortSignal;
+  /** 元ドキュメントのしおり（アウトライン）。指定時は出力へ再マッピングして書き戻す。 */
+  outline?: BuildOutlineNode[];
 }
 
 /**
@@ -51,6 +151,9 @@ export async function buildPdf(
     copied.setRotation(degrees(angle));
     out.addPage(copied);
     options.onProgress?.(i + 1, pages.length);
+  }
+  if (options.outline && options.outline.length > 0) {
+    applyOutline(out, pages, options.outline);
   }
   return out.save();
 }

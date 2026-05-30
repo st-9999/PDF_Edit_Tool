@@ -1,11 +1,17 @@
 "use client";
 
-import { buildPdf, type SourceBytes } from "@/lib/editor/build";
+import {
+  buildPdf,
+  type BuildOutlineNode,
+  type SourceBytes,
+} from "@/lib/editor/build";
 import type { PageRef } from "@/lib/editor/operations";
 
 interface RunOptions {
   onProgress?: (done: number, total: number) => void;
   signal?: AbortSignal;
+  /** 元ドキュメントのしおり。出力へ再マッピングして書き戻す。 */
+  outline?: BuildOutlineNode[];
 }
 
 interface WorkerDone {
@@ -26,7 +32,7 @@ type WorkerMessage = WorkerDone | WorkerProgress | WorkerError;
 function runInWorker(
   sources: SourceBytes,
   pages: PageRef[],
-  { onProgress, signal }: RunOptions,
+  { onProgress, signal, outline }: RunOptions,
 ): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -72,7 +78,7 @@ function runInWorker(
       reject(new Error("worker error"));
     };
 
-    worker.postMessage({ sources, pages });
+    worker.postMessage({ sources, pages, outline });
   });
 }
 
@@ -94,5 +100,9 @@ export async function runBuild(
       if (err instanceof DOMException && err.name === "AbortError") throw err;
     }
   }
-  return buildPdf(sources, pages, options);
+  return buildPdf(sources, pages, {
+    onProgress: options.onProgress,
+    signal: options.signal,
+    outline: options.outline,
+  });
 }

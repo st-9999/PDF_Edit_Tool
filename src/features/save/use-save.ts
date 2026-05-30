@@ -2,13 +2,31 @@
 
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { extractPages, splitPdf } from "@/lib/editor/build";
+import {
+  extractPages,
+  splitPdf,
+  type BuildOutlineNode,
+} from "@/lib/editor/build";
 import { runBuild } from "@/lib/pdf/build-runner";
+import { buildOutline, type OutlineNode } from "@/lib/pdf/outline";
 import { createSaveStrategy, type SaveStrategy } from "@/lib/save/strategy";
 import { useEditorStore } from "@/store/editor-store";
 import { useViewerStore } from "@/store/viewer-store";
 import { useProgressStore } from "@/store/progress-store";
 import { usePdfSources } from "@/features/viewer/pdf-sources-context";
+
+/** OutlineNode（ソース内ページ基準）に sourceId を付与し、ビルド用ツリーへ変換する。 */
+function tagWithSource(
+  nodes: OutlineNode[],
+  sourceId: string,
+): BuildOutlineNode[] {
+  return nodes.map((n) => ({
+    title: n.title,
+    sourceId,
+    sourceIndex: n.sourceIndex,
+    children: tagWithSource(n.children, sourceId),
+  }));
+}
 
 function suggestedName(fileName: string | null, suffix = ""): string {
   const base = (fileName ?? "document.pdf").replace(/\.pdf$/i, "");
@@ -17,11 +35,31 @@ function suggestedName(fileName: string | null, suffix = ""): string {
 
 /** 保存層のアクション群。能力に応じた保存戦略を内部で選択する。 */
 export function useSave() {
-  const { getAllBytes } = usePdfSources();
+  const { getAllBytes, getProxy } = usePdfSources();
   const strategy = useMemo<SaveStrategy>(() => createSaveStrategy(), []);
+
+  // 現在の全ソースのしおりを pdf.js で収集し、保存時に出力へ書き戻す（保存でしおりが
+  // 消えないように）。複数ソース（結合）はソースの初出順に連結する。失敗時はしおり無し。
+  const collectOutline = async (): Promise<BuildOutlineNode[]> => {
+    const pages = useEditorStore.getState().pages;
+    const sourceIds = [...new Set(pages.map((p) => p.sourceId))];
+    const result: BuildOutlineNode[] = [];
+    for (const id of sourceIds) {
+      const proxy = getProxy(id);
+      if (!proxy) continue;
+      try {
+        const tree = await buildOutline(proxy);
+        result.push(...tagWithSource(tree, id));
+      } catch {
+        // 当該ソースのしおりはスキップ
+      }
+    }
+    return result;
+  };
 
   // 現在のドキュメントを Worker で生成（進捗オーバーレイ＋キャンセル付き）
   const buildCurrent = async () => {
+    const outline = await collectOutline();
     const controller = new AbortController();
     useProgressStore
       .getState()
@@ -29,6 +67,7 @@ export function useSave() {
     try {
       return await runBuild(getAllBytes(), useEditorStore.getState().pages, {
         signal: controller.signal,
+        outline,
         onProgress: (done, total) =>
           useProgressStore.getState().progress(done, total),
       });

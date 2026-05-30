@@ -63,7 +63,9 @@ function ContinuousPage({
   page,
   position,
   scale,
-  box,
+  measured,
+  fallback,
+  onMeasured,
   query,
   currentLocalIndex,
   registerRef,
@@ -72,13 +74,41 @@ function ContinuousPage({
   page: PageRef;
   position: number;
   scale: number;
-  box: BaseDims;
+  /** このページ自身の実寸（測定済みなら）。サイズ混在 PDF を各ページの実寸で中央寄せするため。 */
+  measured: BaseDims | null;
+  /** 未測定時のプレースホルダ寸法（先頭ページ基準）。 */
+  fallback: BaseDims;
+  onMeasured: (key: string, dims: BaseDims) => void;
   query: string;
   currentLocalIndex: number | null;
   registerRef: (position: number, el: HTMLElement | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const visible = useVisible(ref);
+
+  // 各ページは自身の実寸で枠を作る（未測定は先頭ページ寸法で仮置き）。これにより
+  // サイズの異なるページも canvas と枠が一致し、items-center / mx-auto で中央寄せされる。
+  const box = boxFor(measured ?? fallback, scale, page.rotation);
+  const dimsKey = `${page.sourceId}:${page.sourceIndex}`;
+
+  // 可視になったら自身の実寸を測ってキャッシュへ報告する（遅延・1 回だけ）。
+  useEffect(() => {
+    if (!visible || !proxy || measured) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const pg = await proxy.getPage(page.sourceIndex + 1);
+        if (cancelled) return;
+        const vp = pg.getViewport({ scale: 1 });
+        onMeasured(dimsKey, { width: vp.width, height: vp.height });
+      } catch {
+        // キャンセル等は無視
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, proxy, measured, dimsKey, page.sourceIndex, onMeasured]);
 
   // position が変わらない限り同一参照を保ち、再描画ごとの observe/unobserve churn を防ぐ
   const setRef = useCallback(
@@ -157,6 +187,18 @@ export function PageViewer() {
   const size = useElementSize(scrollRef);
   const [baseDims, setBaseDims] = useState<BaseDims | null>(null);
 
+  // ページごとの実寸（unrotated, scale=1）のキャッシュ。サイズ混在 PDF で各ページを
+  // 自身の寸法で配置・中央寄せするために使う。キーは元ソース＋ページ番号（並べ替えに不変）。
+  const [pageDims, setPageDims] = useState<Record<string, BaseDims>>({});
+  const dimsKeyOf = (p: PageRef) => `${p.sourceId}:${p.sourceIndex}`;
+  const reportDims = useCallback((key: string, dims: BaseDims) => {
+    setPageDims((prev) => {
+      const p = prev[key];
+      if (p && p.width === dims.width && p.height === dims.height) return prev;
+      return { ...prev, [key]: dims };
+    });
+  }, []);
+
   // Ctrl+ホイールズーム時、カーソル下のコンテンツ位置を保持するためのアンカー。
   // ホイール発火時（ズーム前）に記録し、再レイアウト後に scroll を補正する。
   const zoomAnchor = useRef<{
@@ -222,6 +264,30 @@ export function PageViewer() {
       VIEWER_PADDING,
     );
   }, [fitMode, baseDims, size.width, size.height, zoom]);
+
+  // 単ページ表示の対象ページの実寸を測ってキャッシュへ（中央寄せ用・サイズ混在対応）。
+  useEffect(() => {
+    const ap = pages[currentPage - 1];
+    if (!ap) return;
+    const proxy = getProxy(ap.sourceId);
+    if (!proxy) return;
+    const key = `${ap.sourceId}:${ap.sourceIndex}`;
+    if (pageDims[key]) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const pg = await proxy.getPage(ap.sourceIndex + 1);
+        if (cancelled) return;
+        const vp = pg.getViewport({ scale: 1 });
+        reportDims(key, { width: vp.width, height: vp.height });
+      } catch {
+        // 無視
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pages, currentPage, getProxy, reportDims, pageDims]);
 
   // 拡大率が変わって再レイアウトされた直後（描画前）に、記録した比率位置が
   // 同じカーソル座標へ来るよう scroll を補正する＝カーソル中心のズーム。
@@ -294,6 +360,15 @@ export function PageViewer() {
 
   const displayPercent = Math.round(effectiveScale * 100);
   const activePage = pages[currentPage - 1];
+  // 単ページ表示の枠は対象ページ自身の実寸（未測定は先頭ページ寸法）で計算する。
+  const activeDims =
+    activePage && baseDims
+      ? (pageDims[dimsKeyOf(activePage)] ?? baseDims)
+      : null;
+  const activeBox =
+    activeDims && activePage
+      ? boxFor(activeDims, effectiveScale, activePage.rotation)
+      : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -305,18 +380,14 @@ export function PageViewer() {
       >
         {viewMode === "single" ? (
           <div className="flex min-h-full items-start justify-center p-6">
-            {baseDims && activePage && (
+            {activePage && activeBox && (
               <PdfPageView
                 pdf={getProxy(activePage.sourceId)!}
                 pageNumber={activePage.sourceIndex + 1}
                 scale={effectiveScale}
                 rotation={activePage.rotation}
-                width={
-                  boxFor(baseDims, effectiveScale, activePage.rotation).width
-                }
-                height={
-                  boxFor(baseDims, effectiveScale, activePage.rotation).height
-                }
+                width={activeBox.width}
+                height={activeBox.height}
                 query={query}
                 currentLocalIndex={localCurrentFor(currentPage)}
               />
@@ -334,7 +405,9 @@ export function PageViewer() {
                     page={page}
                     position={position}
                     scale={effectiveScale}
-                    box={boxFor(baseDims, effectiveScale, page.rotation)}
+                    measured={pageDims[dimsKeyOf(page)] ?? null}
+                    fallback={baseDims}
+                    onMeasured={reportDims}
                     query={query}
                     currentLocalIndex={localCurrentFor(position)}
                     registerRef={registerRef}
