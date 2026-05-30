@@ -61,7 +61,7 @@ function MultiSelectToggle() {
       ) : (
         <ListChecksIcon aria-hidden />
       )}
-      {multiSelect ? "複数選択中" : "複数選択"}
+      {multiSelect ? "複数ページを選択中" : "複数ページを選択"}
     </Toggle>
   );
 }

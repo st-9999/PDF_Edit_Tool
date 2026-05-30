@@ -42,6 +42,14 @@ interface EditorState {
 
   // ライフサイクル
   initDocument: (numPages: number, sourceId?: string) => void;
+  /**
+   * 複数ソースを結合した初期ドキュメントを生成する（エントリ画面の結合フロー）。
+   * 全ソースのページを初期ページ列として並べ、クリーンな baseline（履歴空・未保存でない）
+   * で開く。`sourceId` は先頭ソース（しおり対応の基準）。
+   */
+  initMergedDocument: (
+    sources: { sourceId: string; numPages: number }[],
+  ) => void;
   reset: () => void;
   /** 保存完了を記録（未保存フラグをクリア）。任意でハンドルを保持。 */
   markSaved: (handle?: FileSystemFileHandle | null) => void;
@@ -52,7 +60,6 @@ interface EditorState {
   reorder: (ids: string[], toIndex: number) => void;
   rotateSelected: (delta?: number) => void;
   deleteSelected: () => void;
-  mergePages: (index: number, pages: PageRef[]) => void;
   undo: () => void;
   redo: () => void;
 
@@ -88,6 +95,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const initial = createInitialPages(sourceId, numPages);
     set({
       sourceId,
+      history: createHistory(initial),
+      pages: initial,
+      selection: emptySelection(),
+      multiSelect: false,
+      fileHandle: null,
+      savedAppliedLength: 0,
+    });
+  },
+
+  initMergedDocument: (sources) => {
+    if (sources.length === 0) return;
+    const initial = sources.flatMap((s) =>
+      createInitialPages(s.sourceId, s.numPages),
+    );
+    set({
+      sourceId: sources[0].sourceId,
       history: createHistory(initial),
       pages: initial,
       selection: emptySelection(),
@@ -136,11 +159,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       ...commit(applyToHistory(get().history, { type: "delete", ids })),
       selection: emptySelection(),
     });
-  },
-
-  mergePages: (index, pages) => {
-    if (pages.length === 0) return;
-    get().applyEdit({ type: "merge", index, pages });
   },
 
   undo: () => set(commit(undoHistory(get().history))),

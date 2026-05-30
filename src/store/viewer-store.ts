@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  MERGED_PDF_NAME,
   THUMBNAIL_WIDTH_DEFAULT,
   THUMBNAIL_WIDTH_MAX,
   THUMBNAIL_WIDTH_MIN,
@@ -44,6 +45,11 @@ export function clampPage(page: number, numPages: number): number {
 
 interface ViewerState {
   file: File | null;
+  /**
+   * `file` に続けて結合する追加ファイル（順序付き）。エントリ画面の結合フローで
+   * 設定し、ビュアー起動時に 1 本目（`file`）の後ろへ順に結合する。単一オープン時は空。
+   */
+  mergeFiles: File[];
   fileName: string | null;
   fileSize: number | null;
   numPages: number;
@@ -59,8 +65,15 @@ interface ViewerState {
   leftTab: LeftTab;
   /** 左ペインのサムネイル描画幅（px）。ビュアー zoom / ブラウザ拡大率とは独立。 */
   thumbnailWidth: number;
+  /** ページを一覧整理（グリッド）モード。ON で全画面のサムネ一覧整理画面を表示する。 */
+  organize: boolean;
 
   setFile: (file: File) => void;
+  /**
+   * 複数 PDF を結合して開く。先頭を `file`、残りを `mergeFiles` に設定する。
+   * 2 件以上を想定（呼び出し側で件数を担保）。ファイル名は結合既定名（merged.pdf）。
+   */
+  setFiles: (files: File[]) => void;
   clearFile: () => void;
   setStatus: (status: LoadStatus) => void;
   setError: (message: string) => void;
@@ -80,10 +93,13 @@ interface ViewerState {
   setThumbnailWidth: (width: number) => void;
   thumbnailZoomIn: () => void;
   thumbnailZoomOut: () => void;
+  /** 一覧整理モードの切替。 */
+  setOrganize: (on: boolean) => void;
 }
 
 const initialDocState = {
   file: null as File | null,
+  mergeFiles: [] as File[],
   fileName: null as string | null,
   fileSize: null as number | null,
   numPages: 0,
@@ -95,6 +111,8 @@ const initialDocState = {
   fitMode: "actual" as FitMode,
   status: "idle" as LoadStatus,
   error: null as string | null,
+  // ファイルを閉じたら整理モードも解除する（空状態で整理画面が残らないように）
+  organize: false,
 };
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -107,6 +125,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setFile: (file) =>
     set({
       file,
+      mergeFiles: [],
       fileName: file.name,
       fileSize: file.size,
       numPages: 0,
@@ -116,6 +135,24 @@ export const useViewerStore = create<ViewerState>((set) => ({
       status: "loading",
       error: null,
     }),
+
+  setFiles: (files) => {
+    const [first, ...rest] = files;
+    if (!first) return;
+    set({
+      file: first,
+      mergeFiles: rest,
+      // 結合時は merged.pdf を既定名に。単一なら元のファイル名を踏襲。
+      fileName: rest.length > 0 ? MERGED_PDF_NAME : first.name,
+      fileSize: files.reduce((sum, f) => sum + f.size, 0),
+      numPages: 0,
+      currentPage: 1,
+      zoom: ZOOM_DEFAULT,
+      fitMode: "actual",
+      status: "loading",
+      error: null,
+    });
+  },
 
   clearFile: () => set({ ...initialDocState }),
 
@@ -187,4 +224,6 @@ export const useViewerStore = create<ViewerState>((set) => ({
         state.thumbnailWidth - THUMBNAIL_WIDTH_STEP,
       ),
     })),
+
+  setOrganize: (on) => set({ organize: on }),
 }));

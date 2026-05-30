@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactElement,
 } from "react";
 import {
   ChevronLeftIcon,
@@ -23,6 +24,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Toggle } from "@/components/ui/toggle";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useElementSize } from "@/lib/hooks/use-element-size";
 import { useVisible } from "@/lib/hooks/use-visible";
 import { computeFitScale } from "@/lib/pdf/render";
@@ -338,113 +345,150 @@ export function PageViewer() {
         )}
       </div>
 
-      {/* フッター操作バー: ページ送り・ズーム・表示モード */}
-      <div className="flex flex-wrap items-center gap-3 border-t px-4 py-2">
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label="前のページ"
-            disabled={currentPage <= 1}
-            onClick={prevPage}
-          >
-            <ChevronLeftIcon aria-hidden />
-          </Button>
-          <PageNumberInput
-            currentPage={currentPage}
-            numPages={numPages}
-            onGoTo={requestPage}
-          />
-          <span className="text-muted-foreground text-sm">/ {numPages}</span>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label="次のページ"
-            disabled={currentPage >= numPages}
-            onClick={nextPage}
-          >
-            <ChevronRightIcon aria-hidden />
-          </Button>
+      {/* フッター操作バー: ページ送り・ズーム・表示モード（アイコンは Tooltip で説明を表示） */}
+      <TooltipProvider delay={300}>
+        <div className="flex flex-wrap items-center gap-3 border-t px-4 py-2">
+          <div className="flex items-center gap-1">
+            <ControlTip label="前のページ">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="前のページ"
+                disabled={currentPage <= 1}
+                onClick={prevPage}
+              >
+                <ChevronLeftIcon aria-hidden />
+              </Button>
+            </ControlTip>
+            <PageNumberInput
+              currentPage={currentPage}
+              numPages={numPages}
+              onGoTo={requestPage}
+            />
+            <span className="text-muted-foreground text-sm">/ {numPages}</span>
+            <ControlTip label="次のページ">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="次のページ"
+                disabled={currentPage >= numPages}
+                onClick={nextPage}
+              >
+                <ChevronRightIcon aria-hidden />
+              </Button>
+            </ControlTip>
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <ControlTip label="縮小">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="縮小"
+                onClick={zoomOut}
+              >
+                <ZoomOutIcon aria-hidden />
+              </Button>
+            </ControlTip>
+            <Slider
+              aria-label="ズーム"
+              className="w-32"
+              min={Math.round(ZOOM_MIN * 100)}
+              max={Math.round(ZOOM_MAX * 100)}
+              step={1}
+              value={[
+                Math.min(
+                  ZOOM_MAX * 100,
+                  Math.max(ZOOM_MIN * 100, displayPercent),
+                ),
+              ]}
+              onValueChange={(value) => {
+                const v = Array.isArray(value) ? value[0] : value;
+                if (typeof v === "number") setZoom(v / 100);
+              }}
+            />
+            <ControlTip label="拡大">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="拡大"
+                onClick={zoomIn}
+              >
+                <ZoomInIcon aria-hidden />
+              </Button>
+            </ControlTip>
+            <ZoomPercentInput displayPercent={displayPercent} onSet={setZoom} />
+
+            <ControlTip label="幅に合わせる">
+              <Toggle
+                size="sm"
+                aria-label="幅に合わせる"
+                pressed={fitMode === "width"}
+                onPressedChange={() => setFitMode("width")}
+              >
+                <StretchHorizontalIcon aria-hidden />
+              </Toggle>
+            </ControlTip>
+            <ControlTip label="全体表示">
+              <Toggle
+                size="sm"
+                aria-label="全体表示"
+                pressed={fitMode === "page"}
+                onPressedChange={() => setFitMode("page")}
+              >
+                <Maximize2Icon aria-hidden />
+              </Toggle>
+            </ControlTip>
+
+            <div className="bg-border mx-1 h-5 w-px" aria-hidden />
+
+            <ControlTip label="単ページ表示">
+              <Toggle
+                size="sm"
+                aria-label="単ページ表示"
+                pressed={viewMode === "single"}
+                onPressedChange={() => setViewMode("single")}
+              >
+                <SquareIcon aria-hidden />
+              </Toggle>
+            </ControlTip>
+            <ControlTip label="連続スクロール表示">
+              <Toggle
+                size="sm"
+                aria-label="連続スクロール表示"
+                pressed={viewMode === "continuous"}
+                onPressedChange={() => setViewMode("continuous")}
+              >
+                <Rows3Icon aria-hidden />
+              </Toggle>
+            </ControlTip>
+          </div>
         </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label="縮小"
-            onClick={zoomOut}
-          >
-            <ZoomOutIcon aria-hidden />
-          </Button>
-          <Slider
-            aria-label="ズーム"
-            className="w-32"
-            min={Math.round(ZOOM_MIN * 100)}
-            max={Math.round(ZOOM_MAX * 100)}
-            step={1}
-            value={[
-              Math.min(
-                ZOOM_MAX * 100,
-                Math.max(ZOOM_MIN * 100, displayPercent),
-              ),
-            ]}
-            onValueChange={(value) => {
-              const v = Array.isArray(value) ? value[0] : value;
-              if (typeof v === "number") setZoom(v / 100);
-            }}
-          />
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label="拡大"
-            onClick={zoomIn}
-          >
-            <ZoomInIcon aria-hidden />
-          </Button>
-          <ZoomPercentInput displayPercent={displayPercent} onSet={setZoom} />
-
-          <Toggle
-            size="sm"
-            aria-label="幅に合わせる"
-            pressed={fitMode === "width"}
-            onPressedChange={() => setFitMode("width")}
-          >
-            <StretchHorizontalIcon aria-hidden />
-          </Toggle>
-          <Toggle
-            size="sm"
-            aria-label="全体表示"
-            pressed={fitMode === "page"}
-            onPressedChange={() => setFitMode("page")}
-          >
-            <Maximize2Icon aria-hidden />
-          </Toggle>
-
-          <div className="bg-border mx-1 h-5 w-px" aria-hidden />
-
-          <Toggle
-            size="sm"
-            aria-label="単ページ表示"
-            pressed={viewMode === "single"}
-            onPressedChange={() => setViewMode("single")}
-          >
-            <SquareIcon aria-hidden />
-          </Toggle>
-          <Toggle
-            size="sm"
-            aria-label="連続スクロール表示"
-            pressed={viewMode === "continuous"}
-            onPressedChange={() => setViewMode("continuous")}
-          >
-            <Rows3Icon aria-hidden />
-          </Toggle>
-        </div>
-      </div>
+      </TooltipProvider>
     </div>
+  );
+}
+
+/**
+ * アイコンのみのコントロールにフローティング説明を付ける薄いラッパ。
+ * 子要素（Button / Toggle）を Tooltip のトリガとして合成する（余計な要素を増やさない）。
+ */
+function ControlTip({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactElement;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 

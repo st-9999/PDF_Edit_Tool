@@ -13,6 +13,244 @@
 
 ---
 
+## 2026-05-30 — 「ページを一覧整理」（グリッド整理画面）を追加（Playwright 検証）
+
+### 実施内容
+
+- **整理モードの状態**（`viewer-store.ts`）: `organize: boolean` と `setOrganize` を追加。`initialDocState` に `organize:false` を含め、ファイルを閉じると解除。
+- **整理画面 `OrganizeView`**（新規 `organize-view.tsx`）: 全ページをサムネのレスポンシブ・グリッドで表示。
+  - 並べ替え: @dnd-kit `DndContext`＋`SortableContext`（`rectSortingStrategy`）。タイル全体をドラッグ（`PointerSensor` の距離4でクリックと両立）、`onDragEnd` で `editor-store.reorder`。
+  - 選択: クリック=単一 / Ctrl=加除 / Shift=範囲（`selectClick`/`selectToggle`/`selectRangeTo`）。全選択・選択解除も。
+  - 操作: 回転（左右）・削除（確認ダイアログ）・抽出・分割を `useEditActions` 経由で選択ページに適用。各タイルに右クリックメニューも。
+  - サムネサイズ調整（`thumbnailZoomIn/Out`）、ダブルクリックで該当ページをビュアー表示、「ビューアに戻る」/Esc で復帰、抽出/分割の進捗用に `ProgressOverlay` を内包。
+  - ヘッダに「Ctrl＋クリックで複数選択（Shift＋クリックで範囲選択）」の案内表記（`sm` 以上で表示）。
+- **入口**（`edit-toolbar.tsx`）: 「ページを一覧整理」ボタン（`LayoutGridIcon`）を追加し `setOrganize(true)`。
+- **切替表示**（`viewer-layout.tsx`）: `organize` 時は EditToolbar/3ペインの代わりに `OrganizeView` を表示（TopBar/StatusBar は維持）。編集は `editor-store` 共有のためビュアー復帰時に反映。
+- `use context7`: @dnd-kit のグリッド並べ替え（`rectSortingStrategy`／クラシック API）を確認のうえ既存 `thumbnail-list` と同系で実装。
+
+### 作成ファイル
+
+- `src/features/viewer/organize-view.tsx` — 整理画面本体。
+- `e2e/organize.spec.ts` — 入口→グリッド表示→選択→削除→戻る、ドラッグ並べ替えで未保存化の E2E。
+
+### 変更ファイル
+
+- `src/store/viewer-store.ts` — `organize`/`setOrganize`。
+- `src/features/editor/edit-toolbar.tsx` — 入口ボタン。
+- `src/features/viewer/viewer-layout.tsx` — 整理モード切替。
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記。
+
+### 計測結果
+
+- 型チェック・ESLint・Prettier: エラーなし。単体: **128 passed**。本番ビルド: 成功（4/4）。
+- E2E（chromium）: **全 21 passed**（新規 `organize` 2件含む）。
+- **Playwright 目視/計測**: 整理画面に 4 ページのサムネ・グリッドとツールバー（戻る/全選択/回転/削除/抽出/分割/サイズ）を確認。1 ページ選択→削除で **4→3 ページ**・未保存化。ドラッグ並べ替えで未保存・Undo 有効・ページ数不変。「ビューアに戻る」でビュアー復帰し削除結果が維持。
+
+### Risks/TODO
+
+- 並べ替えは「ドラッグした 1 ページ」を移動する仕様（複数選択の一括移動は未対応、既存サムネ一覧と同挙動）。要望あれば拡張可能。
+- グリッドのドラッグはポインタのみ（キーボード並べ替えは未対応、既存実装と同様）。
+- `git push` は未実施（運用ルールに従い手動）。本セッションの変更は未コミット。
+
+### 次ステップ
+
+- 複数選択ページの一括ドラッグ移動、整理画面でのページ追加（結合）導線の検討。
+
+---
+
+## 2026-05-30 — テキスト選択の左端ボックス修正と「?」混入の切り分け（Playwright 検証）
+
+### 実施内容
+
+- **左端の空選択ボックスを修正**（`globals.css`）: pdf.js が改行用に挿入する `<br>` が絶対配置で左上(0,0)に積まれ、`.textLayer > :not(.markedContent)` の `font-size:calc(...)` が継承で 16px になり高さ約21pxの可視ボックスを作っていた。`.textLayer br:not(.markedContent)`（特異度を `:not` で底上げ）で `font-size:0; line-height:0` に潰し、選択ハイライトのボックスを除去。コピー時の改行は `<br>` が引き続き提供（`\r\n`）。
+- **「?」混入の切り分け**: pdf-lib 標準フォント PDF で、単一/連続/回転後の各モードで「全選択→コピー」を Playwright で実施し、クリップボードのコードポイントを検査。いずれも本文と完全一致で **`?`(U+003F) は混入しなかった**。アプリ側に自前のコピー/クリップボード処理が無いことも grep で確認。→ 「?」はビュアーのコードではなく、対象 PDF の埋め込みフォントに **ToUnicode（文字→Unicode 対応）が無い／壊れている**場合に pdf.js のテキスト抽出が代替文字を返す、PDF 固有の事象である可能性が高い（標準的な対策＝cMapUrl / standardFontDataUrl / wasmUrl は設定済み）。
+
+### 作成ファイル
+
+- `e2e/text-selection.spec.ts` — 全選択コピーが本文と一致し余分な文字（?等）を含まないこと＋改行用 `<br>` が font-size 0 であることの回帰テスト。
+
+### 変更ファイル
+
+- `src/app/globals.css` — `.textLayer br:not(.markedContent)` のサイズ 0 化。
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記。
+
+### 計測結果
+
+- 型チェック・ESLint・Prettier: エラーなし。単体: **128 passed**。本番ビルド: 成功（4/4）。
+- E2E（chromium）: **全 19 passed**（新規 `text-selection` 含む）。
+- **Playwright 計測**: 修正後、左端ボックスが消失（スクショ確認）。クリップボード＝`"Hello world from PDF\r\nSecond line of text\r\nThird line here"`（コードポイントに 63=? なし）。`<br>` の computed font-size = `0px`。
+
+### Risks/TODO
+
+- 「?」混入は標準フォント PDF では再現せず未修正。**再現するPDFのサンプル共有**があれば、ToUnicode 欠落かどうか確認し、可能なら抽出オプション等で緩和を検討。
+- 選択ハイライトは行末でわずかに文字幅を超える場合があるが、これは pdf.js のグリフ送り幅由来で通常動作（実害なし）。
+- `git push` は未実施（運用ルールに従い手動）。本セッションの変更は未コミット。
+
+### 次ステップ
+
+- ユーザーから「?」が出る PDF を入手し、テキスト抽出の実値を Playwright で確認。
+
+---
+
+## 2026-05-30 — 回転テキストレイヤー修正・選択色・Tooltip・結合文言（Playwright 検証）
+
+### 実施内容
+
+- **回転時のテキストレイヤーずれを修正**（`pdf-page-view.tsx` / `globals.css`）: pdf.js の `TextLayer` は span を**未回転ページ座標**（rawDims 基準のパーセンテージ）に配置し、回転は**コンテナの CSS 回転**で行う設計。従来はコンテナを回転後寸法にして inset:0 で敷いていたため、canvas だけ回転し span は回転前のまま残っていた。対応として、テキストレイヤーのコンテナを**未回転寸法**（90/270°では width/height を入替）で生成し、`data-main-rotation` 属性＋CSS（`rotate(90/180/270deg)` ＋ `translate`、`transform-origin:0 0`）で canvas に重ねるよう変更。**Playwright で 0/90/180/270° すべて検証**し、全 span が canvas 矩形内に収まり（90/270°=縦 22×104、0/180°=横 104×22）、選択ハイライトが回転後の文字に一致することを確認。
+- **テキスト選択ハイライト色を視認性向上**（`globals.css`）: モノクロ primary 35%（薄い灰）→ 青（`--text-selection`、ライト `rgba(56,132,255,.4)` / ダーク `rgba(96,165,250,.45)`）。
+- **フッターアイコンに Tooltip 追加**（`page-viewer.tsx`）: 前/次ページ・縮小/拡大・幅に合わせる・全体表示・単ページ/連続スクロールの各アイコンに Base UI `Tooltip` を付与。`ControlTip` ヘルパで `Tooltip.Trigger` の `render` を使い既存 Button/Toggle に合成（DOM 上は単一ボタン＝アクセシブル名維持を Playwright で確認）。`use context7` で Base UI Tooltip / pdf.js TextLayer 仕様を確認。
+- **結合画面の文言削除**（`merge-intake.tsx`）: 「またはクリックして複数選択（あとから追加もできます）」→「またはクリックして複数選択」。
+
+### 作成ファイル
+
+- `e2e/footer-tooltip.spec.ts` — フッターアイコンのホバーで Tooltip が表示される E2E。
+
+### 変更ファイル
+
+- `src/features/viewer/pdf-page-view.tsx` — テキストレイヤーを未回転寸法＋`data-main-rotation`。
+- `src/app/globals.css` — `.textLayer` の inset 撤廃＋回転 CSS、選択色変数 `--text-selection`。
+- `src/features/viewer/page-viewer.tsx` — フッターに `TooltipProvider` と `ControlTip`。
+- `src/features/viewer/merge-intake.tsx` — 文言削除。
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記。
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）・ESLint・Prettier: エラーなし。
+- 単体テスト: **128 passed**（18 files、回帰なし）。本番ビルド（`next build`）: 成功（静的生成 4/4）。
+- E2E（chromium）: **全 18 passed**（新規 `footer-tooltip` 1件含む）。回転検証は一時デバッグ spec で 0/90/180/270° の span 整合と選択ハイライトをスクショ＋計測で確認し、確認後にデバッグ spec は削除。
+
+### Risks/TODO
+
+- 回転 CSS は `data-main-rotation` 90/180/270° に限定（本アプリの回転刻みは 90°なので十分）。任意角には未対応。
+- `git push` は未実施（運用ルールに従い手動）。本セッションの変更は未コミット。
+
+### 次ステップ
+
+- 結合一覧で各 PDF の 1 ページ目サムネ表示（視認性向上）を検討。
+
+---
+
+## 2026-05-30 — ビュアー UI 調整（未保存確認・表記変更・全選択廃止）
+
+### 実施内容
+
+- **「開く／閉じる」に未保存確認ダイアログを追加**（`top-bar.tsx`）: 未保存（`editorSelectors.isDirty`）の状態で別ファイルを開く・閉じると変更が失われるため、Base UI `AlertDialog`（制御 `open`/`onOpenChange`、`use context7` で API 確認）で警告。「変更を破棄して開く／閉じる」を確認後に実行し、変更が無ければ確認なしで即時実行。`pendingAction: "open" | "close" | null` で対象を保持。
+- **「◯ ページ選択中」の文字色を調整**（`edit-toolbar.tsx`）: 薄い `text-muted-foreground` → 他のツールバーテキストと同じ `text-foreground`（未選択時のプレースホルダは muted のまま）。
+- **「検索」→「テキストを検索」**（`top-bar.tsx`）に表記変更。
+- **「全選択」ボタンを廃止**（`top-bar.tsx`）: ビュアー内テキスト全選択ボタンと `selectAllViewerText`／未使用の `TextSelectIcon` を削除。
+- **「複数選択」→「複数ページを選択」**（`left-pane.tsx`）に表記変更（ON 時「複数ページを選択中」）。`aria-label="ページを複数選択"` は維持し既存 E2E を非破壊。
+
+### 作成ファイル
+
+- `e2e/unsaved-guard.spec.ts` — 開く/閉じるの未保存確認 E2E（閉じる: 確認→キャンセル維持→破棄で閉じる／開く: 確認表示／変更なし: 確認なしで即閉じる）。
+
+### 変更ファイル
+
+- `src/features/viewer/top-bar.tsx` — 未保存確認ダイアログ、検索表記、全選択削除。
+- `src/features/editor/edit-toolbar.tsx` — 選択件数表示の文字色（`cn` で条件分岐）。
+- `src/features/viewer/left-pane.tsx` — 複数選択トグルの表記。
+- `e2e/search.spec.ts` — 全選択ステップを除去し、検索ボタン名を「テキストを検索」に更新。
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記。
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）・ESLint・Prettier: エラーなし。
+- 単体テスト: **128 passed**（18 files、回帰なし）。本番ビルド: 既存同様に通過見込み（型・lint クリーン）。
+- E2E（chromium）: 関連スイート一括 **17 passed**（新規 `unsaved-guard` 3件、更新 `search` 1件、`editor`/`edit`/`home`/`merge`/`viewer` ほか回帰含む）。
+
+### Risks/TODO
+
+- 未保存確認はアプリ内の「開く／閉じる」操作のみ対象。ブラウザのタブ閉じ/リロードは従来どおり `useUnsavedGuard`（beforeunload）が担当。
+- 「全選択」廃止に伴い、ビュアー内テキストをワンクリックで全選択する導線は無くなった（手動の範囲選択は可能）。必要なら将来再追加を検討。
+- `git push` は未実施（運用ルールに従い手動）。本セッションの変更は未コミット。
+
+### 次ステップ
+
+- 結合一覧で各 PDF の 1 ページ目サムネ表示（視認性向上）を検討。
+
+---
+
+## 2026-05-30 — エントリ画面のレイアウト調整（タイトル追加・結合ボタンを枠外へ・結合画面を中央寄せ）
+
+### 実施内容
+
+- **タイトルと説明を追加**: エントリ画面の最上部に `<h1>PDF ビューア＆エディタ</h1>` と簡単な説明（「ブラウザだけで PDF を閲覧・編集できます（回転・削除・並べ替え・抽出・分割・結合）。」）を表示。
+- **「複数 PDF を結合」ボタンを枠外へ移設・強調**: ドラッグ&ドロップ枠の内側にあったアウトラインボタンを、枠の**下（外側）**へ移動し、primary 塗り＋`size=lg` でやや目立たせた。単一読み込みの導線（枠内「ファイルを選択」）と結合の導線を視覚的に分離。
+- **結合画面を前画面と同じ中央配置に**: `MergeIntake` の枠・タイトル・「結合してビュアーで開く」ボタンを画面中央寄せに変更（横は `items-center`＋`max-w-xl`、縦は親 `overflow-y-auto`＋子 `my-auto` でスクロール両立しつつ中央寄せ）。戻る矢印は左上に固定。`<main>` のネストを解消（`MergeIntake` のルートを `<main>`→フラグメント化、ラッパ `<main>` 側で `overflow-y-auto`）。
+- 文言重複の解消: 説明文と下部注記で「サーバーに送信されません」が重複していたため説明文側から削除（テストの単一一致を維持）。
+- `use context7`: Tailwind の中央寄せ（`items-center`/`justify-center`）とスクロール両立（`overflow-y-auto`＋`my-auto`）を context7 のドキュメントで確認。
+
+### 変更ファイル
+
+- `src/features/viewer/empty-state.tsx` — タイトル・説明追加、結合ボタンを枠外へ、結合モードラッパに `overflow-y-auto`。
+- `src/features/viewer/merge-intake.tsx` — ルートをフラグメント化、枠・タイトル・確定ボタンを中央寄せ（`my-auto`/`items-center`）、戻る矢印を左上に。
+- `e2e/home.spec.ts` — タイトル表示＋結合ボタンが枠外であることのテストを追加。
+- `.gitignore` — `/.playwright-mcp` を追加（MCP スクショ出力を除外）。
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記。
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）・ESLint・Prettier: エラーなし。
+- 単体テスト: **128 passed**（18 files、回帰なし）。本番ビルド（`next build`）: 成功（静的生成 4/4）。
+- E2E（chromium）: `home.spec.ts` **2 passed**（タイトル＋枠外ボタン含む）、`merge.spec.ts` **2 passed**。
+- **目視確認（Playwright スクショ, 1280×860）**: 単一画面はタイトル→枠（枠内に「ファイルを選択」）→枠外に primary の「複数 PDF を結合」→注記の順で中央に整列。結合画面はタイトル・枠・「結合してビュアーで開く」が画面中央に配置されることを確認。
+
+### Risks/TODO
+
+- 縦中央寄せ（`my-auto`）は結合一覧が長くなると上寄り＋スクロールへ自然に切り替わる（`overflow-y-auto`）。極端に多いファイル数でのスクロール体験は要観察。
+- `git push` は未実施（運用ルールに従い手動）。本セッションの変更は未コミット。
+
+### 次ステップ
+
+- 結合一覧で各 PDF の 1 ページ目サムネ表示（視認性向上）を検討。
+
+---
+
+## 2026-05-30 — 結合機能をエントリ画面へ移設（複数選択→順序確認→結合してビュアーへ）
+
+### 実施内容
+
+- **結合の起点をエントリ画面に新設**: PDF を開く画面のドロップゾーンに「複数 PDF を結合」ボタンを追加。押すと結合モードへ切り替わり、「複数の PDF をドラッグ &amp; ドロップ」枠＋クリック複数選択でファイルを集め、一覧で**順序の確認・修正**（@dnd-kit のドラッグ＆ドロップ＋上下ボタン＋個別削除）を行い、「結合してビュアーで開く」でビュアーへ遷移する。各ファイルのページ数は pdf.js（`loadPdfDocument`）で取得し proxy は即破棄。
+- **ビュアー起動経路を複数ファイル対応に拡張**: `viewer-store` に `mergeFiles: File[]` と `setFiles(files)` を追加（先頭を `file`、残りを `mergeFiles`、結合時のファイル名は既定 `merged.pdf`、`fileSize` は合計）。`viewer-layout` の bootstrap で、`mergeFiles` があれば全ソースを登録してから `editor-store.initMergedDocument` で**1 つの初期ドキュメント**として開く。これにより結合直後は履歴空・未保存でないクリーンな baseline になる（`mergePages` での「編集としての結合」とは異なり Undo で巻き戻らない）。
+- **ビュアー側の結合 UI を撤去（要望により一本化）**: 編集ツールバーの「結合」ボタンと関連入力、`useEditActions.merge`、`editor-store.mergePages` を削除。`applyOperation` の `merge` ケース（純関数）は将来用に保持。
+- `use context7`: @dnd-kit のソート（`useSortable`/`SortableContext`/`arrayMove`）の最新ガイドを context7 で確認。docs は v7 系（`@dnd-kit/react`）だが、本リポジトリは v6/v10 のクラシック API を使用中のため、既存 `thumbnail-list.tsx` のパターンに合わせて実装。
+
+### 作成ファイル
+
+- `src/features/viewer/merge-intake.tsx` — 結合インテーク UI（複数 D&D/選択・ページ数取得・並べ替え・確定）。`empty-state` から動的 import。
+- `e2e/merge.spec.ts` — 結合フローの E2E（複数選択→並べ替え→結合→5 ページ/merged.pdf 表示、2 件未満で結合ボタン無効）。
+
+### 変更ファイル
+
+- `src/store/viewer-store.ts` — `mergeFiles`/`setFiles` 追加、`setFile` で `mergeFiles` をクリア、`initialDocState` に `mergeFiles` を追加。
+- `src/store/editor-store.ts` — `initMergedDocument` 追加、`mergePages` 削除。
+- `src/features/viewer/viewer-layout.tsx` — bootstrap で `mergeFiles` を結合（単一は従来どおり `initDocument`）。
+- `src/features/viewer/empty-state.tsx` — 「複数 PDF を結合」ボタンと結合モード切替、`MergeIntake` の動的 import。
+- `src/features/editor/edit-toolbar.tsx` / `src/features/editor/use-edit-actions.ts` — ビュアーの結合ボタン・`merge` アクションを削除。
+- `src/lib/pdf/constants.ts` — `MERGED_PDF_NAME = "merged.pdf"` を追加。
+- `src/store/viewer-store.test.ts` / `src/store/editor-store.test.ts` / `src/features/viewer/empty-state.test.tsx` — テスト追加。
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md` — 追記。
+
+### 計測結果
+
+- 型チェック（`tsc --noEmit`）・ESLint: エラーなし。
+- 単体テスト: **128 passed**（18 files、121→128 へ +7：`setFiles` 4・`initMergedDocument` 2・結合モード切替 1）。回帰なし。
+- 本番ビルド（`next build`）: 成功（静的生成 4/4）。
+- E2E（chromium）: `merge.spec.ts` 2 passed＋`home.spec.ts`/`editor.spec.ts` の回帰確認も passed。結合フローで合計 5 ページ・`merged.pdf` 表示、並べ替え（b を先頭へ）反映、1 件時に結合ボタン無効を確認。
+
+### Risks/TODO
+
+- 結合ドキュメントは複数ソース構造のまま開くため、しおり（アウトライン）は**先頭ソースのみ**対応（`editor-store.sourceId` が先頭）。2 本目以降のしおりは表示されない（既存仕様の踏襲）。
+- 大量ファイル/総ページ数が推奨上限を超える場合は従来どおり警告のみ（合計で判定）。極端な件数では bootstrap の逐次読み込みに時間がかかる可能性あり。
+- `git push` は未実施（運用ルールに従い手動）。
+
+### 次ステップ
+
+- 結合一覧で各 PDF の 1 ページ目サムネ表示（視認性向上）を検討。
+- しおりの多ソース対応（結合後に全ソースのアウトラインを統合）を検討。
+
+---
+
 ## 2026-05-30 — サムネ回転表示を「短辺フィット」に変更（横長ページが回転で縮小しない）
 
 ### 実施内容

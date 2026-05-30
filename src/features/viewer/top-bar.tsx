@@ -1,33 +1,31 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   FileTextIcon,
   RedoIcon,
   SearchIcon,
-  TextSelectIcon,
   UndoIcon,
   UploadIcon,
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useViewerStore } from "@/store/viewer-store";
 import { editorSelectors, useEditorStore } from "@/store/editor-store";
 import { useSearchStore } from "@/store/search-store";
 import { SaveMenu } from "@/features/save/save-menu";
 import { ThemeToggle } from "./theme-toggle";
-
-/** メインビューア内のテキストを全選択する（描画済みページのみ）。 */
-function selectAllViewerText() {
-  const el = document.querySelector("[data-viewer-scroll]");
-  const selection = window.getSelection();
-  if (!el || !selection) return;
-  selection.removeAllRanges();
-  const range = document.createRange();
-  range.selectNodeContents(el);
-  selection.addRange(range);
-}
 
 function isPdfFile(file: File): boolean {
   return (
@@ -44,8 +42,31 @@ export function TopBar() {
   const redo = useEditorStore((s) => s.redo);
   const canUndo = useEditorStore(editorSelectors.canUndo);
   const canRedo = useEditorStore(editorSelectors.canRedo);
+  const isDirty = useEditorStore(editorSelectors.isDirty);
   const openSearch = useSearchStore((s) => s.setOpen);
   const inputRef = useRef<HTMLInputElement>(null);
+  // 未保存の変更がある状態で「開く / 閉じる」を選んだときの確認対象。
+  const [pendingAction, setPendingAction] = useState<null | "open" | "close">(
+    null,
+  );
+
+  const openPicker = () => inputRef.current?.click();
+
+  // 別ファイルを開く・閉じると現在の変更は失われる。未保存なら確認を挟む。
+  const handleOpen = () => {
+    if (fileName && isDirty) setPendingAction("open");
+    else openPicker();
+  };
+  const handleClose = () => {
+    if (isDirty) setPendingAction("close");
+    else clearFile();
+  };
+  const confirmPending = () => {
+    const action = pendingAction;
+    setPendingAction(null);
+    if (action === "open") openPicker();
+    else if (action === "close") clearFile();
+  };
 
   return (
     <header className="flex items-center gap-3 border-b px-4 py-2">
@@ -55,17 +76,12 @@ export function TopBar() {
       </div>
 
       <div className="ml-2 flex items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => inputRef.current?.click()}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={handleOpen}>
           <UploadIcon aria-hidden />
           開く
         </Button>
         {fileName && (
-          <Button type="button" variant="ghost" size="sm" onClick={clearFile}>
+          <Button type="button" variant="ghost" size="sm" onClick={handleClose}>
             <XIcon aria-hidden />
             閉じる
           </Button>
@@ -104,16 +120,7 @@ export function TopBar() {
             onClick={() => openSearch(true)}
           >
             <SearchIcon aria-hidden />
-            検索
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={selectAllViewerText}
-          >
-            <TextSelectIcon aria-hidden />
-            全選択
+            テキストを検索
           </Button>
         </div>
       )}
@@ -144,6 +151,32 @@ export function TopBar() {
           e.target.value = "";
         }}
       />
+
+      <AlertDialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>未保存の変更があります</AlertDialogTitle>
+            <AlertDialogDescription>
+              現在開いている PDF への変更はまだ保存されていません。このまま
+              {pendingAction === "open" ? "別のファイルを開く" : "閉じる"}
+              と、変更は失われます。よろしいですか？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPending}>
+              {pendingAction === "open"
+                ? "変更を破棄して開く"
+                : "変更を破棄して閉じる"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 }

@@ -16,6 +16,7 @@
 /test-results
 /blob-report
 /playwright/.cache
+/.playwright-mcp
 
 # 一時作業ファイル（スクショ・デバッグ・計測レポート等）
 /tmp

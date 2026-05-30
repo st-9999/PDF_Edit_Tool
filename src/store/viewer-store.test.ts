@@ -195,7 +195,50 @@ describe("ファイル設定", () => {
     useViewerStore.getState().clearFile();
     const state = useViewerStore.getState();
     expect(state.file).toBeNull();
+    expect(state.mergeFiles).toEqual([]);
     expect(state.numPages).toBe(0);
     expect(state.status).toBe("idle");
+  });
+
+  it("setFiles で先頭を file、残りを mergeFiles に設定し既定名 merged.pdf にする", () => {
+    const a = new File([new Uint8Array([1, 2])], "a.pdf");
+    const b = new File([new Uint8Array([3])], "b.pdf");
+    const c = new File([new Uint8Array([4, 5, 6])], "c.pdf");
+    useViewerStore.getState().setFiles([a, b, c]);
+    const state = useViewerStore.getState();
+    expect(state.file).toBe(a);
+    expect(state.mergeFiles).toEqual([b, c]);
+    expect(state.fileName).toBe("merged.pdf");
+    // fileSize は全ファイルの合計
+    expect(state.fileSize).toBe(2 + 1 + 3);
+    expect(state.status).toBe("loading");
+  });
+
+  it("setFiles に 1 件だけ渡すと結合せず元のファイル名を使う", () => {
+    const only = new File([new Uint8Array([1])], "single.pdf");
+    useViewerStore.getState().setFiles([only]);
+    const state = useViewerStore.getState();
+    expect(state.file).toBe(only);
+    expect(state.mergeFiles).toEqual([]);
+    expect(state.fileName).toBe("single.pdf");
+  });
+
+  it("setFiles に空配列を渡しても状態を変更しない", () => {
+    const prev = new File([new Uint8Array([9])], "prev.pdf");
+    useViewerStore.getState().setFile(prev);
+    useViewerStore.getState().setFiles([]);
+    expect(useViewerStore.getState().file).toBe(prev);
+  });
+
+  it("setFile は前回の mergeFiles をクリアする", () => {
+    const a = new File([new Uint8Array([1])], "a.pdf");
+    const b = new File([new Uint8Array([2])], "b.pdf");
+    useViewerStore.getState().setFiles([a, b]);
+    const single = new File([new Uint8Array([3])], "single.pdf");
+    useViewerStore.getState().setFile(single);
+    const state = useViewerStore.getState();
+    expect(state.file).toBe(single);
+    expect(state.mergeFiles).toEqual([]);
+    expect(state.fileName).toBe("single.pdf");
   });
 });

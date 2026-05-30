@@ -1,5 +1,8 @@
 import { withBasePath } from "@/lib/config";
 
+/** 複数PDFを結合して開いたときの既定ファイル名（保存時にユーザーが変更可能）。 */
+export const MERGED_PDF_NAME = "merged.pdf";
+
 /** ズーム倍率の下限・上限・刻み・既定値（1.0 = 100%）。 */
 export const ZOOM_MIN = 0.25;
 export const ZOOM_MAX = 5;

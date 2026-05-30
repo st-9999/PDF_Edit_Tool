@@ -1,15 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   FileOutputIcon,
-  FilePlus2Icon,
+  LayoutGridIcon,
   RotateCcwIcon,
   RotateCwIcon,
   ScissorsIcon,
   Trash2Icon,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -22,26 +21,28 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { editorSelectors, useEditorStore } from "@/store/editor-store";
+import { useViewerStore } from "@/store/viewer-store";
 import { ROTATION_STEP } from "@/lib/editor/operations";
+import { cn } from "@/lib/utils";
 import { useEditActions } from "./use-edit-actions";
 
-function isPdfFile(file: File): boolean {
-  return (
-    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
-  );
-}
-
-/** ページ操作ツールバー。回転/削除/抽出/分割は選択時のみ活性、結合は常時。 */
+/** ページ操作ツールバー。回転/削除/抽出/分割は選択時のみ活性。 */
 export function EditToolbar() {
   const selectedCount = useEditorStore(editorSelectors.selectedCount);
-  const { rotate, remove, extract, split, merge } = useEditActions();
+  const { rotate, remove, extract, split } = useEditActions();
+  const setOrganize = useViewerStore((s) => s.setOrganize);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const mergeInputRef = useRef<HTMLInputElement>(null);
   const hasSelection = selectedCount > 0;
 
   return (
     <div className="flex flex-wrap items-center gap-1 border-b px-4 py-1.5">
-      <span className="text-muted-foreground mr-2 text-xs">
+      <span
+        className={cn(
+          "mr-2 text-xs",
+          // 選択中は他のツールバーテキストと同じ前景色で表示し、薄さを解消する
+          hasSelection ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
         {hasSelection ? `${selectedCount} ページ選択中` : "ページ未選択"}
       </span>
 
@@ -105,27 +106,11 @@ export function EditToolbar() {
         type="button"
         size="sm"
         variant="ghost"
-        onClick={() => mergeInputRef.current?.click()}
+        onClick={() => setOrganize(true)}
       >
-        <FilePlus2Icon aria-hidden />
-        結合
+        <LayoutGridIcon aria-hidden />
+        ページを一覧整理
       </Button>
-      <input
-        ref={mergeInputRef}
-        type="file"
-        accept="application/pdf,.pdf"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (!file) return;
-          if (!isPdfFile(file)) {
-            toast.error("PDF ファイルを選択してください");
-            return;
-          }
-          void merge(file);
-        }}
-      />
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>

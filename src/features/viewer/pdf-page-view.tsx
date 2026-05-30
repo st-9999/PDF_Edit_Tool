@@ -94,13 +94,26 @@ export function PdfPageView({
     "--total-scale-factor": scale,
   } as CSSProperties;
 
+  // pdf.js の TextLayer は span を「未回転ページ座標」に配置するため、
+  // 回転はコンテナ自体を CSS で回す（data-main-rotation）。コンテナの寸法は
+  // 未回転（90/270 では width/height を入れ替え）で渡し、回転後に canvas と重なる。
+  const rot = ((rotation % 360) + 360) % 360;
+  const swap = rot % 180 === 90;
+  const layerWidth = swap ? height : width;
+  const layerHeight = swap ? width : height;
+
   return (
     <div
       className="bg-background relative shadow-sm ring-1 ring-black/5"
       style={style}
     >
       <canvas ref={canvasRef} className={cn("absolute top-0 left-0 block")} />
-      <div ref={textRef} className="textLayer" />
+      <div
+        ref={textRef}
+        className="textLayer"
+        data-main-rotation={rot}
+        style={{ width: layerWidth, height: layerHeight }}
+      />
     </div>
   );
 }

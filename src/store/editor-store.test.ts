@@ -16,6 +16,31 @@ describe("editor-store: 初期化", () => {
     expect(editorSelectors.isDirty(get())).toBe(false);
     expect(editorSelectors.canUndo(get())).toBe(false);
   });
+
+  it("initMergedDocument で全ソースを順に連結し、クリーンな baseline で開く", () => {
+    get().initMergedDocument([
+      { sourceId: "a", numPages: 2 },
+      { sourceId: "b", numPages: 3 },
+    ]);
+    const pages = get().pages;
+    // 合計ページ数 = 各ソースのページ数の和、順序はソース順
+    expect(pages).toHaveLength(5);
+    expect(pages.map((p) => p.sourceId)).toEqual(["a", "a", "b", "b", "b"]);
+    expect(pages.map((p) => p.sourceIndex)).toEqual([0, 1, 0, 1, 2]);
+    // 先頭ソースが基準（しおり対応）
+    expect(get().sourceId).toBe("a");
+    // 結合直後は未保存でなく、Undo 履歴も空（結合は初期状態）
+    expect(editorSelectors.isDirty(get())).toBe(false);
+    expect(editorSelectors.canUndo(get())).toBe(false);
+  });
+
+  it("initMergedDocument に空配列を渡すと no-op", () => {
+    get().initDocument(2, "doc");
+    get().initMergedDocument([]);
+    // 直前の状態を維持
+    expect(get().sourceId).toBe("doc");
+    expect(get().pages).toHaveLength(2);
+  });
 });
 
 describe("editor-store: 選択 + 回転 + Undo/Redo", () => {

@@ -51,4 +51,19 @@ describe("EmptyState", () => {
     fireEvent.change(fileInput(), { target: { files: [txt] } });
     expect(useViewerStore.getState().file).toBeNull();
   });
+
+  it("「複数 PDF を結合」ボタンを表示し、押すと結合モードへ切り替わる", () => {
+    render(<EmptyState />);
+    const mergeButton = screen.getByRole("button", {
+      name: "複数 PDF を結合",
+    });
+    expect(mergeButton).toBeInTheDocument();
+
+    fireEvent.click(mergeButton);
+    // 結合モードへ切り替わり、単一読み込みのドロップゾーンは表示されない
+    // （MergeIntake 本体は動的 import のためフォールバックが表示される）
+    expect(
+      screen.queryByRole("button", { name: "PDFの読み込み" }),
+    ).not.toBeInTheDocument();
+  });
 });
