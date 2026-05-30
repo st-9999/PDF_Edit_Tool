@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   clearSelection,
+  collapseToSingle,
   emptySelection,
   selectAll,
   selectRange,
@@ -66,5 +67,36 @@ describe("selectAll / clear", () => {
   it("clear は空集合", () => {
     expect(arr(clearSelection())).toEqual([]);
     expect(clearSelection().anchor).toBeNull();
+  });
+});
+
+describe("collapseToSingle (複数選択モード解除)", () => {
+  it("preferId が選択中ならそれを残す", () => {
+    const s = selectAll(order); // a..e, anchor=a
+    const r = collapseToSingle(s, order, "c");
+    expect(arr(r)).toEqual(["c"]);
+    expect(r.anchor).toBe("c");
+  });
+
+  it("preferId 未指定なら anchor を残す", () => {
+    const s = selectRange(selectSingle("b"), order, "d"); // b,c,d anchor=b
+    const r = collapseToSingle(s, order);
+    expect(arr(r)).toEqual(["b"]);
+    expect(r.anchor).toBe("b");
+  });
+
+  it("preferId が選択外・anchor も選択外なら並び順で先頭の選択を残す", () => {
+    // c,d を選択（anchor は選択外の状態を作る）
+    const s = { selected: new Set(["d", "c"]), anchor: "x" };
+    const r = collapseToSingle(s, order, "a");
+    expect(arr(r)).toEqual(["c"]);
+    expect(r.anchor).toBe("c");
+  });
+
+  it("選択が 1 件以下なら現状維持", () => {
+    const single = selectSingle("b");
+    expect(collapseToSingle(single, order)).toBe(single);
+    const empty = emptySelection();
+    expect(collapseToSingle(empty, order)).toBe(empty);
   });
 });

@@ -49,3 +49,23 @@ export function selectAll(orderedIds: string[]): SelectionState {
 export function clearSelection(): SelectionState {
   return emptySelection();
 }
+
+/**
+ * 複数選択を 1 件に畳む（複数選択モード解除時に使用）。
+ * 残す 1 件は「`preferId`（選択中なら）→ `anchor`（選択中なら）→ 現在の並び順で
+ * 最初に選択されている ID」の優先順で決める。選択が 1 件以下なら現状維持、
+ * 選択が空なら空のまま。
+ */
+export function collapseToSingle(
+  state: SelectionState,
+  orderedIds: string[],
+  preferId?: string,
+): SelectionState {
+  if (state.selected.size <= 1) return state;
+  if (preferId !== undefined && state.selected.has(preferId))
+    return selectSingle(preferId);
+  if (state.anchor !== null && state.selected.has(state.anchor))
+    return selectSingle(state.anchor);
+  const first = orderedIds.find((id) => state.selected.has(id));
+  return first === undefined ? emptySelection() : selectSingle(first);
+}

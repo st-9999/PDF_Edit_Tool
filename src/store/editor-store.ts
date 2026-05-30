@@ -18,6 +18,7 @@ import {
 } from "@/lib/editor/operations";
 import {
   clearSelection,
+  collapseToSingle,
   emptySelection,
   selectAll as selectAllIds,
   selectRange,
@@ -32,6 +33,8 @@ interface EditorState {
   /** 現在のページ列（history から導出。subscribe 用に保持）。 */
   pages: PageRef[];
   selection: SelectionState;
+  /** 複数選択モード。OFF（既定）はクリックで単一選択のみ、ON でクリック加除/Shift 範囲選択。 */
+  multiSelect: boolean;
   /** 上書き保存用のファイルハンドル（FS Access で保存/オープン時に設定）。 */
   fileHandle: FileSystemFileHandle | null;
   /** 最後に保存した時点の適用済み操作数（未保存判定の基準）。 */
@@ -59,6 +62,11 @@ interface EditorState {
   selectRangeTo: (id: string) => void;
   selectAll: () => void;
   clear: () => void;
+  /**
+   * 複数選択モードの切替。OFF にするときは選択を 1 件へ畳む
+   * （`preferId`＝現在の閲覧ページ等を優先して残す）。
+   */
+  setMultiSelect: (on: boolean, preferId?: string) => void;
 }
 
 const emptyHistory: EditHistory = { initial: [], applied: [], undone: [] };
@@ -72,6 +80,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   history: emptyHistory,
   pages: [],
   selection: emptySelection(),
+  multiSelect: false,
   fileHandle: null,
   savedAppliedLength: 0,
 
@@ -82,6 +91,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       history: createHistory(initial),
       pages: initial,
       selection: emptySelection(),
+      multiSelect: false,
       fileHandle: null,
       savedAppliedLength: 0,
     });
@@ -93,6 +103,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       history: emptyHistory,
       pages: [],
       selection: emptySelection(),
+      multiSelect: false,
       fileHandle: null,
       savedAppliedLength: 0,
     }),
@@ -148,6 +159,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   selectAll: () =>
     set({ selection: selectAllIds(get().pages.map((p) => p.id)) }),
   clear: () => set({ selection: clearSelection() }),
+
+  setMultiSelect: (on, preferId) =>
+    set((state) =>
+      on
+        ? { multiSelect: true }
+        : {
+            multiSelect: false,
+            selection: collapseToSingle(
+              state.selection,
+              state.pages.map((p) => p.id),
+              preferId,
+            ),
+          },
+    ),
 }));
 
 /** セレクタ補助（コンポーネントから利用）。 */

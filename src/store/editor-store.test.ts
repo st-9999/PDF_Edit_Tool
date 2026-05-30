@@ -109,3 +109,39 @@ describe("editor-store: Ctrl トグル選択", () => {
     expect(editorSelectors.selectedCount(get())).toBe(0);
   });
 });
+
+describe("editor-store: 複数選択モード", () => {
+  beforeEach(() => get().initDocument(4, "doc"));
+
+  it("初期は複数選択モード OFF", () => {
+    expect(get().multiSelect).toBe(false);
+  });
+
+  it("ON で切替、OFF で選択を 1 件に畳む（preferId 優先）", () => {
+    const [a, b, c] = ids();
+    get().setMultiSelect(true);
+    expect(get().multiSelect).toBe(true);
+
+    get().selectClick(a!);
+    get().selectToggle(b!);
+    get().selectToggle(c!);
+    expect(editorSelectors.selectedCount(get())).toBe(3);
+
+    // 解除時に preferId=b を残す
+    get().setMultiSelect(false, b!);
+    expect(get().multiSelect).toBe(false);
+    expect(editorSelectors.selectedCount(get())).toBe(1);
+    expect(get().selection.selected.has(b!)).toBe(true);
+  });
+
+  it("preferId が選択外なら anchor を残す", () => {
+    const [a, b, d] = [ids()[0], ids()[1], ids()[3]];
+    get().setMultiSelect(true);
+    get().selectClick(a!); // anchor=a
+    get().selectToggle(b!);
+    // d は選択していない → preferId=d は無視され anchor=b（最後の toggle が anchor）を残す
+    get().setMultiSelect(false, d!);
+    expect(editorSelectors.selectedCount(get())).toBe(1);
+    expect(get().selection.selected.has(b!)).toBe(true);
+  });
+});
