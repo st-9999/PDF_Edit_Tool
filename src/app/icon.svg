@@ -1,0 +1,20 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 文書本体（角丸・右上に折り返し） -->
+  <path
+    d="M7 4a2 2 0 0 1 2-2h9.2a2 2 0 0 1 1.42.6l5.8 5.86a2 2 0 0 1 .58 1.41V28a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V4z"
+    fill="#E0392E"
+  />
+  <!-- 折り返し（ページの角） -->
+  <path d="M18 2.2 26 10.3h-6a2 2 0 0 1-2-2V2.2z" fill="#B5271F" />
+  <!-- PDF ラベル -->
+  <text
+    x="16.3"
+    y="23.5"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="8.5"
+    font-weight="800"
+    letter-spacing="-0.4"
+    text-anchor="middle"
+    fill="#ffffff"
+  >PDF</text>
+</svg>
