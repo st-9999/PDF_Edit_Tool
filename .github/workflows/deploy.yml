@@ -29,7 +29,11 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # npm ci ではなく npm install を使用。Tailwind v4 の wasm フォールバック
+        # (@tailwindcss/oxide-wasm32-wasi) が要求する @emnapi/* など、プラットフォーム
+        # 依存の optional 依存は Windows 生成の lock に含められず npm ci が同期エラーに
+        # なるため、ランナー上で解決させる（静的サイトのデプロイ用途で reproducibility 影響は軽微）。
+        run: npm install --no-audit --no-fund
 
       - name: Lint
         run: npm run lint
