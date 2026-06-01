@@ -24,7 +24,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # pdfjs-dist@5.7 は Node >=22.13 を要求するため 22 系を使用
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
