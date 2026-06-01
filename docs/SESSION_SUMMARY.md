@@ -13,6 +13,44 @@
 
 ---
 
+## 2026-06-01 — 本番デプロイ（既存リポジトリ置換）＋ CI 修正 ＋ ファビコン変更 ＋ リポジトリ整理
+
+### 実施内容
+
+- **既存リポジトリの置換**: 旧システムが入っていた `st-9999/PDF_Edit_Tool` を本システムへ置き換え（ユーザー承認のもと `git push --force origin main` で旧履歴を全削除）。GitHub Pages の Source は既に「GitHub Actions」で、basePath はリポジトリ名から自動導出（`/PDF_Edit_Tool`）のためコード修正不要。公開 URL は従来どおり `https://st-9999.github.io/PDF_Edit_Tool/`。
+- **CI 修正**: 初回デプロイが `npm ci` の lock 不同期で失敗。原因は Tailwind v4 の wasm フォールバック `@tailwindcss/oxide-wasm32-wasi` が要求する `@emnapi/core`/`@emnapi/runtime` 等のプラットフォーム依存 optional 依存を Windows 生成の `package-lock.json` に含められない npm の既知制約。`.github/workflows/deploy.yml` の依存インストールを `npm install` に変更し、CI Node を 22 へ更新して解消（3 回目のデプロイで成功）。
+- **ファビコン変更**: Next.js デフォルトの `favicon.ico` を削除し、PDF 文書モチーフの `src/app/icon.svg` を追加。App Router が `type="image/svg+xml"` の icon link を自動生成。
+- **リポジトリ整理**: 実ソースが入った 8 ディレクトリの不要 `.gitkeep` を削除。ローカルの再生成可能アーティファクト（`.next`/`out`/`test-results`/`playwright-report`/`.playwright-mcp`/`tmp`/`tsconfig.tsbuildinfo`、約 271MB）を削除。`main`/`develop` をローカル同期。
+
+### 作成ファイル
+
+- `src/app/icon.svg` — タブアイコン（SVG）
+
+### 変更ファイル
+
+- `.github/workflows/deploy.yml` — `npm ci`→`npm install`、Node 20→22
+- `package-lock.json` — npm 11 で再生成
+- 削除: `src/app/favicon.ico`、`src/**/.gitkeep`（8 件）
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md`
+
+### 計測結果
+
+- デプロイ: `Deploy to GitHub Pages` **success**（失敗 2 → 成功 1）。
+- ライブ確認: `https://st-9999.github.io/PDF_Edit_Tool/` → **HTTP 200**、`<title>PDF ビューア＆エディタ</title>`。
+- ローカル `next build` 成功（`/icon.svg` ルート生成、`<link rel="icon" type="image/svg+xml">` 出力）。
+- 解放ディスク: 約 271MB（gitignore 済みアーティファクト）。
+
+### Risks/TODO
+
+- GitHub Actions の Node 20 系アクション（checkout/setup-node/upload-pages-artifact 等）に非推奨警告（2026-06-16 以降 Node 24 強制）。デプロイは成功しているが、アクションのメジャー更新が将来必要。
+- SVG ファビコンは主要モダンブラウザ対応。ごく一部の旧環境は `.ico` を要求（必要なら併設可）。タブ反映はブラウザキャッシュが強く、再読込が必要な場合あり。
+
+### 次ステップ
+
+- 以降の機能開発は `develop` ブランチで実施。
+
+---
+
 ## 2026-05-30 — 報告書しおり自動作成（v3：本文見出しからしおりを自動生成）
 
 ### 実施内容
