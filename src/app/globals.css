@@ -132,6 +132,21 @@
   }
 }
 
+/* pdf.js の TextLayer が文字幅計測用に document.body へ直接 append する canvas。
+   Tailwind Preflight の `canvas { display: block }` が効くと既定の 300×150px で
+   フローに居座り、body に約 150px の余剰スクロール高を生む。body は overflow:hidden
+   （＝ビューポートへ伝播）でスクロールバーが出ないため、scrollIntoView が
+   ドキュメントごと上へスクロールすると上部バーが戻せなくなる。
+   pdfjs-dist/web/pdf_viewer.css と同じ規則を移植して無害化する。 */
+.hiddenCanvasElement {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 /* pdf.js テキストレイヤ（選択・コピー用）。`--total-scale-factor` は呼び出し側で表示スケールを設定する。 */
 .textLayer {
   position: absolute;

@@ -35,7 +35,7 @@ export function EditToolbar() {
   const hasSelection = selectedCount > 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b px-4 py-1.5">
+    <div className="flex shrink-0 flex-wrap items-center gap-1 border-b px-4 py-1.5">
       <span
         className={cn(
           "mr-2 text-xs",

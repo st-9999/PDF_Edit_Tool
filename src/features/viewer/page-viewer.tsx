@@ -363,7 +363,14 @@ export function PageViewer() {
 
   useEffect(() => {
     if (navSeq === 0 || viewMode !== "continuous") return;
-    pageEls.current.get(navTarget)?.scrollIntoView({ block: "start" });
+    const root = scrollRef.current;
+    const el = pageEls.current.get(navTarget);
+    if (!root || !el) return;
+    // scrollIntoView は祖先のスクロールコンテナを「すべて」動かす（ドキュメントを含む）ため使わない。
+    // 対象ページの上端をビュアー可視領域の上端に合わせる差分だけを、このコンテナに閉じて適用する。
+    const delta =
+      el.getBoundingClientRect().top - root.getBoundingClientRect().top;
+    root.scrollTo({ top: root.scrollTop + delta });
   }, [navSeq, navTarget, viewMode]);
 
   const displayPercent = Math.round(effectiveScale * 100);

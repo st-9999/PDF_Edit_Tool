@@ -70,7 +70,7 @@ export function TopBar() {
   };
 
   return (
-    <header className="flex items-center gap-3 border-b px-4 py-2">
+    <header className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
       <div className="flex items-center gap-2 font-semibold">
         <FileTextIcon className="size-5" aria-hidden />
         <span>PDF ビューア＆エディタ</span>
