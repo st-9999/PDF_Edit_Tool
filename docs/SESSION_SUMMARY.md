@@ -13,6 +13,92 @@
 
 ---
 
+## 2026-07-16 — 不具合 3 件の修正（上部バー消失 / 暗号化 PDF が保存できない / A3 横の一覧が重なる）
+
+### 実施内容
+
+報告された 3 件の不具合について、原因を特定してから修正した。
+
+**1. 左ペインのサムネイル選択で上部バーが消える（fix(viewer)）**
+
+- 上部バーは**一度もアンマウントされていなかった**。`TopBar` は無条件描画、`EditToolbar` の条件（`ready && !organize`）もサムネイル選択では変化しない。実際は**アプリごとビューポート外へスクロール**していた。
+- 起点は pdf.js の `TextLayer` が文字幅計測用に `document.body` へ直接 append する `<canvas class="hiddenCanvasElement">`。pdf.js 本体（`web/pdf_viewer.css`）はこれを `display:none` にしているが、本アプリは `.textLayer` の規則だけを移植して**この 1 行を持っていなかった**。結果 Tailwind Preflight の `canvas { display: block }` が効き、既定 300×150px でフローに居座って `<body>` に約 150px の余剰スクロール高を作っていた。`layout.tsx` のコメントはこの canvas の存在自体は認識していたが、CSS 側の対処が抜けていた。
+- そこへサムネイル選択（`requestPage` → `navSeq` 変化）が `scrollIntoView({ block: "start" })` を呼ぶ。この API は仕様上**祖先のスクロールコンテナすべて**を動かすため、ドキュメント自身が約 110px スクロールし上部バー＋編集ツールバーが画面外へ。`body` は `overflow:hidden`（ビューポートへ伝播）でスクロールバーが無く、利用者は戻せなかった。
+- 対処: (1) `.hiddenCanvasElement` の規則を `globals.css` へ移植（根本原因）、(2) ページ送りを `[data-viewer-scroll]` 内に閉じた明示スクロールへ変更（`scrollIntoView` の祖先波及を断つ）、(3) `<html>` に `overflow-hidden` を追加してビューポートが決してスクロールしないよう二重化、(4) `TopBar`/`EditToolbar` に `shrink-0`。
+
+**2. 保存できない PDF がある（`Reference/logo.pdf`）（fix(save) / feat(pdf)）**
+
+- `logo.pdf` は **暗号化 PDF**（`/Filter /Standard`, V4/R4, RC4-128, `/P -1340`＝編集制限、**ユーザーパスワードは空**）。Illustrator の「編集を制限」に相当し、閲覧は自由なので pdf.js では正常表示され、保存時に pdf-lib が `Input document to PDFDocument.load is encrypted` で失敗していた（`build.ts:114`）。全保存経路（保存/名前を付けて/上書き/分割/抽出）が同じ関数を通るため全滅。
+- 回避策は無いことを実測で確認: `ignoreEncryption: true` は中身が暗号文のままで `Expected instance of PDFDict...` に至る／pdf.js の `saveDocument()` は**元の暗号化バイト列をそのまま返す**（341,540 バイトで入力と同一・`/Encrypt` 残存）／pdf.js の暗号実装は `pdf.worker.mjs` から export されていない（`WorkerMessageHandler` のみ）。
+- ユーザー判断（提示 3 案から選択）に基づき **自前で復号を実装**し、**保護は解除して保存**する方針とした。
+- pdf-lib のパーサが **xref オフセットを使わず線形に走査する**（`parseHeader` → `parseDocumentSection` → `parseIndirectObjects`）ことを実装確認したうえで、「復号して平文 PDF に書き直し、pdf-lib へ渡す」設計を採用。`/Encrypt` 辞書と XRef ストリームは出力から落とし、xref テーブルとトレーラを再生成する。
+- R6 の鍵導出（Algorithm 2.B）は自作前に **pdf.js の `PDF20._hash` 実装と突き合わせて手順を検証**した（`k` がラウンドごとに 32/48/64 バイトへ変化する点を含む）。
+
+**3. A3 横のページで一覧表示が重なる（fix(organize)）**
+
+- サムネイルは「**短辺**＝基準幅」でスケールしていた（回転不変にする意図）。このため A3 横（1191×842pt）の実寸は `140 × 1.414 = 198px` 幅になる一方、グリッドのトラック幅は `thumbnailWidth + 24 = 164px` 前提で、`justify-center` により左右へはみ出して隣と重なっていた。
+- 回転後ページを「幅 `W` × 高さ `W × 1.414`」のセルへ収めるスケール（既存の `computeFitScale(..., "page", ...)` を再利用）へ変更。実寸は必ず `W` 以下に収まる。A4 縦（比 1.41513）はセル比 1.414 とほぼ一致するため従来の見た目を維持する（幅 139.89px＝差 0.11px）。
+
+**副次的な修正**: 保存失敗時に pdf-lib の英語メッセージがそのままトーストに出ていた問題（日本語メッセージのみ表示し、他は定型文＋コンソール詳細へ）、および Worker でのビルド失敗を本スレッドで無駄に再実行して UI を塞いでいた問題（`WorkerUnavailableError` で「Worker が使えない」と「ビルドが失敗した」を区別）。
+
+### 作成ファイル
+
+- `src/lib/pdf/decrypt/md5.ts` — MD5（Web Crypto に無いため自前）
+- `src/lib/pdf/decrypt/rc4.ts` — RC4
+- `src/lib/pdf/decrypt/aes.ts` — AES-128/256 CBC（テーブルは実行時生成）＋ PKCS#7 の寛容な除去
+- `src/lib/pdf/decrypt/standard-security.ts` — 標準セキュリティハンドラの鍵導出・検証・復号器
+- `src/lib/pdf/decrypt/scanner.ts` — 間接オブジェクトの走査（最小トークナイザ）
+- `src/lib/pdf/decrypt/index.ts` — `decryptPdfIfNeeded()`（文書の再構築）
+- `src/lib/pdf/decrypt/md5.test.ts` / `aes.test.ts` / `decrypt.test.ts` — 公式ベクタ＋往復テスト
+- `src/lib/pdf/render.test.ts` — `computeFitScale` とサムネイルのセル収め
+- `e2e/landscape-organize.spec.ts` — A3 横の重なり／上部バー消失の回帰テスト
+
+### 変更ファイル
+
+- `src/app/globals.css` — `.hiddenCanvasElement` 規則を移植（不具合 1 の根本原因）
+- `src/app/layout.tsx` — `<html>` に `overflow-hidden`
+- `src/features/viewer/page-viewer.tsx` — ページ送りを `scrollIntoView` から container 内スクロールへ
+- `src/features/viewer/top-bar.tsx` / `src/features/editor/edit-toolbar.tsx` — `shrink-0`
+- `src/features/viewer/thumbnail.tsx` — 短辺基準 → セル収め（`computeFitScale` を再利用）
+- `src/features/viewer/organize-view.tsx` — グリッド項目に `min-w-0`
+- `src/lib/editor/build.ts` — 読み込み前に `decryptPdfIfNeeded()` を通す
+- `src/lib/pdf/build-runner.ts` — `WorkerUnavailableError` を導入しフォールバック条件を限定
+- `src/features/save/use-save.ts` — `saveErrorMessage()` で内部英語メッセージの露出を防止
+- `docs/CHANGELOG.md` / `docs/SESSION_SUMMARY.md`
+
+### 計測結果
+
+- **ユニットテスト: 221 → 266 通過 / 266（24 → 28 ファイル）**。新規 45 件（MD5 14・AES 11・復号 12・`computeFitScale`/サムネイル 8）。既存 221 件は全て通過を維持。
+- **暗号プリミティブは公式ベクタで検証**: MD5 = RFC 1321 Appendix A.5 全 7 ベクタ＋ブロック境界（55/56/64B）、RC4 = 既知ベクタ 3 件、AES = FIPS-197 C.1（AES-128）/ C.3（AES-256）、AES-CBC = NIST SP 800-38A F.2.1/F.2.2/F.2.5/F.2.6。
+- **`Reference/logo.pdf` の復号を実データで検証**（`Reference/` は Git 管理外のため、当該テストはファイルが在る環境でのみ実行し、無ければ skip）:
+  - 復号前: pdf-lib は `encrypted` で失敗 → 復号後: **2 ページを読み込み・保存成功**。
+  - 忠実性: ページ寸法 `842×595` が前後一致、**描画オペレータ数が 1746 / 1161 で完全一致**（コンテンツストリームがバイト単位で正しい）、`/Info /Title` = `"logo"` が復元（＝文字列復号と鍵導出が仕様どおり）、出力に `/Encrypt` 無し。
+  - 構造: オブジェクト 27 → 24（= 27 − XRef ストリーム 2 − `/Encrypt` 1）、`/ObjStm` 3 件は保持（＝オブジェクトストリームも正しく復号）。データ欠落なし。
+- **実ブラウザ（Playwright）で 3 件すべてを確認**:
+  - 不具合 1: サムネイル選択後 `documentElement.scrollTop = 0`、`header` が `top:0 / height:49`、編集ツールバーが `top:49 / height:45` で可視。`hiddenCanvasElement` は 0×0・`display:none`、ドキュメントの余剰高 **150px → 0**。
+  - 不具合 2: `logo.pdf` を開いてページ回転 → 保存が成功し、**277,580 バイト・`%PDF-1.7`・`/Encrypt` 無し**を書き出し（コンソールエラー 0）。
+  - 不具合 3: A3 横 9 ページの一覧で **重なり 0 件**、サムネ実寸 198×140 → **140×98**、グリッド外へのはみ出し・横スクロールとも無し。
+- **回帰テストが不具合を実際に捕捉することを確認（Red/Green）**: 修正を一時的に戻すと、A3 の重なりテストは **9 組・各 29.5px の重なり**と canvas 幅 **198px** を検出して失敗、`.hiddenCanvasElement` 規則を無効化すると計測用 canvas のテストが失敗した。
+- **E2E: Chromium 27/27 通過。Firefox 26/27**（唯一の失敗 `text-selection` は Firefox が `clipboard-read` 権限に未対応で `browser.newContext: Unknown permission: clipboard-read` となるもの。**本変更前（stash して確認した baseline）でも同じく失敗**する既存の環境依存で、本修正とは無関係）。
+- `npx tsc --noEmit` / `npx eslint` / `npm run build`（Next.js 16.2.6 Turbopack, 静的 4 ページ生成）すべて成功。
+
+### Risks/TODO
+
+- **保護設定の解除**: 暗号化 PDF を保存すると出力は**暗号化なしの通常 PDF**になり、元の権限フラグ（`logo.pdf` は `/P -1340`＝編集制限）は引き継がれない。ユーザー承認済みの方針（qpdf `--decrypt` 相当）。現状は確認ダイアログ無しで解除するため、必要なら保存時に注意喚起を出す余地がある。
+- **AES 系（AESV2 / AESV3）は実ファイルでの検証が未了**。暗号プリミティブは NIST 公式ベクタで検証済みで、鍵導出も RC4 系は `logo.pdf` の実データで裏取りできているが、AES 暗号化 PDF の実サンプルが手元に無く、文書全体の往復は RC4-128（R4）でのみ確認している。AES-256（R6）の Algorithm 2.B は pdf.js 実装と手順を突き合わせて検証したにとどまる。AES 暗号化 PDF の入手時に再確認したい。
+- **オーナーパスワードのみでの復号は未対応**。空ユーザーパスワードで開ける文書のみが対象で、閲覧に実パスワードが必要な文書は `PdfPasswordRequiredError`（日本語）で失敗する。パスワード入力 UI は未実装。
+- 復号は保存のたびに実行される（結果をキャッシュしていない）。`logo.pdf`（341KB）では体感できる遅延は無いが、巨大な暗号化 PDF では保存ごとに走る点が気になれば `sources` 単位でのキャッシュを検討。
+- E2E は並列ワーカー実行時に Firefox が不安定（実行のたびに別のテストがタイムアウトする。`home.spec.ts` のような静的ページの検証まで落ちることがある）。`--workers=1` では `clipboard-read` の 1 件を除いて安定。本修正とは無関係だが、CI の安定性として別途対処の余地あり。
+- 本コミットは未 push（プロジェクト規約により push は手動）。
+
+### 次ステップ
+
+- 暗号化 PDF 保存時に「保護設定が解除される」旨の注意表示を出すか検討する。
+- AES 暗号化（AESV2 / AESV3）の実サンプルで復号の往復を検証する。
+- Firefox の E2E 不安定さ（並列時のタイムアウト、`clipboard-read` 未対応）を切り分けて CI を安定させる。
+
+---
+
 ## 2026-06-01 — 本番デプロイ（既存リポジトリ置換）＋ CI 修正 ＋ ファビコン変更 ＋ リポジトリ整理
 
 ### 実施内容
