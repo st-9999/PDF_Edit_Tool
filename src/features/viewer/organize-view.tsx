@@ -104,7 +104,7 @@ function SortableTile({
       style={style}
       {...listeners}
       onDoubleClick={onOpen}
-      className="flex touch-none justify-center"
+      className="flex min-w-0 touch-none justify-center"
     >
       <ContextMenu>
         <ContextMenuTrigger onContextMenu={onContextMenu}>

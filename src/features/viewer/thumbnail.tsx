@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { CheckIcon } from "lucide-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useVisible } from "@/lib/hooks/use-visible";
-import { renderPageToCanvas } from "@/lib/pdf/render";
+import { computeFitScale, renderPageToCanvas } from "@/lib/pdf/render";
 import { THUMBNAIL_WIDTH } from "@/lib/pdf/constants";
 import { cn } from "@/lib/utils";
 
@@ -51,8 +51,9 @@ export function Thumbnail({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const visible = useVisible(buttonRef);
-  // 描画後のサムネ表示寸法（CSS px）。短辺＝サムネ基準幅に合わせるため、枠は描画実寸に一致させる
-  // （余白なし）。短辺は回転不変なので、回転してもページのスケールは変わらず縮小しない。
+  // 描画後のサムネ表示寸法（CSS px）。枠は描画実寸に一致させる（余白なし）。
+  // 実寸は「幅 width × 高さ width×THUMBNAIL_ASPECT」のセルに収まるようスケールするため、
+  // 横長ページでも width を超えず、グリッドで隣と重ならない。
   // 未描画時は縦長プレースホルダ（A4 縦相当）で代用する。
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
 
@@ -70,9 +71,19 @@ export function Thumbnail({
         // 回転後（元ページ回転＋ユーザー回転）の表示寸法を求める。90/270° で幅・高さは入れ替わる。
         const total = totalRotation(page.rotate, rotation);
         const rotated = page.getViewport({ scale: 1, rotation: total });
-        // 「縦横で短い方」をサムネ基準幅に合わせる。短辺は回転で変わらないため、回転してもスケールが一定になる。
-        const shortSide = Math.min(rotated.width, rotated.height);
-        const scale = width / shortSide;
+        // 回転後のページを「幅 width × 高さ width×THUMBNAIL_ASPECT」のセルに、
+        // アスペクト比を保ったまま収める。
+        // 短辺基準（旧実装）では A3 横などの横長ページが width×1.414 の実寸になり、
+        // グリッドのトラック幅を超えて隣のサムネと重なっていた。
+        // このセル基準なら実寸は必ず width 以下・高さも上限内に収まる。
+        // なお A4 縦（1:1.414）はセル比と一致するため、従来どおり width いっぱいに描画される。
+        const scale = computeFitScale(
+          rotated.width,
+          rotated.height,
+          "page",
+          width,
+          width * THUMBNAIL_ASPECT,
+        );
         const handle = renderPageToCanvas(page, canvas, scale, rotation);
         cancelRender = handle.cancel;
         if (!cancelled && handle.cssWidth > 0 && handle.cssHeight > 0) {
