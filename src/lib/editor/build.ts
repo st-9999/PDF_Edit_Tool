@@ -8,6 +8,7 @@ import {
   PDFNumber,
   type PDFRef,
 } from "pdf-lib";
+import { decryptPdfIfNeeded } from "@/lib/pdf/decrypt";
 import { normalizeRotation, type PageRef } from "./operations";
 
 /** sourceId → 元 PDF のバイト列。 */
@@ -110,7 +111,10 @@ async function loadSourceDocs(
   for (const id of sourceIds) {
     const bytes = sources[id];
     if (!bytes) throw new Error(`ソース "${id}" のバイト列が見つかりません`);
-    map.set(id, await PDFDocument.load(bytes));
+    // pdf-lib は暗号化 PDF を扱えない（`ignoreEncryption` を渡しても中身は暗号文のまま）。
+    // pdf.js は閲覧時に復号できるため「表示できるのに保存できない」状態になる。
+    // 保存前にここで復号し、暗号化なしの通常 PDF として扱う。
+    map.set(id, await PDFDocument.load(await decryptPdfIfNeeded(bytes)));
   }
   return map;
 }
