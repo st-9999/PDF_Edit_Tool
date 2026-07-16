@@ -29,6 +29,19 @@ interface WorkerError {
 }
 type WorkerMessage = WorkerDone | WorkerProgress | WorkerError;
 
+/**
+ * Worker そのものが使えない（生成・読み込みに失敗した）ことを示す。
+ * 「ビルド処理自体が失敗した」ケースと区別するために用いる。
+ * 前者は本スレッドで再試行する価値があるが、後者は再試行しても同じ結果になる。
+ */
+class WorkerUnavailableError extends Error {
+  constructor(cause?: unknown) {
+    super("worker を利用できません");
+    this.name = "WorkerUnavailableError";
+    this.cause = cause;
+  }
+}
+
 function runInWorker(
   sources: SourceBytes,
   pages: PageRef[],
@@ -42,7 +55,7 @@ function runInWorker(
         { type: "module" },
       );
     } catch (err) {
-      reject(err instanceof Error ? err : new Error("worker 生成に失敗"));
+      reject(new WorkerUnavailableError(err));
       return;
     }
 
@@ -73,9 +86,11 @@ function runInWorker(
         reject(new Error(message.message));
       }
     };
+    // ビルド中の例外は worker 側で捕捉して `type: "error"` として通知されるため、
+    // ここに来るのはスクリプトの読み込み失敗など worker 自体の問題とみなす。
     worker.onerror = () => {
       cleanup();
-      reject(new Error("worker error"));
+      reject(new WorkerUnavailableError());
     };
 
     worker.postMessage({ sources, pages, outline });
@@ -96,8 +111,10 @@ export async function runBuild(
     try {
       return await runInWorker(sources, pages, options);
     } catch (err) {
-      // ユーザーキャンセルはそのまま伝播。それ以外は本スレッドで再試行。
-      if (err instanceof DOMException && err.name === "AbortError") throw err;
+      // worker を用意できなかったときだけ本スレッドで再試行する。
+      // ビルド自体の失敗（暗号化 PDF・破損ファイル等）を再試行すると、
+      // 同じ例外がもう一度出るうえに UI スレッドを重い処理で塞いでしまう。
+      if (!(err instanceof WorkerUnavailableError)) throw err;
     }
   }
   return buildPdf(sources, pages, {

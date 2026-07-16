@@ -22,6 +22,24 @@ function suggestedName(fileName: string | null, suffix = ""): string {
   return `${base}${suffix}.pdf`;
 }
 
+/** メッセージが日本語（かな・漢字）を含むか。アプリ自身が投げたものかの判定に使う。 */
+function hasJapanese(message: string): boolean {
+  return /[぀-ヿ一-鿿]/.test(message);
+}
+
+/**
+ * 保存失敗時にユーザーへ見せるメッセージを決める。
+ * pdf-lib など内部ライブラリの英語メッセージは、そのまま出しても利用者が対処できず
+ * 内部実装の示唆（例: `ignoreEncryption` を使え）を含むこともあるため、
+ * 日本語を含むメッセージ（＝アプリが意図して出したもの）だけを表示し、
+ * それ以外は定型文にしてコンソールへ詳細を残す。
+ */
+function saveErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && hasJapanese(err.message)) return err.message;
+  console.error(fallback, err);
+  return fallback;
+}
+
 /** 保存層のアクション群。能力に応じた保存戦略を内部で選択する。 */
 export function useSave() {
   const { getAllBytes, getProxy } = usePdfSources();
@@ -76,7 +94,7 @@ export function useSave() {
         toast.info("保存をキャンセルしました");
         return;
       }
-      toast.error(err instanceof Error ? err.message : "保存に失敗しました");
+      toast.error(saveErrorMessage(err, "保存に失敗しました"));
     }
   };
 
@@ -97,9 +115,7 @@ export function useSave() {
         toast.info("保存をキャンセルしました");
         return;
       }
-      toast.error(
-        err instanceof Error ? err.message : "上書き保存に失敗しました",
-      );
+      toast.error(saveErrorMessage(err, "上書き保存に失敗しました"));
     }
   };
 
@@ -134,9 +150,7 @@ export function useSave() {
       }
       if (saved > 0) toast.success(`${saved} ファイルを保存しました`);
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "分割保存に失敗しました",
-      );
+      toast.error(saveErrorMessage(err, "分割保存に失敗しました"));
     }
   };
 
@@ -159,7 +173,7 @@ export function useSave() {
       if (target)
         toast.success(`${selection.selected.size} ページを抽出しました`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "抽出に失敗しました");
+      toast.error(saveErrorMessage(err, "抽出に失敗しました"));
     }
   };
 
