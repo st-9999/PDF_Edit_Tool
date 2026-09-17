@@ -13,6 +13,60 @@
 
 ---
 
+## 2026-09-17 — テキスト書き換え T4: 画面への組み込み（T4a〜T4e）
+
+### 実施内容
+
+ユーザー決定（範囲は「クリックでまとまり＋ドラッグで文字単位」、書体が変わる場合は確定前に編集ボックス内で表示、1 文字ずつ別命令に分かれた範囲は同じ行ならまとめて書き換える）に沿って、5 段階に分けて実装・コミットした。
+
+- **T4a** 中核の拡張: 複数の描画命令にまたがる範囲のまとめ書き換え（範囲全体の幅で揃えを保つ）と、画面で範囲を選ぶための `text-runs.ts`（語・数値のまとまり、ドラッグ範囲、揃えの初期値）。
+- **T4b** 操作ログと保存: `editText` 操作と `PageRef.textEdits`。`lib/editor/text-edit.ts` が元の PDF 全体に履歴を順に適用してページを再現し（他ページの同じ書体のフォントも使える）、保存（Worker）・抽出・分割に反映。確定前の確認 `previewTextEdit`、失敗理由の日本語化、同梱フォントの遅延取得。
+- **T4c** 表示: `usePageSource` と `EditedPageCache` で、書き換えたページを書き換え後の 1 ページ PDF から描画（ビューア・サムネイル・一覧整理・検索）。同梱フォントは描けない文字があるときだけ読み込む。
+- **T4d** 画面: 編集ツールバーの「文字を書き換え」、ページ上の選択層（`TextEditLayer`、当たり判定 `hit-test.ts`）、編集ボックス（`TextEditPopover`：新しい文字・揃え・確認結果の表示・確定）。実サンプルで操作したところ、ページ下端の文字で編集ボックスがフッターに隠れ、入力欄へのフォーカスで画面が勝手にスクロールしたため、選択範囲の上に出す配置と、ビューアのスクロール領域内だけの最小スクロールに直した。
+- **T4e** 仕上げ: README（機能・使い方・既知の制限）、SPEC §3.5、TEXT_REWRITE §8 を更新。
+- E2E の Firefox での不安定さ（ページを開いた直後のファイル投入がハイドレーション前に取りこぼされる）を、書き換え・結合の spec では `e2e/helpers.ts` の `waitForHydration` で解消。他の既存 spec への適用は別タスクとして提案した。
+
+### 作成ファイル
+
+- `src/lib/pdf/content/text-runs.ts` / `text-runs.test.ts` / `text-runs.samples.test.ts`、`rewrite-multi-op.test.ts`、`hit-test.ts` / `hit-test.test.ts`
+- `src/lib/editor/text-edit.ts` / `text-edit.test.ts`、`src/lib/editor/rewrite-messages.ts`
+- `src/lib/pdf/fallback-font-source.ts` / `.test.ts`、`src/lib/pdf/edited-page-cache.ts` / `.test.ts`
+- `src/features/text-edit/`（`text-edit-layer.tsx`・`text-edit-popover.tsx`・`use-editable-page.ts`・`preview-status.ts` / `.test.ts`）
+- `src/store/text-edit-store.ts` / `.test.ts`
+- `e2e/text-rewrite.spec.ts`、`e2e/helpers.ts`
+
+### 変更ファイル
+
+- `src/lib/pdf/content/rewrite.ts`（まとめ書き換え）、`rewrite.test.ts`（命令をまたぐ失敗の例を別の行に変更）
+- `src/lib/editor/operations.ts`・`build.ts`（+ テスト）、`src/store/editor-store.ts`（+ テスト）、`src/workers/pdf-build.worker.ts`、`src/lib/pdf/build-runner.ts`、`src/features/save/use-save.ts`
+- `src/features/viewer/pdf-sources-context.tsx`・`page-viewer.tsx`・`pdf-page-view.tsx`・`thumbnail-list.tsx`・`organize-view.tsx`・`viewer-layout.tsx`、`src/features/search/search-bar.tsx`、`src/features/editor/edit-toolbar.tsx`
+- `e2e/merge.spec.ts`（ハイドレーション待ちを共通化）
+- `README.md`、`docs/SPEC.md`、`docs/TODO.md`、`docs/TEXT_REWRITE.md`、`docs/CHANGELOG.md`、`docs/SESSION_SUMMARY.md`
+- `src/features/bookmark/auto-bookmark-dialog.tsx`（T4c のコミットで Prettier による整形のみが混入。動作の変更なし）
+
+### 計測結果
+
+- **ユニット／統合テスト: 435 → 500 通過 / 500（43 → 52 ファイル）**。新規 65 件。
+- **E2E**: Chromium 32/32 通過（新規 `text-rewrite.spec.ts` 4 件を含む）。Firefox は `text-rewrite.spec.ts` と `merge.spec.ts` を 3 回繰り返して 21/21 通過。Firefox の全体実行では既存の spec が取りこぼしで失敗する（本件と無関係、原因特定済み）。
+- **実サンプルでの画面操作**（数量計算書）: 「81.9」をクリック → 「1,234.5」と入力 → 「,」がゴシック体になる旨を表示 → 確定で合計欄が右揃えの「1,234.5」になり、未保存表示になることを確認。
+- **バンドル**: 初期表示の JS は gzip 211.3KB（以前の記録 約 210KB と同等。pdf-lib を含む書き換え処理は動的 import）。`npm run build` 成功、`out/` 13MB（同梱フォント 5.5MB を含む）。
+- `npx tsc --noEmit` / `npx eslint src e2e` エラーなし。`prettier --check` の警告は既存 2 ファイル（`checkbox.tsx`・`auto-bookmark.ts`、未変更）。
+
+### Risks/TODO
+
+- **プレビューと文字情報の作成は本スレッド**: 書き換えのたびに元の PDF 全体を読み直すため、大きな文書では確定直後の表示や編集ボックスの確認が遅れる可能性がある（実サンプル 70KB〜360KB では体感できる遅延なし）。Worker への移動は未実施。
+- **Firefox の E2E**: 既存 spec にハイドレーション待ちが未適用（別タスクとして提案済み）。
+- 報告書しおり自動作成は、書き換え前のページのテキストを使う。
+- 同梱フォントはゴシック体のみ。明朝体の資料で補うと書体が変わる（確定前に表示）。
+- 本コミット群は未 push（プロジェクト規約により push は手動）。GitHub Pages に公開すると同梱フォント（5.5MB）も配信される。
+
+### 次ステップ
+
+- 実際の業務 PDF で書き換えを使ってもらい、範囲の選びやすさ・揃え・書体の違いの許容度についてフィードバックを得る。
+- 必要に応じて、プレビュー作成の Worker 化、既存 E2E のハイドレーション待ち適用、画像編集（後回し分）に着手する。
+
+---
+
 ## 2026-09-17 — テキスト書き換え T3: 元のフォントに無い文字の補完
 
 ### 実施内容
