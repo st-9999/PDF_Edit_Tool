@@ -13,6 +13,53 @@
 
 ---
 
+## 2026-09-17 — 大きな PDF（結合後など）の保存失敗を修正（保存先の画面を開ける期限）
+
+### 実施内容
+
+- 報告: `Reference/結合が失敗するサンプル/`（18 ファイル・356 ページ・約 268MB）を結合して保存すると「保存に失敗しました」になる。
+- 調査:
+  1. 18 ファイルとも pdf-lib で単独に読める。Node で `buildPdf` による結合・保存も成功（出力 268.5MB・約 12 秒・RSS ピーク約 1GB）→ PDF の内容・保存処理そのものは原因ではない。
+  2. 本番ビルドを配信し Playwright で結合→保存: ダウンロード経路は Chromium・Firefox とも成功。保存先を選ぶ経路では、選択画面を開いたのがクリックから約 5.2 秒後だった。
+  3. 本物の Chrome で、クリックから 0 秒・3 秒後は選択画面を開けるが、6 秒後は `SecurityError: Must be handling a user gesture to show a file picker.`（`navigator.userActivation.isActive=false`）。
+  4. 修正前のコードで、実サンプルの結合を自然な処理時間で保存すると、作成完了がクリックの 5.4〜5.7 秒後で同じ `SecurityError` → 「保存に失敗しました」を再現（報告のメッセージと一致）。
+- 原因: 「名前を付けて保存」は PDF を作り終えてから保存先の選択画面を開くが、Chromium はクリック（ユーザー操作）から約 5 秒を過ぎると開けない。分割保存は 1 ファイルずつ選択画面を開くため、2 つ目以降も同じ理由で開けない。
+- 方針の検討: 先に保存先を選んでから作る案は、File System Access の仕様で既存ファイルを選んだ時点で中身が消えるため、作成に失敗すると上書き先のファイルを失うおそれがあり、ユーザーと相談のうえ不採用。
+- 修正:
+  - `lib/save/strategy.ts`: 保存先の画面を開けないとき（`SecurityError`、または `navigator.userActivation.isActive === false` と分かっているとき）は `PickerActivationExpiredError` を投げる。`pickDirectory()` を追加（fs-access は `showDirectoryPicker({ mode: "readwrite" })` でフォルダを選び、同名のファイルを避けて書き込む `nextAvailableName`。download 経路はダウンロード）。
+  - `features/save/use-save.ts`: 名前を付けて保存・抽出は、作成後に保存先の画面を開けなければ、作った PDF を保持したまま「保存の準備ができました」（ボタン「保存先を選ぶ」、自動では消えない）を出し、ボタンのクリックで保存先を選んで保存する。作成時点から編集されていれば保存せず、もう一度保存するよう案内する。分割保存は、クリック直後にフォルダを選んでから作成・書き込み。
+- 確認: 修正後、実サンプルの結合を自然な処理時間で保存 → 通知が出て、「保存先を選ぶ」から 268,480,193 バイトの保存が完了。
+- 検証上の注意: Playwright のロケーターで要素を待っている間は `navigator.userActivation.isActive` が true のまま延び続けるため、この問題は要素を待つ E2E では再現しない。実サンプルの確認は時間だけ待ってから状態を読む手順で行い、E2E では保存先の画面の代わりに SecurityError を投げるモックで確認した。
+
+### 作成ファイル
+
+- `e2e/save-picker.spec.ts`（3 件: 期限切れ時の通知から保存、通知前に編集したら保存しない、分割保存はフォルダを 1 回だけ選び同名を上書きしない）
+
+### 変更ファイル
+
+- `src/lib/save/strategy.ts`・`strategy.test.ts`
+- `src/features/save/use-save.ts`
+- `docs/CHANGELOG.md`、`docs/SESSION_SUMMARY.md`
+
+### 計測結果
+
+- 単体テスト **528 通過**（`PickerActivationExpiredError`・`pickDirectory`・`nextAvailableName` の 7 件を追加）。
+- E2E（開発サーバー）: Chromium・Firefox で **96 / 96 通過**（`save-picker.spec.ts` 3 件 × 2 を含む）。修正前の `use-save.ts` では `save-picker.spec.ts` の 3 件とも失敗することを確認。
+- 本番ビルドの E2E: **6 / 6 通過**。`npx tsc --noEmit` / eslint エラーなし。
+
+### Risks/TODO
+
+- 期限切れの通知が出ている間は、作った PDF（結合サンプルでは約 268MB）をメモリに保持する（通知を閉じるか保存すると解放）。
+- 分割保存で選んだフォルダへの書き込みは、Chrome が初回にフォルダへの書き込み許可を確認する。
+- 大きな結合の作成自体に時間がかかる点（数秒〜）は変わらない。
+- 本コミットは未 push。
+
+### 次ステップ
+
+- 報告者の環境（Chrome / Edge）で、同じファイルの結合・保存が通知経由で完了することを確認してもらう。
+
+---
+
 ## 2026-09-17 — 文字の書き換え: ドラッグでまとめて選べることを分かりやすくする
 
 ### 実施内容

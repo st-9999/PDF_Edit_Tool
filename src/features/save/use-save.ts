@@ -15,7 +15,12 @@ import {
 } from "@/lib/pdf/fallback-font-source";
 import { collectEditableOutline } from "@/lib/outline/collect";
 import { toBuildNodes } from "@/lib/outline/edit";
-import { createSaveStrategy, type SaveStrategy } from "@/lib/save/strategy";
+import {
+  PickerActivationExpiredError,
+  createSaveStrategy,
+  type SaveStrategy,
+  type SaveTarget,
+} from "@/lib/save/strategy";
 import { useEditorStore } from "@/store/editor-store";
 import { useViewerStore } from "@/store/viewer-store";
 import { useProgressStore } from "@/store/progress-store";
@@ -94,15 +99,72 @@ export function useSave() {
     }
   };
 
+  /** 作成時点の編集内容の目印（作成後に編集されたかを判定する）。 */
+  const editSnapshot = () => ({
+    applied: useEditorStore.getState().history.applied,
+    outline: useOutlineStore.getState().nodes,
+  });
+  const editedSince = (snapshot: ReturnType<typeof editSnapshot>) =>
+    useEditorStore.getState().history.applied !== snapshot.applied ||
+    useOutlineStore.getState().nodes !== snapshot.outline;
+
+  /**
+   * 作った PDF を保存先を選んで保存する。PDF の作成に時間がかかり、クリックの期限切れで保存先の画面を
+   * 開けなかった場合は、作った PDF を持ったまま通知を出し、そのボタン（新しいクリック）で保存先を選んでもらう。
+   * （先に保存先を選ぶと、既存のファイルを選んだ時点で中身が消え、作成に失敗したときに失われるため、この順にする。）
+   */
+  const saveWithPicker = async (
+    bytes: Uint8Array,
+    name: string,
+    onSaved: (target: SaveTarget) => void,
+    failMessage: string,
+    snapshot: ReturnType<typeof editSnapshot>,
+  ): Promise<void> => {
+    try {
+      const target = await strategy.saveAs(bytes, name);
+      if (target) onSaved(target);
+    } catch (err) {
+      if (!(err instanceof PickerActivationExpiredError)) throw err;
+      toast.info("保存の準備ができました", {
+        description:
+          "PDF の作成に時間がかかったため、保存先を選ぶ画面を自動で開けませんでした。「保存先を選ぶ」を押してください。",
+        duration: Infinity,
+        closeButton: true,
+        action: {
+          label: "保存先を選ぶ",
+          onClick: () => {
+            if (editedSince(snapshot)) {
+              toast.error(
+                "PDF の作成後に編集されたため、もう一度保存を実行してください",
+              );
+              return;
+            }
+            saveWithPicker(bytes, name, onSaved, failMessage, snapshot).catch(
+              (retryErr: unknown) =>
+                toast.error(saveErrorMessage(retryErr, failMessage)),
+            );
+          },
+        },
+      });
+    }
+  };
+
   const saveAs = async () => {
     try {
+      const snapshot = editSnapshot();
       const bytes = await buildCurrent();
       const name = suggestedName(useViewerStore.getState().fileName);
-      const target = await strategy.saveAs(bytes, name);
-      if (!target) return; // キャンセル
-      useEditorStore.getState().markSaved(target.handle);
-      useOutlineStore.getState().markSaved();
-      toast.success(`保存しました: ${target.name}`);
+      await saveWithPicker(
+        bytes,
+        name,
+        (target) => {
+          useEditorStore.getState().markSaved(target.handle);
+          useOutlineStore.getState().markSaved();
+          toast.success(`保存しました: ${target.name}`);
+        },
+        "保存に失敗しました",
+        snapshot,
+      );
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         toast.info("保存をキャンセルしました");
@@ -151,20 +213,21 @@ export function useSave() {
       return;
     }
     try {
+      // 保存先のフォルダはクリック直後に選ぶ（フォルダを選んでもファイルは変更されないため、作る前でよい）。
+      // 1 ファイルずつ保存先を選ぶと、2 つ目以降はクリックの期限切れで画面を開けない。
+      const folder = await strategy.pickDirectory();
+      if (!folder) return; // キャンセル
       const parts = await splitPdf(getAllBytes(), pages, boundaries, {
         fallbackFonts: await fallbackFontsFor(pages),
       });
       const fileName = useViewerStore.getState().fileName;
-      let saved = 0;
       for (let i = 0; i < parts.length; i += 1) {
-        const target = await strategy.saveAs(
+        await folder.write(
           parts[i]!,
           suggestedName(fileName, `-${String(i + 1).padStart(2, "0")}`),
         );
-        if (!target) break; // キャンセルで中断
-        saved += 1;
       }
-      if (saved > 0) toast.success(`${saved} ファイルを保存しました`);
+      toast.success(`${parts.length} ファイルを保存しました`);
     } catch (err) {
       toast.error(saveErrorMessage(err, "分割保存に失敗しました"));
     }
@@ -177,18 +240,21 @@ export function useSave() {
       return;
     }
     try {
+      const snapshot = editSnapshot();
       const bytes = await extractPages(
         getAllBytes(),
         pages,
         selection.selected,
         { fallbackFonts: await fallbackFontsFor(pages) },
       );
-      const target = await strategy.saveAs(
+      const count = selection.selected.size;
+      await saveWithPicker(
         bytes,
         suggestedName(useViewerStore.getState().fileName, "-extract"),
+        () => toast.success(`${count} ページを抽出しました`),
+        "抽出に失敗しました",
+        snapshot,
       );
-      if (target)
-        toast.success(`${selection.selected.size} ページを抽出しました`);
     } catch (err) {
       toast.error(saveErrorMessage(err, "抽出に失敗しました"));
     }
