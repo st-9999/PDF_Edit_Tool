@@ -39,7 +39,7 @@ import { useEditorStore } from "@/store/editor-store";
 import { useSearchStore } from "@/store/search-store";
 import type { PageRef } from "@/lib/editor/operations";
 import { cn } from "@/lib/utils";
-import { usePdfSources } from "./pdf-sources-context";
+import { usePageSource, usePdfSources } from "./pdf-sources-context";
 import { PdfPageView } from "./pdf-page-view";
 
 const VIEWER_PADDING = 24;
@@ -93,6 +93,8 @@ function ContinuousPage({
   // 各ページは自身の実寸で枠を作る（未測定は先頭ページ寸法で仮置き）。これにより
   // サイズの異なるページも canvas と枠が一致し、items-center / mx-auto で中央寄せされる。
   const box = boxFor(measured ?? fallback, scale, page.rotation);
+  // 描画元（テキストを書き換えたページは書き換え後のページ）。画面に入ったページだけ用意する
+  const source = usePageSource(visible ? page : undefined);
   const dimsKey = `${page.sourceId}:${page.sourceIndex}`;
 
   // 可視になったら自身の実寸を測ってキャッシュへ報告する（遅延・1 回だけ）。
@@ -130,10 +132,10 @@ function ContinuousPage({
       className="relative mx-auto"
       style={{ width: box.width, height: box.height }}
     >
-      {visible && proxy ? (
+      {visible && source ? (
         <PdfPageView
-          pdf={proxy}
-          pageNumber={page.sourceIndex + 1}
+          pdf={source.proxy}
+          pageNumber={source.pageNumber}
           scale={scale}
           rotation={page.rotation}
           width={box.width}
@@ -375,6 +377,9 @@ export function PageViewer() {
 
   const displayPercent = Math.round(effectiveScale * 100);
   const activePage = pages[currentPage - 1];
+  const activeSource = usePageSource(
+    viewMode === "single" ? activePage : undefined,
+  );
   // 単ページ表示の枠は対象ページ自身の実寸（未測定は先頭ページ寸法）で計算する。
   const activeDims =
     activePage && baseDims
@@ -395,10 +400,10 @@ export function PageViewer() {
       >
         {viewMode === "single" ? (
           <div className="flex min-h-full items-start justify-center p-6">
-            {activePage && activeBox && (
+            {activePage && activeBox && activeSource && (
               <PdfPageView
-                pdf={getProxy(activePage.sourceId)!}
-                pageNumber={activePage.sourceIndex + 1}
+                pdf={activeSource.proxy}
+                pageNumber={activeSource.pageNumber}
                 scale={effectiveScale}
                 rotation={activePage.rotation}
                 width={activeBox.width}

@@ -16,7 +16,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVerticalIcon } from "lucide-react";
-import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -29,11 +28,10 @@ import { useEditorStore } from "@/store/editor-store";
 import { followScrollDelta } from "@/lib/viewer/follow-scroll";
 import { ROTATION_STEP, type PageRef } from "@/lib/editor/operations";
 import { useEditActions } from "@/features/editor/use-edit-actions";
-import { usePdfSources } from "./pdf-sources-context";
+import { usePageSource } from "./pdf-sources-context";
 import { Thumbnail } from "./thumbnail";
 
 function SortableThumbnail({
-  pdf,
   page,
   position,
   width,
@@ -43,7 +41,6 @@ function SortableThumbnail({
   onClick,
   registerRef,
 }: {
-  pdf: PDFDocumentProxy | undefined;
   page: PageRef;
   position: number;
   width: number;
@@ -62,6 +59,8 @@ function SortableThumbnail({
     transition,
     isDragging,
   } = useSortable({ id: page.id });
+  // 描画元（テキストを書き換えたページは書き換え後のページ）
+  const source = usePageSource(page);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -85,10 +84,10 @@ function SortableThumbnail({
       >
         <GripVerticalIcon className="size-4" aria-hidden />
       </button>
-      {pdf ? (
+      {source ? (
         <Thumbnail
-          pdf={pdf}
-          pageNumber={page.sourceIndex + 1}
+          pdf={source.proxy}
+          pageNumber={source.pageNumber}
           position={position}
           rotation={page.rotation}
           width={width}
@@ -105,7 +104,6 @@ function SortableThumbnail({
 
 /** サムネイル一覧。D&D 並び替え＋クリック/Ctrl/Shift 複数選択。 */
 export function ThumbnailList() {
-  const { getProxy } = usePdfSources();
   const pages = useEditorStore((s) => s.pages);
   const selected = useEditorStore((s) => s.selection.selected);
   const multiSelect = useEditorStore((s) => s.multiSelect);
@@ -205,7 +203,6 @@ export function ThumbnailList() {
                   onContextMenu={() => ensureSelected(page.id)}
                 >
                   <SortableThumbnail
-                    pdf={getProxy(page.sourceId)}
                     page={page}
                     position={position}
                     width={thumbnailWidth}

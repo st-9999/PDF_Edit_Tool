@@ -168,9 +168,7 @@ export function AutoBookmarkDialog({
   };
 
   const togglePattern = (id: string, enabled: boolean) =>
-    updatePatterns(
-      patterns.map((p) => (p.id === id ? { ...p, enabled } : p)),
-    );
+    updatePatterns(patterns.map((p) => (p.id === id ? { ...p, enabled } : p)));
 
   const removePattern = (id: string) =>
     updatePatterns(patterns.filter((p) => p.id !== id));
@@ -251,11 +249,15 @@ export function AutoBookmarkDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" showCloseButton={step !== "running"}>
+      <DialogContent
+        className="sm:max-w-md"
+        showCloseButton={step !== "running"}
+      >
         <DialogHeader>
           <DialogTitle>報告書しおり自動作成</DialogTitle>
           <DialogDescription>
-            本文から章（第N章）/ 節（N.N）/ 項（N.N.N）の見出しを検出してしおりを作成します。
+            本文から章（第N章）/ 節（N.N）/
+            項（N.N.N）の見出しを検出してしおりを作成します。
           </DialogDescription>
         </DialogHeader>
 
@@ -342,7 +344,7 @@ export function AutoBookmarkDialog({
                     onChange={(e) =>
                       setCustomLevel(Number(e.target.value) as 1 | 2 | 3)
                     }
-                    className="border-input bg-transparent h-8 rounded-md border px-2 text-sm"
+                    className="border-input h-8 rounded-md border bg-transparent px-2 text-sm"
                   >
                     <option value={1}>1（章）</option>
                     <option value={2}>2（節）</option>

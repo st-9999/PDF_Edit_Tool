@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 /** 検索バー（Ctrl+F）。常時マウントし、open のときだけパネルを表示する。 */
 export function SearchBar() {
-  const { getProxy } = usePdfSources();
+  const { requestPageSource } = usePdfSources();
   const pages = useEditorStore((s) => s.pages);
   const requestPage = useViewerStore((s) => s.requestPage);
   const open = useSearchStore((s) => s.open);
@@ -69,22 +69,22 @@ export function SearchBar() {
     let cancelled = false;
     (async () => {
       const texts: string[] = [];
+      // テキストを書き換えたページは、書き換え後のページから抽出する
       for (const page of pages) {
-        const proxy = getProxy(page.sourceId);
-        if (!proxy) {
+        try {
+          const { proxy, pageNumber } = await requestPageSource(page);
+          texts.push(await getPageText(await proxy.getPage(pageNumber)));
+        } catch {
           texts.push("");
-          continue;
         }
-        texts.push(
-          await getPageText(await proxy.getPage(page.sourceIndex + 1)),
-        );
+        if (cancelled) return;
       }
       if (!cancelled) setPageTexts(texts);
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, sig, getProxy, pages]);
+  }, [open, sig, requestPageSource, pages]);
 
   // クエリ・抽出結果・オプションからヒットを再計算
   useEffect(() => {

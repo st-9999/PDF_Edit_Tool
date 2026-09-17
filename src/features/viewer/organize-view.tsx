@@ -27,7 +27,6 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
-import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -62,12 +61,11 @@ import {
 } from "@/lib/pdf/constants";
 import { useEditActions } from "@/features/editor/use-edit-actions";
 import { ProgressOverlay } from "@/features/progress/progress-overlay";
-import { usePdfSources } from "./pdf-sources-context";
+import { usePageSource } from "./pdf-sources-context";
 import { Thumbnail } from "./thumbnail";
 
 /** グリッド内の並べ替え可能な 1 タイル。タイル全体をドラッグして並べ替える。 */
 function SortableTile({
-  proxy,
   page,
   position,
   width,
@@ -78,7 +76,6 @@ function SortableTile({
   onContextMenu,
   actions,
 }: {
-  proxy: PDFDocumentProxy | undefined;
   page: PageRef;
   position: number;
   width: number;
@@ -91,6 +88,8 @@ function SortableTile({
 }) {
   const { setNodeRef, listeners, transform, transition, isDragging } =
     useSortable({ id: page.id });
+  // 描画元（テキストを書き換えたページは書き換え後のページ）
+  const source = usePageSource(page);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -108,10 +107,10 @@ function SortableTile({
     >
       <ContextMenu>
         <ContextMenuTrigger onContextMenu={onContextMenu}>
-          {proxy ? (
+          {source ? (
             <Thumbnail
-              pdf={proxy}
-              pageNumber={page.sourceIndex + 1}
+              pdf={source.proxy}
+              pageNumber={source.pageNumber}
               position={position}
               rotation={page.rotation}
               width={width}
@@ -151,7 +150,6 @@ function SortableTile({
  * ビュアーに戻ると変更が反映されている。
  */
 export function OrganizeView() {
-  const { getProxy } = usePdfSources();
   const pages = useEditorStore((s) => s.pages);
   const selected = useEditorStore((s) => s.selection.selected);
   const selectedCount = useEditorStore(editorSelectors.selectedCount);
@@ -386,7 +384,6 @@ export function OrganizeView() {
                 return (
                   <SortableTile
                     key={page.id}
-                    proxy={getProxy(page.sourceId)}
                     page={page}
                     position={position}
                     width={thumbnailWidth}
