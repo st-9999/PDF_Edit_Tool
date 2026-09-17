@@ -98,6 +98,55 @@ describe("parseTrueType（埋め込み TrueType の最小解析）", () => {
     });
   });
 
+  describe("字形の寸法", () => {
+    it("head 表のフォント全体の外接矩形を読む", () => {
+      const font = parseTrueType(
+        buildTestTrueType({ outlines: [true], bbox: [-100, -300, 2000, 1500] }),
+      )!;
+      expect(font.bbox).toEqual([-100, -300, 2000, 1500]);
+    });
+
+    it("unitsPerEm・アセンダ・ディセンダを読む", () => {
+      const font = parseTrueType(
+        buildTestTrueType({
+          outlines: [true],
+          unitsPerEm: 2048,
+          ascender: 1854,
+          descender: -434,
+        }),
+      )!;
+      expect(font.unitsPerEm).toBe(2048);
+      expect(font.ascender).toBe(1854);
+      expect(font.descender).toBe(-434);
+    });
+
+    it("hmtx から GID ごとの送り幅を読み、numberOfHMetrics 以降は最後の値を使う", () => {
+      const font = parseTrueType(
+        buildTestTrueType({
+          outlines: [false, true, true, true],
+          advanceWidths: [0, 555, 1000],
+          numberOfHMetrics: 3,
+        }),
+      )!;
+      expect(font.advanceWidth(1)).toBe(555);
+      expect(font.advanceWidth(2)).toBe(1000);
+      expect(font.advanceWidth(3)).toBe(1000);
+      expect(font.advanceWidth(99)).toBeNull();
+    });
+  });
+
+  it("複合字形が参照する部品の GID を返す（単純字形・空の字形は空配列）", () => {
+    const font = parseTrueType(
+      buildTestTrueType({
+        outlines: [false, true, true, true],
+        composites: { 3: [1, 2] },
+      }),
+    )!;
+    expect(font.glyphComponents(3)).toEqual([1, 2]);
+    expect(font.glyphComponents(1)).toEqual([]);
+    expect(font.glyphComponents(0)).toEqual([]);
+  });
+
   it("name 表からファミリ名を読む（無ければ null）", () => {
     expect(
       parseTrueType(

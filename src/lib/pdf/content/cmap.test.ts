@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseToUnicodeCMap } from "./cmap";
+import { parseToUnicodeCMap, writeToUnicodeCMap } from "./cmap";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -78,5 +78,42 @@ describe("parseToUnicodeCMap", () => {
     expect(empty.codeLengths).toEqual([]);
     const broken = parseToUnicodeCMap(enc("2 beginbfchar <0041> endbfchar"));
     expect(broken.lookup(0x41)).toBeNull();
+  });
+});
+
+describe("writeToUnicodeCMap", () => {
+  const SURROGATE_PAIR = String.fromCodePoint(0x20bb7);
+
+  it("書き出した CMap を解析すると同じ対応になる（サロゲートペア・複数文字を含む）", () => {
+    const entries: [number, string][] = [
+      [0x0001, "鷗"],
+      [0x3ed4, "0"],
+      [0x0f95, SURROGATE_PAIR],
+      [0x0020, "fi"],
+    ];
+    const cmap = parseToUnicodeCMap(writeToUnicodeCMap(entries, 2));
+    expect([...cmap.entries()].sort((a, b) => a[0] - b[0])).toEqual(
+      [...entries].sort((a, b) => a[0] - b[0]),
+    );
+    expect(cmap.codeLengths).toEqual([2]);
+  });
+
+  it("1 バイトコードのコード空間で書き出す", () => {
+    const cmap = parseToUnicodeCMap(writeToUnicodeCMap([[0x41, "A"]], 1));
+    expect(cmap.codeLengths).toEqual([1]);
+    expect(cmap.lookup(0x41)).toBe("A");
+  });
+
+  it("100 件を超える対応は複数の beginbfchar に分けて書き出す（仕様上の上限）", () => {
+    const entries: [number, string][] = Array.from({ length: 250 }, (_, i) => [
+      i + 1,
+      String.fromCharCode(0x4e00 + i),
+    ]);
+    const bytes = writeToUnicodeCMap(entries, 2);
+    const text = new TextDecoder().decode(bytes);
+    expect(text.match(/beginbfchar/g)).toHaveLength(3);
+    expect(text).toContain("100 beginbfchar");
+    expect(text).toContain("50 beginbfchar");
+    expect([...parseToUnicodeCMap(bytes).entries()]).toHaveLength(250);
   });
 });

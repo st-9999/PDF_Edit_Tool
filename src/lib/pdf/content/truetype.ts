@@ -19,6 +19,17 @@ export interface TrueTypeFont {
   glyphForMacCode(code: number): number | null;
   /** name 表のファミリ名（nameID 1）。 */
   familyName: string | null;
+  /** head 表の 1 em あたりの単位数。 */
+  unitsPerEm: number;
+  /** head 表のフォント全体の外接矩形 [xMin, yMin, xMax, yMax]（フォント単位）。 */
+  bbox: [number, number, number, number];
+  /** hhea 表のアセンダ・ディセンダ（フォント単位）。表が無ければ 0。 */
+  ascender: number;
+  descender: number;
+  /** hmtx 表の送り幅（フォント単位）。GID が範囲外・表が無ければ null。 */
+  advanceWidth(gid: number): number | null;
+  /** 複合字形が参照する部品の GID（単純字形・空の字形は空配列）。 */
+  glyphComponents(gid: number): number[];
 }
 
 type CmapLookup = (code: number) => number | null;
@@ -42,9 +53,31 @@ class Reader {
   }
 }
 
-interface TableEntry {
+export interface TableEntry {
   offset: number;
   length: number;
+}
+
+/** 複合字形のフラグ（OpenType glyf 表）。 */
+const ARG_1_AND_2_ARE_WORDS = 0x0001;
+const WE_HAVE_A_SCALE = 0x0008;
+const MORE_COMPONENTS = 0x0020;
+const WE_HAVE_AN_X_AND_Y_SCALE = 0x0040;
+const WE_HAVE_A_TWO_BY_TWO = 0x0080;
+
+/** TrueType のテーブルディレクトリを読む（TrueType でなければ null）。 */
+export function readTableDirectory(
+  bytes: Uint8Array,
+): Map<string, TableEntry> | null {
+  try {
+    return readTables(
+      new Reader(
+        new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+      ),
+    );
+  } catch {
+    return null;
+  }
 }
 
 function readTables(r: Reader): Map<string, TableEntry> | null {
@@ -197,7 +230,13 @@ export function parseTrueType(bytes: Uint8Array): TrueTypeFont | null {
     if (!head || !maxp || !loca || head.length < 54) return null;
 
     const numGlyphs = r.u16(maxp.offset + 4);
+    const unitsPerEm = r.u16(head.offset + 18) || 1000;
     const longLoca = r.i16(head.offset + 50) === 1;
+    const hhea = tables.get("hhea");
+    const hmtx = tables.get("hmtx");
+    const glyf = tables.get("glyf");
+    const numberOfHMetrics =
+      hhea && hhea.length >= 36 ? r.u16(hhea.offset + 34) : 0;
     const locaAt = (i: number) =>
       longLoca ? r.u32(loca.offset + i * 4) : r.u16(loca.offset + i * 2) * 2;
     const locaEntries = longLoca ? loca.length / 4 : loca.length / 2;
@@ -221,18 +260,53 @@ export function parseTrueType(bytes: Uint8Array): TrueTypeFont | null {
       return null;
     };
 
+    const hasOutline = (gid: number) => {
+      if (!Number.isInteger(gid) || gid < 0 || gid >= numGlyphs) return false;
+      if (gid + 1 >= locaEntries) return false;
+      return locaAt(gid + 1) > locaAt(gid);
+    };
+
     return {
       numGlyphs,
-      hasOutline(gid) {
-        if (!Number.isInteger(gid) || gid < 0 || gid >= numGlyphs) return false;
-        if (gid + 1 >= locaEntries) return false;
-        return locaAt(gid + 1) > locaAt(gid);
-      },
+      hasOutline,
       glyphForUnicode: (cp) => first(["3,10", "3,1", "0,4", "0,3"], cp),
       glyphForSymbolCode: (code) =>
         first(["3,0"], code) ?? first(["3,0"], 0xf000 + code),
       glyphForMacCode: (code) => first(["1,0"], code),
       familyName: readFamilyName(r, tables.get("name")),
+      unitsPerEm,
+      bbox: [
+        r.i16(head.offset + 36),
+        r.i16(head.offset + 38),
+        r.i16(head.offset + 40),
+        r.i16(head.offset + 42),
+      ],
+      ascender: hhea ? r.i16(hhea.offset + 4) : 0,
+      descender: hhea ? r.i16(hhea.offset + 6) : 0,
+      advanceWidth(gid) {
+        if (!hmtx || numberOfHMetrics === 0) return null;
+        if (!Number.isInteger(gid) || gid < 0 || gid >= numGlyphs) return null;
+        const index = Math.min(gid, numberOfHMetrics - 1);
+        if ((index + 1) * 4 > hmtx.length) return null;
+        return r.u16(hmtx.offset + index * 4);
+      },
+      glyphComponents(gid) {
+        if (!glyf || !hasOutline(gid)) return [];
+        let o = glyf.offset + locaAt(gid);
+        if (r.i16(o) >= 0) return []; // 単純字形
+        o += 10;
+        const components: number[] = [];
+        for (;;) {
+          const flags = r.u16(o);
+          components.push(r.u16(o + 2));
+          o += 4 + (flags & ARG_1_AND_2_ARE_WORDS ? 4 : 2);
+          if (flags & WE_HAVE_A_SCALE) o += 2;
+          else if (flags & WE_HAVE_AN_X_AND_Y_SCALE) o += 4;
+          else if (flags & WE_HAVE_A_TWO_BY_TWO) o += 8;
+          if (!(flags & MORE_COMPONENTS)) break;
+        }
+        return components;
+      },
     };
   } catch {
     return null;

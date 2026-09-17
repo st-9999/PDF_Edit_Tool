@@ -109,21 +109,15 @@ describe.skipIf(![SPEC, QUANTITY].every((p) => existsSync(p)))(
       expect(available("F2")).toBe("01234568");
     }, 60_000);
 
-    it("仕様書 1 ページ目: Type0 の「令和8年度」の 8 を 6 に書き換える。9 は字形が無いため失敗する", async () => {
+    it("仕様書 1 ページ目: Type0 の「令和8年度」の 8 を元フォントのまま 6 に書き換える", async () => {
       const ok = await rewriteAt(SPEC, 0, "令和8年度", 2, 1, "6", "left");
       expect(ok.result.ok).toBe(true);
       expect(textOf(ok.after.glyphs)).toContain("令和6年度");
       expect(textOf(ok.after.glyphs)).not.toContain("令和8年度");
       expectOthersUnchanged(ok.before.glyphs, ok.after.glyphs, ok.start, 1, 1);
-
-      const ng = await rewriteAt(SPEC, 0, "令和8年度", 2, 1, "9", "left");
-      expect(ng.result).toEqual({
-        ok: false,
-        failures: [{ kind: "missing-glyphs", replacement: 0, chars: ["9"] }],
-      });
     }, 60_000);
 
-    it("仕様書 1 ページ目: 単純 TrueType の「508-010」の 508 を 123 に書き換える。7 は字形が無いため失敗する", async () => {
+    it("仕様書 1 ページ目: 単純 TrueType の「508-010」の 508 を元フォントのまま 123 に書き換える", async () => {
       const ok = await rewriteAt(SPEC, 0, "508-010", 0, 3, "123", "left");
       expect(ok.result.ok).toBe(true);
       expect(textOf(ok.after.glyphs)).toContain("123-010");
@@ -135,12 +129,6 @@ describe.skipIf(![SPEC, QUANTITY].every((p) => existsSync(p)))(
       );
       expect(oracle.actualText).toBe(oracle.expectedText);
       expect(oracle.positionMismatches).toEqual([]);
-
-      const ng = await rewriteAt(SPEC, 0, "508-010", 0, 3, "507", "left");
-      expect(ng.result).toEqual({
-        ok: false,
-        failures: [{ kind: "missing-glyphs", replacement: 0, chars: ["7"] }],
-      });
     }, 60_000);
   },
 );

@@ -1,6 +1,7 @@
 /**
  * テスト専用: 解析に必要な表だけを持つ最小の TrueType フォントを組み立てる。
- * 輪郭データの中身は解析しないため、字形は「空（長さ 0）」か「ダミーの 12 バイト」で表す。
+ * 輪郭データの中身は解析しないため、単純字形は「GID の値で埋めたダミーの 12 バイト」で表す
+ * （部分埋め込みでバイト列がそのまま複写されたかを確かめられるよう、GID ごとに中身を変える）。
  */
 
 export interface TestTrueTypeSpec {
@@ -20,6 +21,41 @@ export interface TestTrueTypeSpec {
   familyName?: string;
   /** loca を 32 ビット形式にする。 */
   longLoca?: boolean;
+  /** 複合字形（GID → 部品の GID 一覧）。outlines の値に関わらず複合字形として書き出す。 */
+  composites?: Record<number, number[]>;
+  /** hmtx の送り幅（index = GID）。省略時は全 GID 500。 */
+  advanceWidths?: number[];
+  /** hhea の numberOfHMetrics（省略時は全 GID 分）。 */
+  numberOfHMetrics?: number;
+  unitsPerEm?: number;
+  ascender?: number;
+  descender?: number;
+  /** ヒンティング用の表（fpgm / prep / cvt）を含める。 */
+  hinting?: boolean;
+  /** head 表の外接矩形 [xMin, yMin, xMax, yMax]。 */
+  bbox?: [number, number, number, number];
+}
+
+/** 単純字形のダミーデータ（numberOfContours = 1、残りは GID の値）。 */
+export function testGlyphBytes(gid: number): Uint8Array {
+  const bytes = new Uint8Array(12).fill(gid & 0xff);
+  bytes[0] = 0;
+  bytes[1] = 1;
+  return bytes;
+}
+
+function compositeGlyphBytes(components: number[]): Uint8Array {
+  const w = new Writer();
+  w.i16(-1);
+  w.raw(new Array(8).fill(0));
+  components.forEach((gid, i) => {
+    const more = i < components.length - 1 ? 0x0020 : 0;
+    w.u16(0x0001 | more); // ARG_1_AND_2_ARE_WORDS
+    w.u16(gid);
+    w.i16(0);
+    w.i16(0);
+  });
+  return w.toArray();
 }
 
 class Writer {
@@ -119,10 +155,14 @@ export function buildTestTrueType(spec: TestTrueTypeSpec): Uint8Array {
   // glyf / loca
   const glyf = new Writer();
   const offsets: number[] = [];
-  for (const has of spec.outlines) {
+  spec.outlines.forEach((has, gid) => {
     offsets.push(glyf.length);
-    if (has) glyf.raw(new Array(12).fill(1));
-  }
+    const components = spec.composites?.[gid];
+    if (components) glyf.raw(compositeGlyphBytes(components));
+    else if (has) glyf.raw(testGlyphBytes(gid));
+    // loca（16 ビット形式は offset / 2）のため偶数長にそろえる
+    if (glyf.length % 2 === 1) glyf.u8(0);
+  });
   offsets.push(glyf.length);
   const loca = new Writer();
   for (const o of offsets) {
@@ -130,11 +170,31 @@ export function buildTestTrueType(spec: TestTrueTypeSpec): Uint8Array {
     else loca.u16(o / 2);
   }
 
-  // head（indexToLocFormat は先頭から 50 バイト目）
+  // head（unitsPerEm は 18 バイト目、indexToLocFormat は 50 バイト目）
   const head = new Writer();
-  head.raw(new Array(50).fill(0));
+  head.raw(new Array(18).fill(0));
+  head.u16(spec.unitsPerEm ?? 1000);
+  head.raw(new Array(16).fill(0));
+  for (const v of spec.bbox ?? [0, 0, 0, 0]) head.i16(v); // 36〜43 バイト目
+  head.raw(new Array(6).fill(0));
   head.i16(spec.longLoca ? 1 : 0);
   head.i16(0);
+
+  // hhea（ascender 4、descender 6、numberOfHMetrics 34）/ hmtx
+  const widths =
+    spec.advanceWidths ?? Array.from({ length: numGlyphs }, () => 500);
+  const numberOfHMetrics = spec.numberOfHMetrics ?? numGlyphs;
+  const hhea = new Writer();
+  hhea.u32(0x00010000);
+  hhea.i16(spec.ascender ?? 880);
+  hhea.i16(spec.descender ?? -120);
+  hhea.raw(new Array(26).fill(0));
+  hhea.u16(numberOfHMetrics);
+  const hmtx = new Writer();
+  for (let g = 0; g < numGlyphs; g += 1) {
+    if (g < numberOfHMetrics) hmtx.u16(widths[g] ?? 0);
+    hmtx.i16(0);
+  }
 
   // maxp version 0.5
   const maxp = new Writer();
@@ -174,9 +234,16 @@ export function buildTestTrueType(spec: TestTrueTypeSpec): Uint8Array {
     ["cmap", cmap.toArray()],
     ["glyf", glyf.toArray()],
     ["head", head.toArray()],
+    ["hhea", hhea.toArray()],
+    ["hmtx", hmtx.toArray()],
     ["loca", loca.toArray()],
     ["maxp", maxp.toArray()],
   ];
+  if (spec.hinting) {
+    tables.push(["cvt ", Uint8Array.of(0, 10, 0, 20)]);
+    tables.push(["fpgm", Uint8Array.of(0xb0, 0x01)]);
+    tables.push(["prep", Uint8Array.of(0xb0, 0x02)]);
+  }
   if (spec.familyName !== undefined) {
     const str = new Writer();
     for (const ch of spec.familyName) str.u16(ch.charCodeAt(0));
@@ -192,8 +259,8 @@ export function buildTestTrueType(spec: TestTrueTypeSpec): Uint8Array {
     name.u16(0);
     name.raw(str.toArray());
     tables.push(["name", name.toArray()]);
-    tables.sort((a, b) => (a[0] < b[0] ? -1 : 1));
   }
+  tables.sort((a, b) => (a[0] < b[0] ? -1 : 1));
 
   const font = new Writer();
   font.u32(0x00010000);

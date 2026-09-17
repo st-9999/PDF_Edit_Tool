@@ -67,6 +67,17 @@ export interface FontModel {
    * - 埋め込みが無い・TrueType 以外で確かめられない場合は対応表を信用する
    */
   encode(char: string): number | null;
+  /**
+   * ToUnicode に無い文字を、埋め込み TrueType の cmap から探す（Type0 / Identity-H のみ）。
+   * 使うには ToUnicode と W に対応を追記する必要があるため、そのためのコードと幅（1/1000 em）を返す。
+   * その CID が ToUnicode で別の文字に対応づいている場合は使わない。
+   */
+  encodeViaFontProgram(char: string): { code: number; width: number } | null;
+  /**
+   * 同じ書体の別サブセットを見分けるためのキー（ファミリ名・グリフ総数・unitsPerEm）。
+   * 埋め込み TrueType が無ければ null。
+   */
+  typefaceKey: string | null;
 }
 
 const DEFAULT_ASCENT = 880;
@@ -214,16 +225,39 @@ function readTrueTypeProgram(
   }
 }
 
-/** CIDFont の CIDToGIDMap（Identity または 2 バイトずつの対応表ストリーム）。 */
+/** CIDFont の CIDToGIDMap（Identity または 2 バイトずつの対応表ストリーム）と、その逆引き。 */
 function readCidToGid(
   ctx: PDFContext,
   cidFont: PDFDict | undefined,
-): (cid: number) => number {
+): { toGid: (cid: number) => number; toCid: (gid: number) => number | null } {
   const stream = cidFont ? getStream(ctx, cidFont, "CIDToGIDMap") : undefined;
-  if (!stream) return (cid) => cid;
+  if (!stream) return { toGid: (cid) => cid, toCid: (gid) => gid };
   const map = streamBytes(stream);
-  return (cid) =>
-    cid * 2 + 1 < map.length ? (map[cid * 2]! << 8) | map[cid * 2 + 1]! : 0;
+  let inverse: Map<number, number> | null = null;
+  return {
+    toGid: (cid) =>
+      cid * 2 + 1 < map.length ? (map[cid * 2]! << 8) | map[cid * 2 + 1]! : 0,
+    toCid(gid) {
+      if (!inverse) {
+        inverse = new Map();
+        for (let cid = 0; cid * 2 + 1 < map.length; cid += 1) {
+          const g = (map[cid * 2]! << 8) | map[cid * 2 + 1]!;
+          if (g !== 0 && !inverse.has(g)) inverse.set(g, cid);
+        }
+      }
+      return inverse.get(gid) ?? null;
+    },
+  };
+}
+
+function typefaceKeyOf(
+  program: TrueTypeFont | null,
+  postScriptName: string | null,
+): string | null {
+  if (!program) return null;
+  const family = program.familyName ?? postScriptName;
+  if (!family) return null;
+  return `${family}|${program.numGlyphs}|${program.unitsPerEm}`;
 }
 
 function descriptorMetrics(ctx: PDFContext, descriptor: PDFDict | undefined) {
@@ -259,6 +293,7 @@ function loadType0(
   const metrics = descriptorMetrics(ctx, descriptor);
   const program = readTrueTypeProgram(ctx, descriptor);
   const cidToGid = readCidToGid(ctx, cidFont);
+  const postScriptName = stripSubsetTag(baseFont);
   const unsupportedReason: FontUnsupportedReason | null = vertical
     ? "vertical"
     : identity
@@ -269,7 +304,7 @@ function loadType0(
     resourceName,
     subtype: "Type0",
     baseFont,
-    postScriptName: stripSubsetTag(baseFont),
+    postScriptName,
     vertical,
     unsupportedReason,
     ...metrics,
@@ -296,12 +331,27 @@ function loadType0(
       if (unsupportedReason || [...char].length !== 1) return null;
       for (const code of toUnicode?.codesFor(char) ?? []) {
         if (!program) return code;
-        const gid = cidToGid(code);
+        const gid = cidToGid.toGid(code);
         if (program.hasOutline(gid)) return code;
         if (isBlank(char) && gid > 0 && gid < program.numGlyphs) return code;
       }
       return null;
     },
+    encodeViaFontProgram(char) {
+      if (unsupportedReason || !program || [...char].length !== 1) return null;
+      const gid = program.glyphForUnicode(char.codePointAt(0)!);
+      if (gid === null) return null;
+      if (!program.hasOutline(gid) && !isBlank(char)) return null;
+      const code = cidToGid.toCid(gid);
+      if (code === null) return null;
+      const mapped = toUnicode?.lookup(code);
+      if (mapped !== undefined && mapped !== null && mapped !== char)
+        return null;
+      const advance = program.advanceWidth(gid);
+      if (advance === null) return null;
+      return { code, width: (advance * 1000) / program.unitsPerEm };
+    },
+    typefaceKey: typefaceKeyOf(program, postScriptName),
   };
 }
 
@@ -382,6 +432,8 @@ function loadSimple(
       }
       return null;
     },
+    encodeViaFontProgram: () => null,
+    typefaceKey: typefaceKeyOf(program, stripSubsetTag(baseFont)),
   };
 }
 

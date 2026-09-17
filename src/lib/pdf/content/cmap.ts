@@ -138,3 +138,57 @@ export function parseToUnicodeCMap(bytes: Uint8Array): ToUnicodeCMap {
     entries: () => map.entries(),
   };
 }
+
+/** bfchar 1 ブロックあたりの上限件数（PDF 仕様 / Adobe Technical Note #5014）。 */
+const BFCHAR_BLOCK_LIMIT = 100;
+
+function hexOf(value: number, bytes: number): string {
+  return value
+    .toString(16)
+    .toUpperCase()
+    .padStart(bytes * 2, "0");
+}
+
+/** 文字列を UTF-16BE の 16 進表記にする。 */
+function utf16beHex(text: string): string {
+  let s = "";
+  for (let i = 0; i < text.length; i += 1) s += hexOf(text.charCodeAt(i), 2);
+  return s;
+}
+
+/**
+ * ToUnicode CMap ストリームの中身を書き出す。
+ * `codeLength` はコードのバイト長（Type0 / Identity-H は 2、単純フォントは 1）。
+ */
+export function writeToUnicodeCMap(
+  entries: Iterable<[number, string]>,
+  codeLength: 1 | 2,
+): Uint8Array {
+  const sorted = [...entries].sort((a, b) => a[0] - b[0]);
+  const lines = [
+    "/CIDInit /ProcSet findresource begin",
+    "12 dict begin",
+    "begincmap",
+    "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def",
+    "/CMapName /Adobe-Identity-UCS def",
+    "/CMapType 2 def",
+    "1 begincodespacerange",
+    `<${hexOf(0, codeLength)}> <${hexOf(codeLength === 2 ? 0xffff : 0xff, codeLength)}>`,
+    "endcodespacerange",
+  ];
+  for (let i = 0; i < sorted.length; i += BFCHAR_BLOCK_LIMIT) {
+    const block = sorted.slice(i, i + BFCHAR_BLOCK_LIMIT);
+    lines.push(`${block.length} beginbfchar`);
+    for (const [code, text] of block) {
+      lines.push(`<${hexOf(code, codeLength)}> <${utf16beHex(text)}>`);
+    }
+    lines.push("endbfchar");
+  }
+  lines.push(
+    "endcmap",
+    "CMapName currentdict /CMap defineresource pop",
+    "end",
+    "end",
+  );
+  return new TextEncoder().encode(lines.join("\n"));
+}

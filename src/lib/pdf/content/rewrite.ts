@@ -1,5 +1,10 @@
 import { PDFName, type PDFDocument } from "pdf-lib";
-import type { CharCode, FontModel, FontUnsupportedReason } from "./font";
+import type { FontModel, FontUnsupportedReason } from "./font";
+import {
+  GlyphResolver,
+  type GlyphResolverOptions,
+  type ResolvedGlyph,
+} from "./glyph-resolver";
 import type { ContentOperation, Operand } from "./operations";
 import { extractPageText, type PageText } from "./page-text";
 import { transformPoint, type Matrix, type PageGlyph } from "./text-layout";
@@ -27,11 +32,24 @@ export type RewriteFailure =
     }
   | { kind: "missing-glyphs"; replacement: number; chars: string[] };
 
-export type RewriteWarning = {
-  /** 文字がクリップからはみ出すが、クリップが矩形でないため広げられなかった。 */
-  kind: "clip-not-adjusted";
-  replacement: number;
-};
+export type RewriteWarning =
+  | {
+      /** 文字がクリップからはみ出すが、クリップが矩形でないため広げられなかった。 */
+      kind: "clip-not-adjusted";
+      replacement: number;
+    }
+  | {
+      /** 文書内のフォントで描けず、同梱フォントで描いた（書体が変わる）文字。 */
+      kind: "fallback-font";
+      replacement: number;
+      chars: string[];
+    };
+
+/** 1 文字を描くフォントとコードを決める関数（描けなければ null）。 */
+export type GlyphResolveFn = (
+  fontResource: string,
+  char: string,
+) => ResolvedGlyph | null;
 
 export type RewriteResult =
   | { ok: true; clipAdjustments: number; warnings: RewriteWarning[] }
@@ -72,7 +90,14 @@ function invert(m: Matrix): Matrix | null {
 // 置換する命令の単位列（グリフ／TJ の数値）
 
 type Unit =
-  | { kind: "glyph"; bytes: Uint8Array; glyphIndex: number }
+  | {
+      kind: "glyph";
+      bytes: Uint8Array;
+      /** 元のグリフの index（新しいグリフは -1）。 */
+      glyphIndex: number;
+      /** 描くフォントのリソース名。 */
+      resource: string;
+    }
   | { kind: "number"; value: number };
 
 /** 文字列を持つ引数（Tj・TJ・' は 0、" は 2）。 */
@@ -94,6 +119,7 @@ function unitsOf(
         kind: "glyph",
         bytes: o.bytes.subarray(c.offset, c.offset + c.length),
         glyphIndex: next,
+        resource: font.resourceName,
       });
       next += 1;
     }
@@ -125,24 +151,45 @@ function hex(bytes: Uint8Array): string {
   return s;
 }
 
-/** 単位列を TJ 配列の中身として書き出す（連続するグリフは 1 つの 16 進文字列にまとめる）。 */
-function serializeUnits(units: Unit[]): string {
-  const parts: string[] = [];
+/**
+ * 単位列を文字列表示の命令として書き出す。連続するグリフは 1 つの 16 進文字列にまとめ、
+ * 描くフォントが変わる箇所では TJ を区切って Tf で切り替え、最後に元のフォントへ戻す。
+ */
+function serializeTextShow(
+  units: Unit[],
+  baseResource: string,
+  fontSize: number,
+): string {
+  const out: string[] = [];
+  let current = baseResource;
+  let parts: string[] = [];
   let pending: number[] = [];
-  const flush = () => {
+  const flushGlyphs = () => {
     if (pending.length > 0) parts.push(`<${hex(Uint8Array.from(pending))}>`);
     pending = [];
   };
+  const flushArray = () => {
+    flushGlyphs();
+    if (parts.length > 0) out.push(`[${parts.join(" ")}] TJ`);
+    parts = [];
+  };
+  const switchTo = (resource: string) => {
+    flushArray();
+    out.push(`${PDFName.of(resource).toString()} ${fmt(fontSize)} Tf`);
+    current = resource;
+  };
   for (const u of units) {
     if (u.kind === "glyph") {
+      if (u.resource !== current) switchTo(u.resource);
       pending.push(...u.bytes);
     } else {
-      flush();
+      flushGlyphs();
       parts.push(fmt(u.value));
     }
   }
-  flush();
-  return `[${parts.join(" ")}]`;
+  flushArray();
+  if (current !== baseResource) switchTo(baseResource);
+  return out.length > 0 ? out.join(" ") : "[] TJ";
 }
 
 // ---------------------------------------------------------------------------
@@ -306,12 +353,13 @@ interface PlannedReplacement {
   replacement: TextReplacement;
   glyphs: PageGlyph[];
   font: FontModel;
-  codes: number[];
+  resolved: ResolvedGlyph[];
 }
 
 function validate(
   page: PageText,
   replacements: TextReplacement[],
+  resolveGlyph: GlyphResolveFn,
 ): { planned: PlannedReplacement[]; failures: RewriteFailure[] } {
   const failures: RewriteFailure[] = [];
   const planned: PlannedReplacement[] = [];
@@ -355,14 +403,14 @@ function validate(
       });
       return;
     }
-    const codes: number[] = [];
+    const resolved: ResolvedGlyph[] = [];
     const missing: string[] = [];
     for (const ch of r.text) {
-      const code = font.encode(ch);
-      if (code === null) {
+      const glyph = resolveGlyph(first.fontResource, ch);
+      if (glyph === null) {
         if (!missing.includes(ch)) missing.push(ch);
       } else {
-        codes.push(code);
+        resolved.push(glyph);
       }
     }
     if (missing.length > 0) {
@@ -373,7 +421,7 @@ function validate(
       });
       return;
     }
-    planned.push({ index, replacement: r, glyphs, font, codes });
+    planned.push({ index, replacement: r, glyphs, font, resolved });
   });
 
   return { planned, failures };
@@ -381,16 +429,36 @@ function validate(
 
 /** グリフ 1 つ分の送り（テキスト空間、Tc・Tw・Tz を含む）。 */
 function textAdvance(
-  font: FontModel,
-  code: CharCode,
   width: number,
+  isWordSpace: boolean,
   state: PageGlyph,
 ): number {
-  const tw = font.isWordSpace(code) ? state.wordSpacing : 0;
+  const tw = isWordSpace ? state.wordSpacing : 0;
   return (
     ((width / 1000) * state.fontSize + state.charSpacing + tw) *
     state.horizontalScale
   );
+}
+
+/** 元のフォントの ToUnicode だけで解決する（補完しない）。 */
+function sameFontResolver(page: PageText): GlyphResolveFn {
+  return (resource, char) => {
+    const font = page.fonts.get(resource);
+    const code = font?.encode(char) ?? null;
+    if (!font || code === null) return null;
+    const codeLength = font.subtype === "Type0" ? 2 : 1;
+    return {
+      char,
+      resource,
+      code,
+      codeLength,
+      width: font.width(code),
+      ascent: font.ascent,
+      descent: font.descent,
+      isWordSpace: font.isWordSpace({ code, offset: 0, length: codeLength }),
+      source: "same-font",
+    };
+  };
 }
 
 /**
@@ -400,6 +468,7 @@ function textAdvance(
 export function rewritePageContent(
   page: PageText,
   replacements: TextReplacement[],
+  resolveGlyph: GlyphResolveFn = sameFontResolver(page),
 ):
   | {
       ok: true;
@@ -408,7 +477,7 @@ export function rewritePageContent(
       warnings: RewriteWarning[];
     }
   | { ok: false; failures: RewriteFailure[] } {
-  const { planned, failures } = validate(page, replacements);
+  const { planned, failures } = validate(page, replacements, resolveGlyph);
   if (failures.length > 0) {
     return {
       ok: false,
@@ -437,7 +506,6 @@ export function rewritePageContent(
     const font = list[0]!.font;
     const opGlyphs = page.glyphs.filter((g) => g.source.opIndex === opIndex);
     let units = unitsOf(op, font, opGlyphs[0]!.index);
-    const codeLength = font.subtype === "Type0" ? 2 : 1;
 
     // 後ろの範囲から置き換えると、前の範囲の単位位置がずれない
     for (const p of [...list].sort(
@@ -459,9 +527,12 @@ export function rewritePageContent(
         if (u.kind === "glyph") {
           const g = page.glyphs[u.glyphIndex]!;
           oldSpan += textAdvance(
-            font,
-            { code: g.code, offset: 0, length: g.source.byteLength },
             g.width,
+            font.isWordSpace({
+              code: g.code,
+              offset: 0,
+              length: g.source.byteLength,
+            }),
             g,
           );
         } else {
@@ -469,13 +540,8 @@ export function rewritePageContent(
         }
       }
       // 新: 新しいコードの送り
-      const newAdvances = p.codes.map((code) =>
-        textAdvance(
-          font,
-          { code, offset: 0, length: codeLength },
-          font.width(code),
-          first,
-        ),
+      const newAdvances = p.resolved.map((r) =>
+        textAdvance(r.width, r.isWordSpace, first),
       );
       const newSpan = newAdvances.reduce((s, a) => s + a, 0);
       const delta = newSpan - oldSpan;
@@ -487,11 +553,24 @@ export function rewritePageContent(
       const replacementUnits: Unit[] = [];
       if (Math.abs(shift) > EPS)
         replacementUnits.push({ kind: "number", value: toTj(shift) });
-      for (const code of p.codes) {
+      for (const r of p.resolved) {
         replacementUnits.push({
           kind: "glyph",
-          bytes: codeBytes(code, codeLength),
+          bytes: codeBytes(r.code, r.codeLength),
           glyphIndex: -1,
+          resource: r.resource,
+        });
+      }
+      const fallbackChars = [
+        ...new Set(
+          p.resolved.filter((r) => r.source === "fallback").map((r) => r.char),
+        ),
+      ];
+      if (fallbackChars.length > 0) {
+        warnings.push({
+          kind: "fallback-font",
+          replacement: p.index,
+          chars: fallbackChars,
         });
       }
       const after = delta - shift;
@@ -508,13 +587,13 @@ export function rewritePageContent(
       if (clips.length === 0) continue;
       const trm = first.matrix;
       const em = first.fontSize * first.horizontalScale;
-      const asc = font.ascent / 1000;
-      const desc = font.descent / 1000;
       const newQuads: number[][] = [];
       let offset = -shift;
-      p.codes.forEach((code, i) => {
+      p.resolved.forEach((r, i) => {
         const u = offset / em;
-        const w = font.width(code) / 1000;
+        const w = r.width / 1000;
+        const asc = r.ascent / 1000;
+        const desc = r.descent / 1000;
         newQuads.push([
           ...transformPoint(trm, u, desc),
           ...transformPoint(trm, u + w, desc),
@@ -569,7 +648,12 @@ export function rewritePageContent(
         if (growLow <= EPS && growHigh <= EPS) continue;
         if (!rect || !current) {
           // 矩形でない（または座標を読めない）クリップは変更しない
-          if (!warnings.some((w) => w.replacement === p.index)) {
+          if (
+            !warnings.some(
+              (w) =>
+                w.kind === "clip-not-adjusted" && w.replacement === p.index,
+            )
+          ) {
             warnings.push({ kind: "clip-not-adjusted", replacement: p.index });
           }
           continue;
@@ -582,7 +666,11 @@ export function rewritePageContent(
     }
 
     // 命令を書き出す（Tj・'・" は等価な TJ に変換する）
-    const array = serializeUnits(units);
+    const body = serializeTextShow(
+      units,
+      font.resourceName,
+      list[0]!.glyphs[0]!.fontSize,
+    );
     const numberText = (o: Operand | undefined) =>
       o
         ? new TextDecoder("latin1").decode(
@@ -592,13 +680,13 @@ export function rewritePageContent(
     let text: string;
     switch (op.operator) {
       case "'":
-        text = `T* ${array} TJ`;
+        text = `T* ${body}`;
         break;
       case '"':
-        text = `${numberText(op.operands[0])} Tw ${numberText(op.operands[1])} Tc T* ${array} TJ`;
+        text = `${numberText(op.operands[0])} Tw ${numberText(op.operands[1])} Tc T* ${body}`;
         break;
       default:
-        text = `${array} TJ`;
+        text = body;
     }
     edits.push({ start: op.start, end: op.end, text });
   }
@@ -609,7 +697,11 @@ export function rewritePageContent(
     }
   }
 
-  warnings.sort((a, b) => a.replacement - b.replacement);
+  // 置換の番号順、同じ置換ではクリップ → 同梱フォントの順
+  const order = { "clip-not-adjusted": 0, "fallback-font": 1 } as const;
+  warnings.sort(
+    (a, b) => a.replacement - b.replacement || order[a.kind] - order[b.kind],
+  );
   return {
     ok: true,
     content: splice(page.content.bytes, edits),
@@ -645,15 +737,22 @@ function splice(
 /**
  * ページの文字列を書き換える。成功した場合のみ、ページの /Contents を
  * 新しい 1 つのコンテンツストリームに差し替える（共有ストリームは変更しない）。
+ * 元のフォントに無い文字は `GlyphResolver` の順で補い、そのための追記（ToUnicode・W・
+ * リソース・同梱フォント）も成功した場合にだけ反映する。
  */
 export function replacePageText(
   doc: PDFDocument,
   pageIndex: number,
   replacements: TextReplacement[],
+  options: GlyphResolverOptions = {},
 ): RewriteResult {
   const page = extractPageText(doc, pageIndex);
-  const result = rewritePageContent(page, replacements);
+  const resolver = new GlyphResolver(doc, pageIndex, page, options);
+  const result = rewritePageContent(page, replacements, (resource, char) =>
+    resolver.resolve(resource, char),
+  );
   if (!result.ok) return result;
+  resolver.commit();
   const ctx = doc.context;
   const stream = ctx.register(ctx.flateStream(result.content));
   doc.getPage(pageIndex).node.set(PDFName.of("Contents"), stream);

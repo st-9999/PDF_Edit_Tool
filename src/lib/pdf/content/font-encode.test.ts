@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { PDFDict, PDFDocument, PDFName, type PDFContext } from "pdf-lib";
 import { loadFontModel } from "./font";
+import { cidFontWithProgram } from "./pdf-fixtures.test-helper";
 import { buildTestTrueType } from "./truetype.test-helper";
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -17,63 +18,6 @@ function toUnicodeStream(ctx: PDFContext, body: string) {
       enc(`1 begincodespacerange <0000> <FFFF> endcodespacerange\n${body}`),
     ),
   );
-}
-
-const hex4 = (n: number) => n.toString(16).padStart(4, "0");
-
-/** Type0 / Identity-H。FontFile2 に指定の輪郭有無を持つ TrueType を埋め込む。 */
-function cidFontWithProgram(
-  ctx: PDFContext,
-  opts: {
-    toUnicode: Record<number, string>;
-    outlines?: boolean[];
-    cidToGid?: number[];
-  },
-): PDFDict {
-  const entries = Object.entries(opts.toUnicode);
-  const bfchar = entries
-    .map(([code, ch]) => `<${hex4(Number(code))}> <${hex4(ch.charCodeAt(0))}>`)
-    .join("\n");
-  const descriptor = ctx.obj({ Type: "FontDescriptor", Flags: 4 });
-  if (opts.outlines) {
-    descriptor.set(
-      PDFName.of("FontFile2"),
-      ctx.register(
-        ctx.flateStream(buildTestTrueType({ outlines: opts.outlines })),
-      ),
-    );
-  }
-  const descendant = ctx.obj({
-    Type: "Font",
-    Subtype: "CIDFontType2",
-    BaseFont: "AAAAAA+MS-Gothic",
-    FontDescriptor: ctx.register(descriptor),
-  });
-  if (opts.cidToGid) {
-    const map = new Uint8Array(opts.cidToGid.length * 2);
-    opts.cidToGid.forEach((gid, cid) => {
-      map[cid * 2] = gid >> 8;
-      map[cid * 2 + 1] = gid & 0xff;
-    });
-    descendant.set(
-      PDFName.of("CIDToGIDMap"),
-      ctx.register(ctx.flateStream(map)),
-    );
-  } else {
-    descendant.set(PDFName.of("CIDToGIDMap"), PDFName.of("Identity"));
-  }
-  const font = ctx.obj({
-    Type: "Font",
-    Subtype: "Type0",
-    BaseFont: "AAAAAA+MS-Gothic",
-    Encoding: "Identity-H",
-    DescendantFonts: [ctx.register(descendant)],
-  });
-  font.set(
-    PDFName.of("ToUnicode"),
-    toUnicodeStream(ctx, `${entries.length} beginbfchar\n${bfchar}\nendbfchar`),
-  );
-  return font;
 }
 
 describe("FontModel.encode（新しい文字を、そのフォントで描けるコードに変換する）", () => {
@@ -262,5 +206,140 @@ describe("FontModel.encode（新しい文字を、そのフォントで描ける
       );
       expect(font.encode("１")).toBe(0x41);
     });
+  });
+});
+
+describe("FontModel.encodeViaFontProgram（ToUnicode に無い文字を埋め込みフォントの cmap から探す）", () => {
+  it("cmap に輪郭のある字形があれば、CID と hmtx 由来の幅（1/1000 em）を返す", async () => {
+    const ctx = await newContext();
+    const font = loadFontModel(
+      ctx,
+      "F1",
+      cidFontWithProgram(ctx, {
+        toUnicode: { 1: "1" },
+        outlines: [false, true, true, false],
+        program: {
+          unicodeBmp: { 0x31: 1, 0x37: 2, 0x39: 3 },
+          advanceWidths: [0, 1100, 1024, 1024],
+          unitsPerEm: 2048,
+        },
+      }),
+    );
+    expect(font.encodeViaFontProgram("7")).toEqual({ code: 2, width: 500 });
+    // 字形はあるが輪郭が削られている
+    expect(font.encodeViaFontProgram("9")).toBeNull();
+    // cmap に無い
+    expect(font.encodeViaFontProgram("8")).toBeNull();
+  });
+
+  it("その CID が ToUnicode で別の文字に対応づいていれば使わない", async () => {
+    const ctx = await newContext();
+    const font = loadFontModel(
+      ctx,
+      "F1",
+      cidFontWithProgram(ctx, {
+        toUnicode: { 2: "X" },
+        outlines: [false, false, true],
+        program: { unicodeBmp: { 0x37: 2 } },
+      }),
+    );
+    expect(font.encodeViaFontProgram("7")).toBeNull();
+  });
+
+  it("CIDToGIDMap ストリームがあれば GID から CID を逆に引く", async () => {
+    const ctx = await newContext();
+    const font = loadFontModel(
+      ctx,
+      "F1",
+      cidFontWithProgram(ctx, {
+        toUnicode: {},
+        cidToGid: [0, 0, 0, 0, 0, 2],
+        outlines: [false, false, true],
+        program: { unicodeBmp: { 0x37: 2 } },
+      }),
+    );
+    expect(font.encodeViaFontProgram("7")?.code).toBe(5);
+  });
+
+  it("フォント実体が無い・単純フォントでは null", async () => {
+    const ctx = await newContext();
+    const noProgram = loadFontModel(
+      ctx,
+      "F1",
+      cidFontWithProgram(ctx, { toUnicode: {} }),
+    );
+    expect(noProgram.encodeViaFontProgram("7")).toBeNull();
+
+    const simple = ctx.obj({
+      Type: "Font",
+      Subtype: "TrueType",
+      FirstChar: 32,
+      Widths: [500],
+      FontDescriptor: ctx.obj({
+        Type: "FontDescriptor",
+        FontFile2: ctx.register(
+          ctx.flateStream(
+            buildTestTrueType({
+              outlines: [false, true],
+              unicodeBmp: { 0x37: 1 },
+            }),
+          ),
+        ),
+      }),
+    });
+    expect(
+      loadFontModel(ctx, "F2", simple).encodeViaFontProgram("7"),
+    ).toBeNull();
+  });
+});
+
+describe("FontModel.typefaceKey（同じ書体の別サブセットを見分ける）", () => {
+  it("ファミリ名・グリフ総数・unitsPerEm が同じなら同じキーになる（ベースフォント名が違っても）", async () => {
+    const ctx = await newContext();
+    const a = cidFontWithProgram(ctx, {
+      toUnicode: {},
+      outlines: [false, true, false],
+      program: { familyName: "MS Mincho", unitsPerEm: 2048 },
+    });
+    const b = cidFontWithProgram(ctx, {
+      toUnicode: {},
+      outlines: [false, false, true],
+      program: { familyName: "MS Mincho", unitsPerEm: 2048 },
+    });
+    b.set(PDFName.of("BaseFont"), PDFName.of("CIDFont+F1"));
+    const c = cidFontWithProgram(ctx, {
+      toUnicode: {},
+      outlines: [false, true, false, false],
+      program: { familyName: "MS Mincho", unitsPerEm: 2048 },
+    });
+    const keyA = loadFontModel(ctx, "F1", a).typefaceKey;
+    expect(keyA).not.toBeNull();
+    expect(loadFontModel(ctx, "F2", b).typefaceKey).toBe(keyA);
+    // グリフ総数が違えば別の書体
+    expect(loadFontModel(ctx, "F3", c).typefaceKey).not.toBe(keyA);
+  });
+
+  it("name 表が無ければベースフォント名（サブセット接頭辞を除く）で判定する", async () => {
+    const ctx = await newContext();
+    const a = cidFontWithProgram(ctx, {
+      toUnicode: {},
+      outlines: [false, true],
+    });
+    const b = cidFontWithProgram(ctx, {
+      toUnicode: {},
+      outlines: [true, false],
+    });
+    b.set(PDFName.of("BaseFont"), PDFName.of("ZZZZZZ+MS-Gothic"));
+    const keyA = loadFontModel(ctx, "F1", a).typefaceKey;
+    expect(keyA).not.toBeNull();
+    expect(loadFontModel(ctx, "F2", b).typefaceKey).toBe(keyA);
+  });
+
+  it("フォント実体が無ければ null（同一性を確かめられない）", async () => {
+    const ctx = await newContext();
+    expect(
+      loadFontModel(ctx, "F1", cidFontWithProgram(ctx, { toUnicode: {} }))
+        .typefaceKey,
+    ).toBeNull();
   });
 });

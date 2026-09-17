@@ -23,6 +23,8 @@ function simpleFont(name: string, width = 500): FontModel {
     width: () => width,
     isWordSpace: (c) => c.length === 1 && c.code === 32,
     encode: (ch) => ch.charCodeAt(0),
+    encodeViaFontProgram: () => null,
+    typefaceKey: null,
   };
 }
 

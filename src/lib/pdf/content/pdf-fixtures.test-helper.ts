@@ -7,8 +7,13 @@ import {
   PDFHexString,
   PDFName,
   type PDFContext,
+  type PDFDict,
   type PDFRef,
 } from "pdf-lib";
+import {
+  buildTestTrueType,
+  type TestTrueTypeSpec,
+} from "./truetype.test-helper";
 
 export const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -138,4 +143,86 @@ export async function buildPdf(
     refs.length === 1 ? refs[0]! : ctx.obj(refs),
   );
   return doc.save();
+}
+
+function toUnicodeStream(ctx: PDFContext, body: string) {
+  return ctx.register(
+    ctx.flateStream(
+      enc(`1 begincodespacerange <0000> <FFFF> endcodespacerange
+${body}`),
+    ),
+  );
+}
+
+const hex4 = (n: number) => n.toString(16).padStart(4, "0");
+
+/**
+ * Type0 / Identity-H。FontFile2 に指定の輪郭有無を持つ TrueType を埋め込む。
+ * `widths` を渡すと /W に設定する（省略時は DW 1000 のみ）。
+ */
+export function cidFontWithProgram(
+  ctx: PDFContext,
+  opts: {
+    toUnicode: Record<number, string>;
+    outlines?: boolean[];
+    cidToGid?: number[];
+    program?: Omit<TestTrueTypeSpec, "outlines">;
+    baseFont?: string;
+    widths?: Record<number, number>;
+  },
+): PDFDict {
+  const entries = Object.entries(opts.toUnicode);
+  const bfchar = entries
+    .map(([code, ch]) => `<${hex4(Number(code))}> <${hex4(ch.charCodeAt(0))}>`)
+    .join("\n");
+  const descriptor = ctx.obj({ Type: "FontDescriptor", Flags: 4 });
+  if (opts.outlines) {
+    descriptor.set(
+      PDFName.of("FontFile2"),
+      ctx.register(
+        ctx.flateStream(
+          buildTestTrueType({ outlines: opts.outlines, ...opts.program }),
+        ),
+      ),
+    );
+  }
+  const descendant = ctx.obj({
+    Type: "Font",
+    Subtype: "CIDFontType2",
+    BaseFont: opts.baseFont ?? "AAAAAA+MS-Gothic",
+    FontDescriptor: ctx.register(descriptor),
+  });
+  if (opts.widths) {
+    descendant.set(
+      PDFName.of("W"),
+      ctx.obj(
+        Object.entries(opts.widths).flatMap(([code, w]) => [Number(code), [w]]),
+      ),
+    );
+  }
+  if (opts.cidToGid) {
+    const map = new Uint8Array(opts.cidToGid.length * 2);
+    opts.cidToGid.forEach((gid, cid) => {
+      map[cid * 2] = gid >> 8;
+      map[cid * 2 + 1] = gid & 0xff;
+    });
+    descendant.set(
+      PDFName.of("CIDToGIDMap"),
+      ctx.register(ctx.flateStream(map)),
+    );
+  } else {
+    descendant.set(PDFName.of("CIDToGIDMap"), PDFName.of("Identity"));
+  }
+  const font = ctx.obj({
+    Type: "Font",
+    Subtype: "Type0",
+    BaseFont: opts.baseFont ?? "AAAAAA+MS-Gothic",
+    Encoding: "Identity-H",
+    DescendantFonts: [ctx.register(descendant)],
+  });
+  font.set(
+    PDFName.of("ToUnicode"),
+    toUnicodeStream(ctx, `${entries.length} beginbfchar\n${bfchar}\nendbfchar`),
+  );
+  return font;
 }

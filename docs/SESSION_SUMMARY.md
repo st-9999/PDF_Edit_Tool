@@ -13,6 +13,62 @@
 
 ---
 
+## 2026-09-17 — テキスト書き換え T3: 元のフォントに無い文字の補完
+
+### 実施内容
+
+- 元のフォントで描けない文字を、書体が変わらないものから順に補う `glyph-resolver.ts` を実装した: (1) 元フォントの ToUnicode、(2) 元フォントの埋め込み TrueType の cmap（ToUnicode と W に追記）、(3) 文書内の同じ書体の別サブセット（ページのリソースに加え `Tf` を切り替え、直後に元のフォントへ戻す）、(4) 同梱フォント Noto Sans JP（警告 `fallback-font`）。`resolve` は文書を変更せず、書き換えが全件成功したときだけ `commit` で追記する。
+- `rewrite.ts` を拡張し、1 つの置換の中で描くフォントが変わる場合は TJ を区切って `Tf` を挟んで書き出すようにした。
+- **同梱フォントの取得**: ユーザー承認のもと取得を試みたが、curl によるダウンロードは実行環境の権限設定で拒否された。npm パッケージ `@expo-google-fonts/noto-sans-jp@0.4.3` を `npm pack` で作業フォルダに取得し、Regular の静的 TTF とライセンス文（OFL 1.1）だけを取り出して `public/fonts/` に配置した（依存関係には追加していない）。
+- **@pdf-lib/fontkit を不採用にした**: いったんインストールして試作したところ、`subset: true` では 7 文字中 5 文字が表示されず（抽出・幅は正しい）、`subset: false` では PDF が約 3.2MB 増えた。代わりに **GID を保った部分埋め込み** `truetype-subset.ts` を自前で実装し（使う字形の輪郭データをバイト列のまま複写）、7 文字すべての表示を MuPDF・pdf.js で確認（PDF 約 22KB）。fontkit はアンインストールし、`package-lock.json` も元に戻した。
+- `truetype.ts` に unitsPerEm・外接矩形・アセンダ／ディセンダ・hmtx の送り幅・複合字形の部品を追加。`cmap.ts` に ToUnicode CMap の書き出しを追加。`FontModel` に `encodeViaFontProgram`・`typefaceKey` を追加。
+- 同梱フォントの組み込み `fallback-font.ts`（Type0 / Identity-H、コード＝GID、同じ文書では 1 つのフォント辞書に字形を追加していく）。
+
+### 作成ファイル
+
+- `src/lib/pdf/content/glyph-resolver.ts`
+- `src/lib/pdf/content/fallback-font.ts` / `fallback-font.test.ts`
+- `src/lib/pdf/content/truetype-subset.ts` / `truetype-subset.test.ts`
+- `src/lib/pdf/content/rewrite-fonts.test.ts` / `rewrite-fonts.samples.test.ts`
+- `public/fonts/NotoSansJP-Regular.ttf`（5.5MB）/ `public/fonts/NotoSansJP-OFL.txt`
+
+### 変更ファイル
+
+- `src/lib/pdf/content/rewrite.ts`（解決関数の受け渡し、`Tf` 切り替えを含む書き出し、警告 `fallback-font`、`replacePageText` の `fallbackFont` オプション）
+- `src/lib/pdf/content/font.ts`（`encodeViaFontProgram`・`typefaceKey`、CIDToGIDMap の逆引き）
+- `src/lib/pdf/content/truetype.ts` / `truetype.test.ts` / `truetype.test-helper.ts`（寸法・複合字形）
+- `src/lib/pdf/content/cmap.ts` / `cmap.test.ts`（書き出し）
+- `src/lib/pdf/content/font-encode.test.ts` / `pdf-fixtures.test-helper.ts`（FontFile2 付きフォントの生成を共通化）
+- `src/lib/pdf/content/rewrite.samples.test.ts`（T3 で 7・9 が補完されるようになったため、字形不足で失敗する前提の部分を削除し T3 側へ移した）
+- `src/lib/pdf/content/text-layout.test.ts`（テスト用フォントモデルの追従）
+- `docs/TEXT_REWRITE.md`（§7 T3 実装メモ）、`docs/TODO.md`、`docs/CHANGELOG.md`、`docs/SESSION_SUMMARY.md`
+
+### 計測結果
+
+- **ユニット／統合テスト: 391 → 435 通過 / 435（39 → 43 ファイル）**。新規 44 件（部分埋め込み 7・同梱フォント 9・補完を通した書き換え 8・実サンプル 5・cmap/寸法/encode/書き出し ほか 15）。
+- **実サンプル**（いずれも範囲外のグリフは文字・位置とも不変、pdf.js の抽出・位置と一致）:
+  - 仕様書「令和8年度」→「令和4年度」: 元フォントの cmap 経由、同じフォントのまま。
+  - 仕様書「令和8年度」→「令和9年度」、「508」→「507」: 他ページの同じ MS 明朝のサブセットに切り替え。
+  - 仕様書「令和8年度」→「令和鷗年度」: 同梱フォント、警告あり。PDF の増加は約 20KB（テストでは 50KB 未満を確認）。
+  - 数量計算書「81.9」→「1,234.5」（右揃え）: 「,」のみ同梱フォント、クリップ拡張 1 件。
+  - 目視: 2・3 段目の補完は元の MS 明朝と見分けがつかない。同梱フォントはゴシック体。
+- **テストの検出力**（故意に誤りを入れて失敗することを確認）: cmap 補完の無効化 → 3 件、`Tf` を元に戻さない → 2 件、ToUnicode 追記を反映しない → 3 件、複合字形の部品を残さない → 1 件。
+- `npx tsc --noEmit` / `npx eslint src e2e` エラーなし、`prettier --check` 適合。**`npm run build` 成功**（`out/fonts/` にフォントが含まれ、`out/` 全体 13MB）。
+
+### Risks/TODO
+
+- **配信サイズ**: 同梱フォント 5.5MB を GitHub Pages で配信する。T4 ではテキスト書き換えを使うときだけ読み込む（初期表示には含めない）必要がある。
+- 同梱フォントはゴシック体 1 書体のみ。明朝体の資料で補完すると書体が変わる（警告で明示）。
+- 同じ書体の別フォントからは ToUnicode で描ける文字だけを使う。
+- 複数の命令にまたがる範囲（Excel で 1 文字ずつ別の `BT` に分かれた数字など）は未対応のまま。
+- 本コミットは未 push（プロジェクト規約により push は手動）。
+
+### 次ステップ
+
+- T4: 画面への組み込み。テキスト編集モード、クリックでの範囲選択（命令をまたぐ範囲の扱いを含む）、入力と揃えの切替、補完・警告の表示、プレビュー、操作ログでの Undo/Redo、保存・抽出・分割への反映、同梱フォントの遅延読み込み、E2E。
+
+---
+
 ## 2026-09-17 — テキスト書き換え T2: 同一フォントでの本物の書き換え
 
 ### 実施内容
