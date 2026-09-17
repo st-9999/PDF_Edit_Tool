@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useRef, type CSSProperties } from "react";
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import type { PageViewport, PDFDocumentProxy } from "pdfjs-dist";
 import { renderPageToCanvas, renderTextLayer } from "@/lib/pdf/render";
 import { applyHighlights } from "@/lib/search/highlight";
 import { cn } from "@/lib/utils";
@@ -22,6 +28,11 @@ interface PdfPageViewProps {
   regex?: boolean;
   /** 大文字小文字を区別する。 */
   caseSensitive?: boolean;
+  /**
+   * ページの上に重ねる層（文字の書き換えモードなど）。描画に使ったビューポートを受け取る。
+   * 指定中はテキストレイヤでの文字選択を無効にする。
+   */
+  overlay?: (viewport: PageViewport) => ReactNode;
 }
 
 /** メインビューア用ページ: canvas ＋ テキストレイヤ（選択・コピー・検索ハイライト）。 */
@@ -36,9 +47,11 @@ export function PdfPageView({
   currentLocalIndex = null,
   regex = false,
   caseSensitive = false,
+  overlay,
 }: PdfPageViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState<PageViewport | null>(null);
 
   // ハイライト適用に最新値を使うための参照（canvas 再描画を避けるため依存に含めない）
   const queryRef = useRef(query);
@@ -65,6 +78,7 @@ export function PdfPageView({
         cancelRender = handle.cancel;
         await handle.promise;
         if (cancelled) return;
+        setViewport(handle.viewport);
         await renderTextLayer(page, textContainer, handle.viewport);
         if (cancelled) return;
         applyHighlights(
@@ -126,10 +140,11 @@ export function PdfPageView({
       <canvas ref={canvasRef} className={cn("absolute top-0 left-0 block")} />
       <div
         ref={textRef}
-        className="textLayer"
+        className={cn("textLayer", overlay && "pointer-events-none")}
         data-main-rotation={rot}
         style={{ width: layerWidth, height: layerHeight }}
       />
+      {overlay && viewport && overlay(viewport)}
     </div>
   );
 }

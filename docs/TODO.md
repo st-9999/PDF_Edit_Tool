@@ -153,7 +153,7 @@
   - [x] T4a 中核の拡張: 複数の命令にまたがる範囲のまとめ書き換え（`rewrite.ts`）、クリック用のまとまり判定・ドラッグ範囲・揃えの初期値（`text-runs.ts`）
   - [x] T4b 操作ログ（Undo/Redo）への組み込みと、保存・抽出・分割（Worker）への反映（`editText` 操作・`PageRef.textEdits`、`lib/editor/text-edit.ts`、`buildPdf` の `fallbackFont`、同梱フォントの遅延取得 `fallback-font-source.ts`）
   - [x] T4c 書き換えたページの表示（ビューア・サムネイル・一覧整理・検索）（`edited-page-cache.ts`・`usePageSource`）
-  - [ ] T4d 画面: 書き換えモード、範囲選択、編集ボックス（揃え・書体が変わる表示）、同梱フォントの遅延読み込み
+  - [x] T4d 画面: 書き換えモード、範囲選択、編集ボックス（揃え・書体が変わる表示）、同梱フォントの遅延読み込み（`features/text-edit/`、`text-edit-store`、`hit-test.ts`、E2E `text-rewrite.spec.ts`）
   - [ ] T4e E2E と仕上げ
 - [ ] 画像編集（追加・差し替え・削除）— 後回し
 

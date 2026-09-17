@@ -10,6 +10,7 @@ import {
 import { useViewerStore } from "@/store/viewer-store";
 import { useEditorStore } from "@/store/editor-store";
 import { useOutlineStore } from "@/store/outline-store";
+import { useTextEditStore } from "@/store/text-edit-store";
 import { useUnsavedGuard } from "@/lib/hooks/use-unsaved-guard";
 import { useIsDirty } from "@/lib/hooks/use-is-dirty";
 import { useEditorShortcuts } from "@/lib/hooks/use-editor-shortcuts";
@@ -105,6 +106,7 @@ function ViewerShell() {
       cancelled = true;
       resetEditor();
       resetOutline();
+      useTextEditStore.getState().reset();
     };
   }, [
     file,

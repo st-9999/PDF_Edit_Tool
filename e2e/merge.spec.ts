@@ -1,4 +1,5 @@
-import { test, expect, type Locator, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { waitForHydration } from "./helpers";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 /** ラベル付きの既知ページ数 PDF を生成する。 */
@@ -23,23 +24,6 @@ async function makeSamplePdf(
 }
 
 const MERGE_ZONE = "結合する複数 PDF の読み込み";
-
-/**
- * 枠は SSR の HTML に先に現れるため、React のハイドレーションでイベントハンドラが
- * 付く前に drop / change を送ると無視される（Firefox で顕在化）。ハンドラの付与を待つ。
- */
-async function waitForHydration(locator: Locator) {
-  await locator.evaluate(
-    (el) =>
-      new Promise<void>((resolve) => {
-        const check = () =>
-          Object.keys(el).some((k) => k.startsWith("__reactProps"))
-            ? resolve()
-            : setTimeout(check, 50);
-        check();
-      }),
-  );
-}
 
 /**
  * 実際のドラッグ&ドロップと同じく、`DataTransfer` にファイルを載せて

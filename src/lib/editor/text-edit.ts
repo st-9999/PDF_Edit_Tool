@@ -12,8 +12,10 @@ import {
   type RewriteResult,
 } from "@/lib/pdf/content/rewrite";
 import type { TextEdit } from "./operations";
+import { describeRewriteFailures } from "./rewrite-messages";
 
 export type { TextEdit } from "./operations";
+export { describeRewriteFailures } from "./rewrite-messages";
 
 /**
  * ページのテキスト書き換え（本物の書き換え）を、編集モデルから使うための入口。
@@ -34,32 +36,6 @@ export class TextEditError extends Error {
     super(message);
     this.name = "TextEditError";
   }
-}
-
-const UNSUPPORTED_FONT: Record<string, string> = {
-  vertical: "縦書きの文字",
-  encoding: "対応していない文字コード方式のフォントの文字",
-  metrics: "文字幅の情報が無いフォントの文字",
-  type3: "Type3 フォントの文字",
-};
-
-/** 失敗の理由を利用者向けの日本語にする。 */
-export function describeRewriteFailures(failures: RewriteFailure[]): string {
-  const reasons = failures.map((f) => {
-    switch (f.kind) {
-      case "invalid-range":
-        return "書き換える範囲が正しくありません";
-      case "overlap":
-        return "書き換える範囲が重なっています";
-      case "spans-operations":
-        return "選んだ範囲は PDF 内で別々の行・書式に分かれているため、まとめて書き換えられません";
-      case "unsupported-font":
-        return `${UNSUPPORTED_FONT[f.reason] ?? "このフォントの文字"}は書き換えられません`;
-      case "missing-glyphs":
-        return `「${f.chars.join("」「")}」を描けるフォントがありません`;
-    }
-  });
-  return [...new Set(reasons)].join("。");
 }
 
 /** 元の PDF を読み、指定ページに書き換え履歴を順に適用した文書を返す（ページの位置は変わらない）。 */

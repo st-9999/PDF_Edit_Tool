@@ -1,6 +1,6 @@
 # テキスト書き換え（本物の書き換え）設計メモ
 
-> ステータス: **T4（UI）実装中: T4a〜T4c 完了（2026-09-17）**
+> ステータス: **T4（UI）実装中: T4a〜T4d 完了（2026-09-17）**
 > 関連: [`SPEC.md`](./SPEC.md) §6.1、[`TODO.md`](./TODO.md)「テキスト書き換え」
 
 ## 1. 目的と定義
@@ -228,3 +228,14 @@ PDF しか手元に無い資料で、**一部の数字や文言を変更する**
 - 同梱フォント: まず使わずに作り、`TextEditError` に `missing-glyphs` があったときだけ `loadFallbackFont()` で読み込んで作り直す（書き換えのたびに 5.5MB を読み込まない）。`TextEditError` は名前で判定し、pdf-lib を含む `text-edit` は動的 import にして、書き換えが無い文書では読み込まない。
 - 作成に失敗したページは元のページを表示し、ページごとに 1 度だけトーストで通知する。
 - 既知の制約: プレビューの作成は本スレッドで行う（元の PDF 全体を読むため、大きな文書では書き換え直後に表示が少し遅れる可能性がある）。報告書しおり自動作成は元のページのテキストを使う。
+
+### 8.5 T4d（操作画面）
+
+- **モード**: `text-edit-store`（`active` と、文書全体で 1 つの `selection = { pageId, start, end }`）。編集ツールバーのトグル「文字を書き換え」で切り替え、「ページを一覧整理」を開くとき・文書を切り替えたときは解除する。
+- **重ねる層**: `PdfPageView` に `overlay(viewport)` を追加し、書き換えモードの間はページの上に `TextEditLayer` を重ねる（テキストレイヤは `pointer-events: none` にして文字選択と競合させない）。PDF 座標 → 画面座標は pdf.js の `viewport.convertToViewportPoint`（回転・拡大率を含む）。
+- **文字情報**: `useEditablePage(page)` が `loadDocumentWithEdits` の結果から `extractPageText`・`findTextRuns` を求める（元の PDF 全体を読むため、同時に保持するのは 3 ページ分）。同梱フォントが必要な書き換えを含む場合はフォントを読み込んで作り直す。pdf-lib を含むモジュールはすべて動的 import。
+- **選択**: `hit-test.ts` の `glyphAt`（グリフの四隅の多角形で判定、外れたら 3px 以内の最寄り）と `selectionRect`。移動量 3px 以下ならクリック（まとまり）、超えたらドラッグ（`rangeBetween`。別の行にまたがると選べない旨を表示）。位置計算に未対応のフォントの文字は選べない旨を表示。
+- **編集ボックス**（`TextEditPopover`）: 元の文字、新しい文字（Enter で確定、Esc で閉じる。IME 変換中の Enter は無視）、揃え（`suggestAlign` が初期値）、状態、キャンセル／確定。入力が 150ms 止まったら `previewTextEdit` で確認し、`missing-glyphs` なら同梱フォントを読み込んで再確認する。状態の文言は `previewStatus`（変更なし／確認中／元の書体のまま／書体が変わる・クリップを広げられない（確定可）／書き換えられない理由（確定不可））。
+- **位置**: ページ下端に近ければ選択範囲の上に出す。`scrollIntoView` は祖先のスクロール領域まで動かす（以前の上部バー消失の原因）ため使わず、`[data-viewer-scroll]` の中だけを必要な分スクロールし、入力欄は `focus({ preventScroll: true })`。
+- **確認**: E2E `text-rewrite.spec.ts`（クリック選択→書き換え→表示・未保存・Undo/Redo・保存した PDF の文字、同梱フォントの警告と確定、描けない文字で確定不可と Esc、モード OFF）。実サンプル（数量計算書）でも画面操作で「81.9」→「1,234.5」を確認した。
+- **E2E の安定化**: 入口画面でのファイル投入はハイドレーション待ち（`e2e/helpers.ts` の `waitForHydration`）を入れる。書き換え・結合の spec に適用済み。他の既存 spec は未適用（Firefox で不安定な原因）。

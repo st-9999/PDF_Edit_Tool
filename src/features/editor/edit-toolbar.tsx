@@ -8,7 +8,10 @@ import {
   RotateCwIcon,
   ScissorsIcon,
   Trash2Icon,
+  TypeIcon,
 } from "lucide-react";
+import { Toggle } from "@/components/ui/toggle";
+import { useTextEditStore } from "@/store/text-edit-store";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -31,6 +34,8 @@ export function EditToolbar() {
   const selectedCount = useEditorStore(editorSelectors.selectedCount);
   const { rotate, remove, extract, split } = useEditActions();
   const setOrganize = useViewerStore((s) => s.setOrganize);
+  const textEditActive = useTextEditStore((s) => s.active);
+  const setTextEditActive = useTextEditStore((s) => s.setActive);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const hasSelection = selectedCount > 0;
 
@@ -106,11 +111,37 @@ export function EditToolbar() {
         type="button"
         size="sm"
         variant="ghost"
-        onClick={() => setOrganize(true)}
+        onClick={() => {
+          setTextEditActive(false);
+          setOrganize(true);
+        }}
       >
         <LayoutGridIcon aria-hidden />
         ページを一覧整理
       </Button>
+
+      <div className="bg-border mx-1 h-5 w-px" aria-hidden />
+
+      <Toggle
+        size="sm"
+        variant="outline"
+        pressed={textEditActive}
+        aria-label="文字を書き換える"
+        className={cn(
+          "gap-1.5 font-medium",
+          "aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground",
+          "aria-pressed:hover:bg-primary/90 aria-pressed:hover:text-primary-foreground",
+        )}
+        onPressedChange={setTextEditActive}
+      >
+        <TypeIcon aria-hidden />
+        文字を書き換え
+      </Toggle>
+      {textEditActive && (
+        <span className="text-muted-foreground ml-2 text-xs">
+          書き換えたい文字をクリック（ドラッグで範囲を選択）。Esc で閉じる
+        </span>
+      )}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>

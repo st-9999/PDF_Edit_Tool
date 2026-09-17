@@ -40,6 +40,8 @@ import { useSearchStore } from "@/store/search-store";
 import type { PageRef } from "@/lib/editor/operations";
 import { cn } from "@/lib/utils";
 import { usePageSource, usePdfSources } from "./pdf-sources-context";
+import { useTextEditStore } from "@/store/text-edit-store";
+import { TextEditLayer } from "@/features/text-edit/text-edit-layer";
 import { PdfPageView } from "./pdf-page-view";
 
 const VIEWER_PADDING = 24;
@@ -95,6 +97,7 @@ function ContinuousPage({
   const box = boxFor(measured ?? fallback, scale, page.rotation);
   // 描画元（テキストを書き換えたページは書き換え後のページ）。画面に入ったページだけ用意する
   const source = usePageSource(visible ? page : undefined);
+  const textEditActive = useTextEditStore((s) => s.active);
   const dimsKey = `${page.sourceId}:${page.sourceIndex}`;
 
   // 可視になったら自身の実寸を測ってキャッシュへ報告する（遅延・1 回だけ）。
@@ -136,6 +139,11 @@ function ContinuousPage({
         <PdfPageView
           pdf={source.proxy}
           pageNumber={source.pageNumber}
+          overlay={
+            textEditActive
+              ? (viewport) => <TextEditLayer page={page} viewport={viewport} />
+              : undefined
+          }
           scale={scale}
           rotation={page.rotation}
           width={box.width}
@@ -380,6 +388,7 @@ export function PageViewer() {
   const activeSource = usePageSource(
     viewMode === "single" ? activePage : undefined,
   );
+  const textEditActive = useTextEditStore((s) => s.active);
   // 単ページ表示の枠は対象ページ自身の実寸（未測定は先頭ページ寸法）で計算する。
   const activeDims =
     activePage && baseDims
@@ -404,6 +413,13 @@ export function PageViewer() {
               <PdfPageView
                 pdf={activeSource.proxy}
                 pageNumber={activeSource.pageNumber}
+                overlay={
+                  textEditActive
+                    ? (viewport) => (
+                        <TextEditLayer page={activePage} viewport={viewport} />
+                      )
+                    : undefined
+                }
                 scale={effectiveScale}
                 rotation={activePage.rotation}
                 width={activeBox.width}
