@@ -20,8 +20,6 @@ async function makeTextPdf(): Promise<Buffer> {
   return Buffer.from(await doc.save());
 }
 
-test.use({ permissions: ["clipboard-read", "clipboard-write"] });
-
 test.describe("テキスト選択・コピー", () => {
   test("選択コピーは改行付きで本文と一致し、余分な文字（?等）を含まない", async ({
     page,
@@ -46,7 +44,22 @@ test.describe("テキスト選択・コピー", () => {
       sel.addRange(r);
     });
     await page.keyboard.press("Control+c");
-    const clip = await page.evaluate(() => navigator.clipboard.readText());
+
+    // コピーされた内容を、貼り付け先の入力欄で受け取って読む。
+    // クリップボードの読み取り権限（Firefox は未対応）を使わず、利用者と同じ Ctrl+V の経路で確かめる。
+    await page.evaluate(() => {
+      const area = document.createElement("textarea");
+      area.setAttribute("aria-label", "貼り付け先");
+      area.style.position = "fixed";
+      area.style.top = "0";
+      area.style.left = "0";
+      document.body.appendChild(area);
+    });
+    const pasteTarget = page.getByRole("textbox", { name: "貼り付け先" });
+    await pasteTarget.focus();
+    await page.keyboard.press("Control+v");
+    await expect(pasteTarget).not.toHaveValue("");
+    const clip = await pasteTarget.inputValue();
 
     // 改行（\r\n or \n）で正規化して本文と一致。余分な文字混入なし
     const normalized = clip.replace(/\r\n/g, "\n");
