@@ -80,6 +80,7 @@
 
 ### Fixed
 
+- chore(guardrails): `.guardrails/config.yaml` の公開 URL・ヘルス確認 URL を実際の `https://st-9999.github.io/PDF_Edit_Tool/` に修正（小文字の `pdf-edit-tool` は 404 で、ヘルス確認が誤って失敗する状態だった）。公開前の注記も現状（Actions で自動デプロイ）に更新。
 - test(e2e): `text-selection.spec.ts` が Firefox で必ず失敗していた問題を修正。クリップボードの読み取り権限（`clipboard-read`。Firefox は未対応）でコピー内容を読む代わりに、ページに置いた入力欄へ Ctrl+V で貼り付けて読むようにし、権限の付与をやめた。コピーそのもの（改行・余分な文字が無いこと）を確かめる点は変わらない（コピー操作を抜くと両ブラウザで失敗することを確認）。
 - test(e2e): Firefox で E2E が毎回 4〜8 件不安定に失敗していた問題を修正。入口画面の読み込み枠・ファイル入力は SSR の HTML に先に現れるため、`page.goto` 直後に `setInputFiles` すると React のハイドレーション前で変更イベントが取りこぼされ、「N ページ」などの表示待ちでタイムアウトしていた。`e2e/helpers.ts` に「入口画面を開き、読み込み枠にイベントハンドラが付くまで待つ」`openEntryPage` を追加し、ファイルを投入する全 spec（16 ファイル・21 か所）で使うようにした（タイムアウトの延長やリトライには頼らない）。
 - fix(viewer): 左ペインのサムネイルからページを選択すると、上部バー（タイトル・回転/削除アイコン）が消える不具合を修正。原因は pdf.js の `TextLayer` が文字幅計測用に `document.body` へ直接 append する `<canvas class="hiddenCanvasElement">` に対応する CSS が無かったこと。pdf.js 本体の `web/pdf_viewer.css` は同要素を `display:none` にしているが、本アプリはこの規則を移植しておらず、Tailwind Preflight の `canvas { display: block }` が効いて既定の 300×150px でフローに残り、`<body>` に約 150px の余剰スクロール高を生んでいた。`body` は `overflow:hidden`（ビューポートへ伝播）でスクロールバーが出ないため、サムネイル選択時の `scrollIntoView({ block: "start" })` が**祖先のスクロールコンテナ（＝ドキュメント自身）まで**スクロールさせ、上部バーが画面外へ出たまま戻せなくなっていた。`.hiddenCanvasElement` の規則を `globals.css` へ移植して無害化し、併せて (1) `page-viewer` のページ送りを `scrollIntoView` から `[data-viewer-scroll]` 内に閉じた明示スクロールへ変更、(2) `<html>` に `overflow-hidden` を追加してビューポートが決してスクロールしないよう二重化、(3) `TopBar` / `EditToolbar` に `shrink-0` を付与して縦方向の圧縮でも潰れないようにした。

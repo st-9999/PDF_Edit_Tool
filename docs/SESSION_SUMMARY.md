@@ -13,6 +13,38 @@
 
 ---
 
+## 2026-09-17 — 公開と監視設定の URL 修正
+
+### 実施内容
+
+- `develop` を `main` に早送りでマージし、`main`・`develop` を push。GitHub Actions（run 35184721534）で lint・型チェック・単体テスト・ビルド・本番ビルドの E2E（6 件）を通過し、GitHub Pages へデプロイした。
+- 公開ページ（https://st-9999.github.io/PDF_Edit_Tool/）で、Chromium・Firefox とも PDF の読み込みと保存（Worker で `done` まで）を確認。同梱フォント（ゴシック体・明朝体）とライセンス文が 200 で配信されることを確認。
+- `.guardrails/config.yaml` の公開 URL・ヘルス確認 URL が `pdf-edit-tool`（小文字、404）になっていたため `PDF_Edit_Tool` に修正し、公開前の注記を現状に更新した。
+
+### 作成ファイル
+
+- なし
+
+### 変更ファイル
+
+- `.guardrails/config.yaml`、`docs/CHANGELOG.md`、`docs/SESSION_SUMMARY.md`
+
+### 計測結果
+
+- Actions: build 2 分 1 秒（本番 E2E 6 passed / 12.6 秒）、deploy 10 秒。
+- 公開 URL: `PDF_Edit_Tool/` は 200 でタイトル文言を含む、`pdf-edit-tool/` は 404。
+
+### Risks/TODO
+
+- Actions で Node.js 20 向けのアクション（checkout・setup-node・configure-pages・upload-artifact・deploy-pages）に廃止予定の警告が出ている（現在は Node.js 24 で実行されて成功）。新しいメジャー版への更新が必要。
+- 手元の `tmp/pages/`（確認用のビルド出力のコピー）が残っており、手元の `npm run lint` で 347 件のエラーになる（CI には無いため影響なし）。削除が必要。
+
+### 次ステップ
+
+- 実際の業務 PDF で文字の書き換えを試し、結果に応じて対応範囲（Form XObject 内の文字・太字など）を決める。
+
+---
+
 ## 2026-09-17 — 本番ビルドの E2E を CI（デプロイ前）に追加
 
 ### 実施内容
