@@ -22,6 +22,7 @@ function simpleFont(name: string, width = 500): FontModel {
     unicode: (code) => String.fromCharCode(code),
     width: () => width,
     isWordSpace: (c) => c.length === 1 && c.code === 32,
+    encode: (ch) => ch.charCodeAt(0),
   };
 }
 
@@ -173,6 +174,33 @@ describe("layoutText（テキスト描画命令の解釈）", () => {
   it("描画モード Tr を記録する", () => {
     const { glyphs } = run("BT /F1 10 Tf 2 Tr (A) Tj ET");
     expect(glyphs[0]!.renderMode).toBe(2);
+  });
+
+  it("グリフごとに、その時点のテキスト状態（Tc・Tw・Tz）を記録する", () => {
+    const { glyphs } = run(
+      "BT /F1 10 Tf 1 Tc 2 Tw 80 Tz [(A) -120.5 (B C)] TJ ET",
+    );
+    expect(
+      glyphs.map((g) => [
+        g.text,
+        g.charSpacing,
+        g.wordSpacing,
+        g.horizontalScale,
+      ]),
+    ).toEqual([
+      ["A", 1, 2, 0.8],
+      ["B", 1, 2, 0.8],
+      [" ", 1, 2, 0.8],
+      ["C", 1, 2, 0.8],
+    ]);
+  });
+
+  it("各命令の実行直前の CTM を命令番号ごとに返す", () => {
+    const { ctmBeforeOp } = run("q 2 0 0 2 10 20 cm 0 0 5 5 re W n Q BT ET");
+    // q, cm, re, W, n, Q, BT, ET
+    expect(ctmBeforeOp[0]).toEqual([1, 0, 0, 1, 0, 0]);
+    expect(ctmBeforeOp[2]).toEqual([2, 0, 0, 2, 10, 20]); // re
+    expect(ctmBeforeOp[6]).toEqual([1, 0, 0, 1, 0, 0]); // Q の後の BT
   });
 
   describe("元データ上の位置", () => {

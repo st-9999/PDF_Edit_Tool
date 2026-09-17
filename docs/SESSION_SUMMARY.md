@@ -13,6 +13,58 @@
 
 ---
 
+## 2026-09-17 — テキスト書き換え T2: 同一フォントでの本物の書き換え
+
+### 実施内容
+
+- `src/lib/pdf/content/rewrite.ts` に、グリフ範囲を新しい文字列へ置き換える処理を実装した（画面への組み込みは未実施）。
+  - 描画命令の文字データを直接書き換え、`Tj`・`'`・`"` は等価な TJ に変換。
+  - 幅の差を TJ の間隔値で補正し、左／右／中央揃えで基準位置と後続の文字を固定。
+  - 有効なクリップを追跡し、矩形クリップは「新しい文字がはみ出した側だけを、元の文字より伸びた量だけ」広げる。矩形でなければ変更せず警告。
+  - 失敗（範囲不正・重複・命令またぎ・未対応フォント・字形不足）は全件を返し、文書は変更しない。
+- 設計中に、**同じフォントでも字形がサブセットに残っているとは限らない**（T0 で仕様書の数字用フォントに 7・9 が無いと判明済み）ことから、埋め込み TrueType の最小解析 `truetype.ts`（`loca` による輪郭の有無、cmap format 0/4/6/12、name 表）と `FontModel.encode` を追加し、字形を確かめてからコードを使うようにした。
+- クリップの広げ方は、Print to PDF のクリップが元の文字の送り幅よりわずかに狭い（353.76 に対し文字終端 353.88）ことに気づき、「新しい文字全体を覆う」方式から上記の方式に改めた（元のはみ出し分まで広げないため）。
+- テスト用 PDF の生成処理を `pdf-fixtures.test-helper.ts` に切り出し、テスト用の最小 TrueType を組み立てる `truetype.test-helper.ts` を追加した。
+- `text-layout.ts` にグリフごとのテキスト状態（Tc・Tw・Tz）と命令ごとの CTM を追加した（幅補正とクリップ判定用）。
+
+### 作成ファイル
+
+- `src/lib/pdf/content/rewrite.ts` / `rewrite.test.ts` / `rewrite.samples.test.ts`
+- `src/lib/pdf/content/truetype.ts` / `truetype.test.ts` / `truetype.test-helper.ts`
+- `src/lib/pdf/content/font-encode.test.ts`
+- `src/lib/pdf/content/pdf-fixtures.test-helper.ts`（`page-text.test.ts` から切り出し）
+
+### 変更ファイル
+
+- `src/lib/pdf/content/font.ts`（`encode`、FontFile2・CIDToGIDMap の読み取り）
+- `src/lib/pdf/content/text-layout.ts` / `text-layout.test.ts`（テキスト状態・CTM の記録）
+- `src/lib/pdf/content/page-text.test.ts`（生成処理を共通化）
+- `docs/TEXT_REWRITE.md`（§6 T2 実装メモ）、`docs/TODO.md`、`docs/CHANGELOG.md`、`docs/SESSION_SUMMARY.md`
+
+### 計測結果
+
+- **ユニット／統合テスト: 345 → 391 通過 / 391（35 → 39 ファイル）**。新規 46 件（TrueType 10・encode 11・書き換え 19・実サンプル 4・位置計算 2）。
+- **実サンプルでの書き換え**（元フォントのまま・画像でも目視確認）:
+  - 数量計算書 1 ページ目「81.9」→「123.4」（右揃え）: 成功、クリップ拡張 1 件。範囲外のグリフは文字・位置とも全件不変（許容差 1e-6）。pdf.js の抽出も「123.4」のみで位置一致。
+  - 仕様書 1 ページ目「令和8年度」→「令和6年度」（Type0）: 成功、他のグリフ不変。「9」は `missing-glyphs`。
+  - 仕様書 1 ページ目「508-010」→「123-010」（単純 TrueType）: 成功、他のグリフ不変、pdf.js 一致。「7」は `missing-glyphs`。
+- **字形の判定が T0 の独立調査と一致**: 仕様書 1 ページ目 F1 = `012368`、F2 = `01234568`、数量計算書 = `0123456789.`。
+- **テストの検出力の確認**（故意に誤りを入れて失敗することを確認）: 右揃え補正の符号反転 → 4 件失敗、クリップ拡張の無効化 → 3 件失敗（実サンプル含む）、`"` 変換で Tw を落とす → 1 件失敗。
+- `npx tsc --noEmit` / `npx eslint src e2e` エラーなし、`prettier --check` 適合。`npm run build` は未実行（画面から未使用のため）。
+
+### Risks/TODO
+
+- 範囲が複数の命令にまたがる置換は未対応（`spans-operations`）。Excel 出力では 1 文字ずつ別の `BT` に分かれていることがある（仕様書 1 ページ目の「1」「8」）。T4 の範囲選択 UI と合わせて対応方針を決める必要がある。
+- 字形の確認は埋め込み TrueType のみ。CFF（FontFile3）や非埋め込みフォントは対応表を信用する。
+- 矩形でないクリップは広げない（警告のみ）。
+- 本コミットは未 push（プロジェクト規約により push は手動）。
+
+### 次ステップ
+
+- T3: 元フォントに無い文字の補完。(1) 同一フォントの cmap に字形があれば ToUnicode に対応を追記して使う、(2) 同一書体の別フォントリソース（name 表のファミリ名と総グリフ数で判定）を `Tf` 切り替えで使う、(3) 同梱フォント（fontkit＋Noto Sans JP のサブセット）で描き、書体が変わる旨を警告する。
+
+---
+
 ## 2026-09-17 — テキスト書き換え T1: PDF 内の文字データの解析
 
 ### 実施内容

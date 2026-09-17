@@ -6,6 +6,7 @@ import {
   type PDFContext,
 } from "pdf-lib";
 import { parseToUnicodeCMap, type ToUnicodeCMap } from "./cmap";
+import { parseTrueType, type TrueTypeFont } from "./truetype";
 import {
   getArray,
   getDict,
@@ -58,6 +59,14 @@ export interface FontModel {
   width(code: number): number;
   /** ワード間隔（Tw）の対象となる空白か（1 バイトのコード 32 のみ。仕様 9.3.3）。 */
   isWordSpace(c: CharCode): boolean;
+  /**
+   * 1 文字を、このフォントで実際に描けるコードに変換する（描けなければ null）。
+   * - 文字との対応（ToUnicode・エンコーディング）を逆に引いて候補を出す
+   * - 埋め込み TrueType があれば、その字形の輪郭データが残っているかを確かめる
+   *   （サブセットでは使っていない字形の輪郭が空になっている。空白は輪郭が空でもよい）
+   * - 埋め込みが無い・TrueType 以外で確かめられない場合は対応表を信用する
+   */
+  encode(char: string): number | null;
 }
 
 const DEFAULT_ASCENT = 880;
@@ -188,6 +197,35 @@ function simpleEncoding(
   };
 }
 
+const isBlank = (ch: string) => /^\s$/u.test(ch);
+
+/** FontDescriptor の FontFile2（TrueType）を解析する。埋め込みが無い・解析できなければ null。 */
+function readTrueTypeProgram(
+  ctx: PDFContext,
+  descriptor: PDFDict | undefined,
+): TrueTypeFont | null {
+  if (!descriptor) return null;
+  const stream = getStream(ctx, descriptor, "FontFile2");
+  if (!stream) return null;
+  try {
+    return parseTrueType(streamBytes(stream));
+  } catch {
+    return null;
+  }
+}
+
+/** CIDFont の CIDToGIDMap（Identity または 2 バイトずつの対応表ストリーム）。 */
+function readCidToGid(
+  ctx: PDFContext,
+  cidFont: PDFDict | undefined,
+): (cid: number) => number {
+  const stream = cidFont ? getStream(ctx, cidFont, "CIDToGIDMap") : undefined;
+  if (!stream) return (cid) => cid;
+  const map = streamBytes(stream);
+  return (cid) =>
+    cid * 2 + 1 < map.length ? (map[cid * 2]! << 8) | map[cid * 2 + 1]! : 0;
+}
+
 function descriptorMetrics(ctx: PDFContext, descriptor: PDFDict | undefined) {
   const ascent = getNumber(ctx, descriptor, "Ascent");
   const descent = getNumber(ctx, descriptor, "Descent");
@@ -215,10 +253,17 @@ function loadType0(
     : new Map<number, number>();
   const dw = getNumber(ctx, cidFont, "DW") ?? DEFAULT_CID_WIDTH;
   const toUnicode = readToUnicode(ctx, dict);
-  const metrics = descriptorMetrics(
-    ctx,
-    cidFont ? getDict(ctx, cidFont, "FontDescriptor") : undefined,
-  );
+  const descriptor = cidFont
+    ? getDict(ctx, cidFont, "FontDescriptor")
+    : undefined;
+  const metrics = descriptorMetrics(ctx, descriptor);
+  const program = readTrueTypeProgram(ctx, descriptor);
+  const cidToGid = readCidToGid(ctx, cidFont);
+  const unsupportedReason: FontUnsupportedReason | null = vertical
+    ? "vertical"
+    : identity
+      ? null
+      : "encoding";
 
   return {
     resourceName,
@@ -226,7 +271,7 @@ function loadType0(
     baseFont,
     postScriptName: stripSubsetTag(baseFont),
     vertical,
-    unsupportedReason: vertical ? "vertical" : identity ? null : "encoding",
+    unsupportedReason,
     ...metrics,
     toUnicode,
     splitCodes(bytes) {
@@ -247,6 +292,16 @@ function loadType0(
     unicode: (code) => toUnicode?.lookup(code) ?? null,
     width: (code) => widths.get(code) ?? dw,
     isWordSpace: () => false,
+    encode(char) {
+      if (unsupportedReason || [...char].length !== 1) return null;
+      for (const code of toUnicode?.codesFor(char) ?? []) {
+        if (!program) return code;
+        const gid = cidToGid(code);
+        if (program.hasOutline(gid)) return code;
+        if (isBlank(char) && gid > 0 && gid < program.numGlyphs) return code;
+      }
+      return null;
+    },
   };
 }
 
@@ -269,6 +324,23 @@ function loadSimple(
   const missingWidth = getNumber(ctx, descriptor, "MissingWidth") ?? 0;
   const toUnicode = readToUnicode(ctx, dict);
   const fromEncoding = simpleEncoding(ctx, dict);
+  const program = readTrueTypeProgram(ctx, descriptor);
+  const flags = getNumber(ctx, descriptor, "Flags") ?? 0;
+  // Flags: bit 3（4）= Symbolic、bit 6（32）= Nonsymbolic
+  const symbolic = (flags & 4) !== 0 && (flags & 32) === 0;
+  const unicodeOf = (code: number) =>
+    toUnicode?.lookup(code) ?? fromEncoding(code);
+  const inWidths = (code: number) =>
+    !!widths && code >= firstChar && code < firstChar + widths.length;
+  /** 単純 TrueType のコード → GID（仕様 9.6.6.4 の探索順に準じる）。 */
+  const glyphFor = (tt: TrueTypeFont, code: number): number | null => {
+    if (symbolic) {
+      return tt.glyphForSymbolCode(code) ?? tt.glyphForMacCode(code);
+    }
+    const ch = fromEncoding(code);
+    const byUnicode = ch ? tt.glyphForUnicode(ch.codePointAt(0)!) : null;
+    return byUnicode ?? tt.glyphForMacCode(code) ?? tt.glyphForSymbolCode(code);
+  };
 
   // 標準 14 フォントは Widths を省略できるが、字幅表を同梱していないため位置を計算できない
   let unsupportedReason: FontUnsupportedReason | null = null;
@@ -293,6 +365,23 @@ function loadSimple(
       return w === undefined ? missingWidth : w;
     },
     isWordSpace: (c) => c.length === 1 && c.code === 32,
+    encode(char) {
+      if (unsupportedReason || [...char].length !== 1) return null;
+      const candidates = new Set(toUnicode?.codesFor(char) ?? []);
+      for (let code = 0; code < 256; code += 1) {
+        if (fromEncoding(code) === char) candidates.add(code);
+      }
+      for (const code of candidates) {
+        if (code > 0xff || !inWidths(code) || unicodeOf(code) !== char) {
+          continue;
+        }
+        if (!program) return code;
+        const gid = glyphFor(program, code);
+        if (gid === null) continue;
+        if (program.hasOutline(gid) || isBlank(char)) return code;
+      }
+      return null;
+    },
   };
 }
 

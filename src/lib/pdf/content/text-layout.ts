@@ -62,6 +62,10 @@ export interface PageGlyph {
   matrix: Matrix;
   /** 四隅 [左下x, 左下y, 右下x, 右下y, 右上x, 右上y, 左上x, 左上y]（ユーザー空間）。 */
   quad: number[];
+  /** 描画時のテキスト状態: 文字間隔 Tc・単語間隔 Tw（テキスト空間の単位）・水平倍率（Tz / 100）。 */
+  charSpacing: number;
+  wordSpacing: number;
+  horizontalScale: number;
   /** BT 〜 ET の出現順。 */
   textObject: number;
   renderMode: number;
@@ -75,6 +79,8 @@ export interface TextLayout {
   missingFonts: string[];
   /** Do で呼び出された XObject 名（Form XObject 内の文字は解釈しない）。 */
   xObjects: string[];
+  /** 各命令（index）の実行直前の CTM。クリップ矩形の座標系を求めるのに使う。 */
+  ctmBeforeOp: Matrix[];
 }
 
 interface GraphicsState {
@@ -106,6 +112,7 @@ export function layoutText(
   const glyphs: PageGlyph[] = [];
   const missingFonts = new Set<string>();
   const xObjects: string[] = [];
+  const ctmBeforeOp: Matrix[] = [];
 
   let gs: GraphicsState = {
     ctm: initialCtm,
@@ -181,6 +188,9 @@ export function layoutText(
         glyphWidth,
         matrix: trm,
         quad,
+        charSpacing: gs.charSpacing,
+        wordSpacing: gs.wordSpacing,
+        horizontalScale: th,
         textObject,
         renderMode: gs.renderMode,
         source: {
@@ -197,6 +207,7 @@ export function layoutText(
   };
 
   for (const op of ops) {
+    ctmBeforeOp[op.index] = gs.ctm;
     const a = op.operands;
     switch (op.operator) {
       case "q":
@@ -298,5 +309,5 @@ export function layoutText(
     }
   }
 
-  return { glyphs, missingFonts: [...missingFonts], xObjects };
+  return { glyphs, missingFonts: [...missingFonts], xObjects, ctmBeforeOp };
 }
