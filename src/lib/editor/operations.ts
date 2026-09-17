@@ -1,4 +1,13 @@
 import { createId } from "@/lib/id";
+import type { TextReplacement } from "@/lib/pdf/content/rewrite";
+
+/**
+ * 1 回分のテキストの書き換え。範囲（グリフ番号）は、そのページにそれまでの書き換えを
+ * 適用した状態を基準にする（`lib/editor/text-edit.ts` で順に適用して再現する）。
+ */
+export interface TextEdit {
+  replacements: TextReplacement[];
+}
 
 /**
  * 編集対象の 1 ページ。元バイト列は変更せず、ページの並び・回転は
@@ -13,6 +22,8 @@ export interface PageRef {
   sourceIndex: number;
   /** ユーザーが適用した追加回転（時計回り, 0/90/180/270）。 */
   rotation: number;
+  /** このページに適用したテキストの書き換え（適用順）。無ければ未定義。 */
+  textEdits?: TextEdit[];
 }
 
 /**
@@ -24,7 +35,8 @@ export type EditOperation =
   | { type: "reorder"; ids: string[]; toIndex: number }
   | { type: "rotate"; ids: string[]; delta: number }
   | { type: "delete"; ids: string[] }
-  | { type: "merge"; index: number; pages: PageRef[] };
+  | { type: "merge"; index: number; pages: PageRef[] }
+  | { type: "editText"; id: string; edit: TextEdit };
 
 export const ROTATION_STEP = 90;
 
@@ -59,6 +71,7 @@ export function createInitialPages(
  * - rotate : 指定 ID の回転に delta を加算（正規化）
  * - delete : 指定 ID を除去
  * - merge  : `index` に新規ページ群を挿入
+ * - editText: 指定 ID のページの書き換え履歴に追加
  */
 export function applyOperation(pages: PageRef[], op: EditOperation): PageRef[] {
   switch (op.type) {
@@ -85,6 +98,12 @@ export function applyOperation(pages: PageRef[], op: EditOperation): PageRef[] {
       const at = clamp(op.index, 0, pages.length);
       return [...pages.slice(0, at), ...op.pages, ...pages.slice(at)];
     }
+    case "editText":
+      return pages.map((p) =>
+        p.id === op.id
+          ? { ...p, textEdits: [...(p.textEdits ?? []), op.edit] }
+          : p,
+      );
   }
 }
 

@@ -151,7 +151,7 @@
 - [x] T3 不足文字: 元フォントの ToUnicode → 元フォントの cmap（ToUnicode・W に追記）→ 同一書体の別フォントリソース（Tf 切り替え）→ 同梱フォント（Noto Sans JP、警告）の順で補完。`glyph-resolver.ts`・`fallback-font.ts`・自前の GID 保持サブセット `truetype-subset.ts`（@pdf-lib/fontkit の部分埋め込みは字形が表示されない不具合があり不採用）。失敗時は追記も含め何も変更しない。実サンプルで 4 段階すべてを確認（4＝cmap、7・9＝別サブセット、「鷗」「,」＝同梱フォント）。単体・統合 44 件
 - [~] T4 UI（ユーザー決定: 範囲は「クリックでまとまり＋ドラッグで文字単位」、書体が変わる場合は確定前に編集ボックス内で表示、1 文字ずつ別命令に分かれた範囲は同じ行・フォント・サイズならまとめて書き換える）
   - [x] T4a 中核の拡張: 複数の命令にまたがる範囲のまとめ書き換え（`rewrite.ts`）、クリック用のまとまり判定・ドラッグ範囲・揃えの初期値（`text-runs.ts`）
-  - [ ] T4b 操作ログ（Undo/Redo）への組み込みと、保存・抽出・分割（Worker）への反映
+  - [x] T4b 操作ログ（Undo/Redo）への組み込みと、保存・抽出・分割（Worker）への反映（`editText` 操作・`PageRef.textEdits`、`lib/editor/text-edit.ts`、`buildPdf` の `fallbackFont`、同梱フォントの遅延取得 `fallback-font-source.ts`）
   - [ ] T4c 書き換えたページの表示（ビューア・サムネイル・一覧整理・検索）
   - [ ] T4d 画面: 書き換えモード、範囲選択、編集ボックス（揃え・書体が変わる表示）、同梱フォントの遅延読み込み
   - [ ] T4e E2E と仕上げ

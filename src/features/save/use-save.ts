@@ -7,7 +7,12 @@ import {
   splitPdf,
   type BuildOutlineNode,
 } from "@/lib/editor/build";
+import type { PageRef } from "@/lib/editor/operations";
 import { runBuild } from "@/lib/pdf/build-runner";
+import {
+  loadFallbackFont,
+  needsFallbackFont,
+} from "@/lib/pdf/fallback-font-source";
 import { collectEditableOutline } from "@/lib/outline/collect";
 import { toBuildNodes } from "@/lib/outline/edit";
 import { createSaveStrategy, type SaveStrategy } from "@/lib/save/strategy";
@@ -61,17 +66,24 @@ export function useSave() {
     return toBuildNodes(editable);
   };
 
+  // テキストの書き換えを含む場合だけ、元のフォントに無い文字を描く同梱フォントを渡す
+  const fallbackFontFor = async (pages: PageRef[]) =>
+    needsFallbackFont(pages) ? await loadFallbackFont() : undefined;
+
   // 現在のドキュメントを Worker で生成（進捗オーバーレイ＋キャンセル付き）
   const buildCurrent = async () => {
     const outline = await collectOutline();
+    const pages = useEditorStore.getState().pages;
+    const fallbackFont = await fallbackFontFor(pages);
     const controller = new AbortController();
     useProgressStore
       .getState()
       .begin("PDF を生成中…", () => controller.abort());
     try {
-      return await runBuild(getAllBytes(), useEditorStore.getState().pages, {
+      return await runBuild(getAllBytes(), pages, {
         signal: controller.signal,
         outline,
+        fallbackFont,
         onProgress: (done, total) =>
           useProgressStore.getState().progress(done, total),
       });
@@ -137,7 +149,9 @@ export function useSave() {
       return;
     }
     try {
-      const parts = await splitPdf(getAllBytes(), pages, boundaries);
+      const parts = await splitPdf(getAllBytes(), pages, boundaries, {
+        fallbackFont: await fallbackFontFor(pages),
+      });
       const fileName = useViewerStore.getState().fileName;
       let saved = 0;
       for (let i = 0; i < parts.length; i += 1) {
@@ -165,6 +179,7 @@ export function useSave() {
         getAllBytes(),
         pages,
         selection.selected,
+        { fallbackFont: await fallbackFontFor(pages) },
       );
       const target = await strategy.saveAs(
         bytes,

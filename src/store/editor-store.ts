@@ -15,6 +15,7 @@ import {
   ROTATION_STEP,
   type EditOperation,
   type PageRef,
+  type TextEdit,
 } from "@/lib/editor/operations";
 import {
   clearSelection,
@@ -60,6 +61,8 @@ interface EditorState {
   reorder: (ids: string[], toIndex: number) => void;
   rotateSelected: (delta?: number) => void;
   deleteSelected: () => void;
+  /** ページ（id）のテキストを書き換える。置換が空なら何もしない。 */
+  editText: (id: string, edit: TextEdit) => void;
   undo: () => void;
   redo: () => void;
 
@@ -159,6 +162,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       ...commit(applyToHistory(get().history, { type: "delete", ids })),
       selection: emptySelection(),
     });
+  },
+
+  editText: (id, edit) => {
+    if (edit.replacements.length === 0) return;
+    get().applyEdit({ type: "editText", id, edit });
   },
 
   undo: () => set(commit(undoHistory(get().history))),

@@ -126,3 +126,52 @@ describe("derivePages", () => {
     expect(ids(initial)).toEqual(["a", "b"]);
   });
 });
+
+describe("applyOperation: editText（テキストの書き換え）", () => {
+  const replacement = (text: string) => ({
+    replacements: [{ start: 0, end: 1, text, align: "left" as const }],
+  });
+
+  it("対象ページの書き換え履歴に追加し、他のページは変えない", () => {
+    const base = [mk("a", 0), mk("b", 1)];
+    const once = applyOperation(base, {
+      type: "editText",
+      id: "a",
+      edit: replacement("9"),
+    });
+    const twice = applyOperation(once, {
+      type: "editText",
+      id: "a",
+      edit: replacement("8"),
+    });
+    expect(twice[0]!.textEdits).toEqual([replacement("9"), replacement("8")]);
+    expect(twice[1]!.textEdits).toBeUndefined();
+    // 元の配列・履歴を破壊しない
+    expect(once[0]!.textEdits).toEqual([replacement("9")]);
+    expect(base[0]!.textEdits).toBeUndefined();
+  });
+
+  it("並べ替え・回転しても書き換え履歴はページについていく", () => {
+    const pages = derivePages(
+      [mk("a", 0), mk("b", 1)],
+      [
+        { type: "editText", id: "a", edit: replacement("9") },
+        { type: "reorder", ids: ["a"], toIndex: 1 },
+        { type: "rotate", ids: ["a"], delta: 90 },
+      ],
+    );
+    expect(ids(pages)).toEqual(["b", "a"]);
+    expect(pages[1]!.textEdits).toEqual([replacement("9")]);
+    expect(pages[1]!.rotation).toBe(90);
+  });
+
+  it("存在しないページへの書き換えは何も変えない", () => {
+    const base = [mk("a", 0)];
+    const r = applyOperation(base, {
+      type: "editText",
+      id: "zzz",
+      edit: replacement("9"),
+    });
+    expect(r).toEqual(base);
+  });
+});

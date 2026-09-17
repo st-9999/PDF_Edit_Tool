@@ -12,6 +12,8 @@ interface RunOptions {
   signal?: AbortSignal;
   /** 元ドキュメントのしおり。出力へ再マッピングして書き戻す。 */
   outline?: BuildOutlineNode[];
+  /** テキストの書き換えで使う同梱フォント。 */
+  fallbackFont?: Uint8Array;
 }
 
 interface WorkerDone {
@@ -45,7 +47,7 @@ class WorkerUnavailableError extends Error {
 function runInWorker(
   sources: SourceBytes,
   pages: PageRef[],
-  { onProgress, signal, outline }: RunOptions,
+  { onProgress, signal, outline, fallbackFont }: RunOptions,
 ): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -93,7 +95,7 @@ function runInWorker(
       reject(new WorkerUnavailableError());
     };
 
-    worker.postMessage({ sources, pages, outline });
+    worker.postMessage({ sources, pages, outline, fallbackFont });
   });
 }
 
@@ -121,5 +123,6 @@ export async function runBuild(
     onProgress: options.onProgress,
     signal: options.signal,
     outline: options.outline,
+    fallbackFont: options.fallbackFont,
   });
 }

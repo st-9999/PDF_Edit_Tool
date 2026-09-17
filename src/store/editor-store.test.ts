@@ -68,6 +68,33 @@ describe("editor-store: 選択 + 回転 + Undo/Redo", () => {
   });
 });
 
+describe("editor-store: テキストの書き換え", () => {
+  beforeEach(() => get().initDocument(3, "doc"));
+
+  it("editText でページの書き換え履歴に追加し、未保存になり、Undo/Redo できる", () => {
+    const [, second] = ids();
+    const edit = {
+      replacements: [{ start: 0, end: 2, text: "99", align: "right" as const }],
+    };
+    get().editText(second!, edit);
+    expect(get().pages[1]!.textEdits).toEqual([edit]);
+    expect(editorSelectors.isDirty(get())).toBe(true);
+
+    get().undo();
+    expect(get().pages[1]!.textEdits).toBeUndefined();
+    expect(editorSelectors.isDirty(get())).toBe(false);
+
+    get().redo();
+    expect(get().pages[1]!.textEdits).toEqual([edit]);
+  });
+
+  it("置換が空の書き換えは積まない", () => {
+    const [first] = ids();
+    get().editText(first!, { replacements: [] });
+    expect(editorSelectors.isDirty(get())).toBe(false);
+  });
+});
+
 describe("editor-store: 保存フラグ", () => {
   beforeEach(() => get().initDocument(3, "doc"));
 

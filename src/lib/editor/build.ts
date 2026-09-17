@@ -10,6 +10,7 @@ import {
 } from "pdf-lib";
 import { decryptPdfIfNeeded } from "@/lib/pdf/decrypt";
 import { normalizeRotation, type PageRef } from "./operations";
+import { loadDocumentWithEdits } from "./text-edit";
 
 /** sourceId → 元 PDF のバイト列。 */
 export type SourceBytes = Record<string, Uint8Array>;
@@ -126,6 +127,8 @@ export interface BuildOptions {
   signal?: AbortSignal;
   /** 元ドキュメントのしおり（アウトライン）。指定時は出力へ再マッピングして書き戻す。 */
   outline?: BuildOutlineNode[];
+  /** テキストの書き換えで、元のフォントに無い文字を描く同梱フォント（TrueType）。 */
+  fallbackFont?: Uint8Array;
 }
 
 /**
@@ -141,15 +144,38 @@ export async function buildPdf(
     throw new Error("出力するページがありません");
   }
   const out = await PDFDocument.create();
-  const sourceIds = [...new Set(pages.map((p) => p.sourceId))];
+  const sourceIds = [
+    ...new Set(
+      pages.filter((p) => !p.textEdits?.length).map((p) => p.sourceId),
+    ),
+  ];
   const docs = await loadSourceDocs(sources, sourceIds);
+  // テキストの書き換えがあるページは、書き換えを適用した文書からコピーする（同じ内容はまとめて 1 回）
+  const edited = new Map<string, Promise<PDFDocument>>();
+  const docFor = (page: PageRef): Promise<PDFDocument> => {
+    if (!page.textEdits?.length)
+      return Promise.resolve(docs.get(page.sourceId)!);
+    const key = `${page.sourceId}|${page.sourceIndex}|${JSON.stringify(page.textEdits)}`;
+    let doc = edited.get(key);
+    if (!doc) {
+      const bytes = sources[page.sourceId];
+      if (!bytes) {
+        throw new Error(`ソース "${page.sourceId}" のバイト列が見つかりません`);
+      }
+      doc = loadDocumentWithEdits(bytes, page.sourceIndex, page.textEdits, {
+        fallbackFont: options.fallbackFont,
+      });
+      edited.set(key, doc);
+    }
+    return doc;
+  };
 
   for (let i = 0; i < pages.length; i += 1) {
     if (options.signal?.aborted) {
       throw new DOMException("キャンセルされました", "AbortError");
     }
     const page = pages[i]!;
-    const srcDoc = docs.get(page.sourceId)!;
+    const srcDoc = await docFor(page);
     const [copied] = await out.copyPages(srcDoc, [page.sourceIndex]);
     const angle = normalizeRotation(copied.getRotation().angle + page.rotation);
     copied.setRotation(degrees(angle));
@@ -167,13 +193,14 @@ export async function extractPages(
   sources: SourceBytes,
   pages: PageRef[],
   ids: Iterable<string>,
+  options: Pick<BuildOptions, "fallbackFont"> = {},
 ): Promise<Uint8Array> {
   const idSet = new Set(ids);
   const subset = pages.filter((p) => idSet.has(p.id));
   if (subset.length === 0) {
     throw new Error("抽出するページが選択されていません");
   }
-  return buildPdf(sources, subset);
+  return buildPdf(sources, subset, options);
 }
 
 /**
@@ -185,6 +212,7 @@ export async function splitPdf(
   sources: SourceBytes,
   pages: PageRef[],
   boundaries: number[],
+  options: Pick<BuildOptions, "fallbackFont"> = {},
 ): Promise<Uint8Array[]> {
   const len = pages.length;
   const cuts = [
@@ -200,5 +228,7 @@ export async function splitPdf(
   ranges.push(pages.slice(start));
 
   const nonEmpty = ranges.filter((r) => r.length > 0);
-  return Promise.all(nonEmpty.map((range) => buildPdf(sources, range)));
+  return Promise.all(
+    nonEmpty.map((range) => buildPdf(sources, range, options)),
+  );
 }

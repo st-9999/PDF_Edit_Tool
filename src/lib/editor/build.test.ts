@@ -15,6 +15,8 @@ import {
   type BuildOutlineNode,
   type SourceBytes,
 } from "./build";
+import { buildPdf as buildFixturePdf } from "@/lib/pdf/content/pdf-fixtures.test-helper";
+import { extractPageText } from "@/lib/pdf/content/page-text";
 import type { PageRef } from "./operations";
 
 /** 各ページ幅を一意にして「元のどのページか」を出力側から識別できるソースを作る。 */
@@ -228,5 +230,64 @@ describe("buildPdf: 複数ソース結合", () => {
     const { count, widths } = await inspect(out);
     expect(count).toBe(4);
     expect(widths).toEqual([210, 310, 220, 320]);
+  });
+});
+
+describe("buildPdf: テキストの書き換え", () => {
+  const textsOf = async (bytes: Uint8Array) => {
+    const doc = await PDFDocument.load(bytes);
+    return doc.getPages().map((_, i) =>
+      extractPageText(doc, i)
+        .glyphs.map((g) => g.text ?? "?")
+        .join(""),
+    );
+  };
+  const withEdit = (page: PageRef, text: string): PageRef => ({
+    ...page,
+    textEdits: [{ replacements: [{ start: 0, end: 2, text, align: "left" }] }],
+  });
+
+  async function sources(): Promise<SourceBytes> {
+    return {
+      A: await buildFixturePdf(
+        ["BT /F1 10 Tf 72 700 Td <3ED53ED6> Tj ET"],
+        [612, 792],
+      ),
+      B: await buildFixturePdf(
+        ["BT /F1 10 Tf 72 700 Td <3ED73ED8> Tj ET"],
+        [612, 792],
+      ),
+    };
+  }
+
+  it("書き換え履歴のあるページだけに適用する（同じ元ページの別エントリには影響しない）", async () => {
+    const out = await buildPdf(await sources(), [
+      withEdit(mk("A", 0, 0, "a1"), "99"),
+      mk("B", 0),
+      mk("A", 0, 0, "a2"),
+    ]);
+    expect(await textsOf(out)).toEqual(["99", "34", "12"]);
+  });
+
+  it("書き換えたページにもユーザー回転を加算する", async () => {
+    const out = await buildPdf(await sources(), [
+      withEdit(mk("A", 0, 90), "99"),
+    ]);
+    expect((await inspect(out)).rotations).toEqual([90]);
+    expect(await textsOf(out)).toEqual(["99"]);
+  });
+
+  it("抽出・分割にも書き換えを反映する", async () => {
+    const pages = [withEdit(mk("A", 0, 0, "a1"), "55"), mk("B", 0)];
+    const extracted = await extractPages(await sources(), pages, ["a1"]);
+    expect(await textsOf(extracted)).toEqual(["55"]);
+    const parts = await splitPdf(await sources(), pages, [2]);
+    expect(await Promise.all(parts.map(textsOf))).toEqual([["55"], ["34"]]);
+  });
+
+  it("適用できない書き換えがあれば、日本語のメッセージで失敗する", async () => {
+    await expect(
+      buildPdf(await sources(), [withEdit(mk("A", 0), "鷗")]),
+    ).rejects.toThrow(/書き換え/);
   });
 });
