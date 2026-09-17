@@ -64,6 +64,7 @@ npm run build        # 静的エクスポート（out/）
 npm run preview      # out/ をローカル配信
 npm test             # ユニット（Vitest）
 npm run e2e          # E2E（Playwright・要 npx playwright install）
+npm run e2e:prod     # 本番ビルドをサブパス配下で配信して確かめる E2E（ビルドも行う）
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
 npm run format       # Prettier

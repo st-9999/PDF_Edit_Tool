@@ -14,6 +14,7 @@
 
 ### Added
 
+- ci: **本番ビルドの E2E** を追加し、GitHub Pages へのデプロイ前に実行する（失敗したらデプロイしない）。静的エクスポートの出力をデプロイ先と同じ basePath 配下で配信する `scripts/serve-static.mjs`（basePath の外は 404）と `playwright.prod.config.ts`・`e2e-prod/production-build.spec.ts`（Chromium・Firefox）で、(1) 読み込みに失敗するアセットが無いこと、(2) 保存がバンドルされた Worker（basePath 配下の `.js`）で完了すること、(3) 同梱フォントを basePath 配下から読み込んで書き換えを保存できることを確かめる。`npm run e2e:prod` で手元でも実行できる。失敗時はテスト結果を Actions のアーティファクトに残す。
 - test(e2e): E2E が無かった 3 機能の E2E を追加。**しおり編集**（`bookmark-edit.spec.ts`: メニューからの名前の変更・現在のページの追加・階層を下げる・子を持つしおりの削除確認とキャンセル、Esc での改名取消と空欄確定、未保存表示、保存した PDF のしおりのタイトル・階層・宛先ページ）、**検索オプション**（`search-options.spec.ts`: 正規表現の可変長一致とヒットのページへの移動・強調、不正な式の「無効な式」表示、大文字小文字の区別と正規表現の併用）、**報告書しおり自動作成**（`auto-bookmark.spec.ts`: ToUnicode 付き日本語フォントの PDF で章・節の見出しから階層を作成し保存、既存しおりへの末尾追加／上書き、開始ページ、検出 0 件）。`e2e/helpers.ts` に保存のダウンロード（`forceDownloadSave`・`saveAsDownload`）と、しおりをタイトル・階層・宛先ページで読む `readOutline` を追加。
 - feat(text-rewrite): 文字の書き換えで元の書体に無い文字を補う**同梱フォントに明朝体（Noto Serif JP）を追加**。元のフォントの名前（Mincho・明朝・Serif など。ゴシック系の名前を優先）と FontDescriptor の Flags の Serif で明朝体かを判定し（`font-style.ts`・`FontModel.style`）、明朝体の資料では明朝体、それ以外ではゴシック体（Noto Sans JP）で描く。違う書体の同梱フォントでは描かないため、表示と保存の結果は常に一致する。編集ボックスの表示も「明朝体（Noto Serif JP）で描きます」のように書体ごとに出す。各書き換えに使った書体（`TextEdit.fallbackStyles`）を記録し、表示・保存・抽出・分割では**必要な書体のフォントだけ**を読み込む（同梱フォントを使わない書き換えの保存ではフォントを読み込まなくなった）。
 - chore(fonts): 同梱フォント `public/fonts/NotoSerifJP-Regular.ttf`（Noto Serif JP Regular、7.7MB、SIL Open Font License 1.1）とライセンス文 `NotoSerifJP-OFL.txt` を追加。

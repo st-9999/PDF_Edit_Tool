@@ -3,7 +3,13 @@ import { test, expect, type Page } from "@playwright/test";
 import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import { buildPdf } from "../src/lib/pdf/content/pdf-fixtures.test-helper";
 import { extractPageText } from "../src/lib/pdf/content/page-text";
-import { openEntryPage } from "./helpers";
+import {
+  clickText,
+  enterRewriteMode,
+  openEntryPage,
+  rewriteDialog as dialog,
+  textLayerSpan,
+} from "./helpers";
 
 /**
  * 「Total」「81.9」「yen」を別々の位置に置いた 1 ページの PDF。
@@ -48,24 +54,6 @@ async function openSample(page: Page, pdf?: Buffer) {
   await expect(page.getByText("1 ページ")).toBeVisible();
   await expect(textLayerSpan(page, "81.9")).toBeVisible();
 }
-
-const textLayerSpan = (page: Page, text: string) =>
-  page.locator(".textLayer span", { hasText: text }).first();
-
-/** テキストレイヤ上の文字の位置（中央）をクリックする。 */
-async function clickText(page: Page, text: string) {
-  const box = await textLayerSpan(page, text).boundingBox();
-  if (!box) throw new Error(`「${text}」の位置を取得できません`);
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-}
-
-async function enterRewriteMode(page: Page) {
-  await page.getByRole("button", { name: "文字を書き換える" }).click();
-  await expect(page.locator("[data-text-edit-layer]").first()).toBeVisible();
-}
-
-const dialog = (page: Page) =>
-  page.getByRole("dialog", { name: "文字の書き換え" });
 
 test.describe("文字の書き換え", () => {
   test("クリックで数値を選んで書き換え、Undo/Redo でき、保存した PDF にも反映される", async ({

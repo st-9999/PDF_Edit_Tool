@@ -50,6 +50,25 @@ jobs:
           # basePath はリポジトリ名から自動導出（ハードコードしない）
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox
+
+      - name: E2E (production build)
+        # 直前でビルドした out/ を、デプロイ先と同じ basePath で配信して確かめる
+        # （アセットの basePath・保存用 Worker のバンドル・同梱フォントの配信）。失敗したらデプロイしない。
+        run: npm run e2e:prod
+        env:
+          E2E_PROD_SKIP_BUILD: "1"
+          E2E_BASE_PATH: /${{ github.event.repository.name }}
+
+      - name: Upload E2E results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-prod-results
+          path: test-results/
+          retention-days: 7
+
       - name: Disable Jekyll (_next ディレクトリを配信するため)
         run: touch out/.nojekyll
 

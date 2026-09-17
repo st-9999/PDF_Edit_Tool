@@ -13,6 +13,45 @@
 
 ---
 
+## 2026-09-17 — 本番ビルドの E2E を CI（デプロイ前）に追加
+
+### 実施内容
+
+- 開発サーバーの E2E では見つからない本番固有の問題を、デプロイ前に自動で確かめるようにした。
+  - `scripts/serve-static.mjs`: `out/` を basePath 配下だけで配信する依存なしの静的サーバー（basePath の外・存在しないパスは 404、`.js`/`.mjs` は JavaScript として配信、パストラバーサルを拒否）。
+  - `playwright.prod.config.ts`: `npm run build` → 配信 → `e2e-prod/` を Chromium・Firefox で実行。`E2E_BASE_PATH`（既定 `/pdf-edit-tool`）、`E2E_PROD_SKIP_BUILD`（既存の `out/` を使う）。リトライなし。
+  - `e2e-prod/production-build.spec.ts`（3 件）: 読み込みの失敗（400 以上・通信失敗）が無いこと、保存が basePath 配下の `.js` の Worker で `done` まで進むこと、同梱フォントを basePath 配下から読み込み書き換えを Worker で保存できること。
+  - `.github/workflows/deploy.yml`: デプロイ用のビルドの後に Playwright のブラウザを入れて `npm run e2e:prod`（`E2E_PROD_SKIP_BUILD=1`、basePath はリポジトリ名）を実行。失敗したら Pages へアップロードせず、テスト結果をアーティファクトに残す。
+- `e2e/helpers.ts`: `openEntryPage` に開く URL の引数を追加（サブパスの baseURL では `"./"`）。書き換え用の `textLayerSpan`・`clickText`・`enterRewriteMode`・`rewriteDialog` を `text-rewrite.spec.ts` から移した。
+- テストが問題を捉えることを確認: (A) basePath なしでビルドした出力をサブパスで配信すると 3 件とも失敗、(B) Worker の URL を存在しないファイルにすると（保存は本スレッドへの切り替えで成功するが）Worker の 2 件が失敗。確認後に元に戻した。
+
+### 作成ファイル
+
+- `scripts/serve-static.mjs`、`playwright.prod.config.ts`、`e2e-prod/production-build.spec.ts`
+
+### 変更ファイル
+
+- `.github/workflows/deploy.yml`、`package.json`（`e2e:prod`）
+- `e2e/helpers.ts`、`e2e/text-rewrite.spec.ts`
+- `README.md`、`docs/CHANGELOG.md`、`docs/SESSION_SUMMARY.md`
+
+### 計測結果
+
+- `npm run e2e:prod`: **6 / 6 通過**（3 件 × Chromium・Firefox、ビルド込み約 55 秒）。
+- 変更した `text-rewrite.spec.ts`（Chromium）5 / 5 通過。`npx tsc --noEmit` / `npx eslint e2e e2e-prod scripts playwright.prod.config.ts` エラーなし。
+
+### Risks/TODO
+
+- CI の実行時間が延びる（ブラウザのインストール＋本番 E2E で数分の見込み）。
+- CI 上（ubuntu）での初回実行結果は push 後に確認する。
+- 開発サーバーの E2E（`npm run e2e`）は引き続き CI では実行していない。
+
+### 次ステップ
+
+- push して GitHub Actions のデプロイが本番 E2E を含めて通ること、公開ページが表示されることを確認する。
+
+---
+
 ## 2026-09-17 — 本番ビルドでの PDF 生成ワーカーの動作確認（修正不要）
 
 ### 実施内容

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { Locator, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import {
   PDFArray,
   PDFDict,
@@ -33,9 +33,10 @@ export async function waitForHydration(locator: Locator) {
 /**
  * 入口画面を開き、PDF の読み込み枠が操作を受け付けるようになるまで待つ。
  * この後に `setInputFiles` でファイルを渡すと、取りこぼされずに読み込まれる。
+ * `url` は baseURL からの相対（サブパス配信の baseURL では `"./"` を渡す。`"/"` はオリジンの直下になる）。
  */
-export async function openEntryPage(page: Page) {
-  await page.goto("/");
+export async function openEntryPage(page: Page, url = "/") {
+  await page.goto(url);
   await waitForHydration(page.getByRole("button", { name: "PDFの読み込み" }));
 }
 
@@ -100,3 +101,24 @@ export async function readOutline(bytes: Uint8Array): Promise<OutlineEntry[]> {
   walk(outlines?.get(PDFName.of("First")), 0);
   return entries;
 }
+
+/** テキストレイヤ上で、指定の文字を含む最初の要素。 */
+export const textLayerSpan = (page: Page, text: string) =>
+  page.locator(".textLayer span", { hasText: text }).first();
+
+/** テキストレイヤ上の文字の位置（中央）をクリックする。 */
+export async function clickText(page: Page, text: string) {
+  const box = await textLayerSpan(page, text).boundingBox();
+  if (!box) throw new Error(`「${text}」の位置を取得できません`);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+/** 編集ツールバーの「文字を書き換え」で書き換えモードに入る。 */
+export async function enterRewriteMode(page: Page) {
+  await page.getByRole("button", { name: "文字を書き換える" }).click();
+  await expect(page.locator("[data-text-edit-layer]").first()).toBeVisible();
+}
+
+/** 文字の書き換えの編集ボックス。 */
+export const rewriteDialog = (page: Page) =>
+  page.getByRole("dialog", { name: "文字の書き換え" });
