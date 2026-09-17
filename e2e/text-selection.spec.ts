@@ -26,7 +26,7 @@ test.describe("テキスト選択・コピー", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "t.pdf",
       mimeType: "application/pdf",
       buffer: await makeTextPdf(),

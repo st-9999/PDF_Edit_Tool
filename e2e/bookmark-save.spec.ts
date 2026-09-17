@@ -93,7 +93,7 @@ test.describe("しおり付き PDF の保存", () => {
     });
 
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "booked.pdf",
       mimeType: "application/pdf",
       buffer: await makeBookmarkedPdf(),

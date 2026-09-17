@@ -26,7 +26,7 @@ test.describe("ビューア基盤（実 PDF を読み込み）", () => {
     const buffer = await makeSamplePdf(5);
 
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "sample.pdf",
       mimeType: "application/pdf",
       buffer,

@@ -55,7 +55,7 @@ test.describe("P6 しおり表示", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "outline.pdf",
       mimeType: "application/pdf",
       buffer: await makeOutlinePdf(),
@@ -74,7 +74,7 @@ test.describe("P6 しおり表示", () => {
 
   test("アウトライン無しは空状態を表示", async ({ page }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "plain.pdf",
       mimeType: "application/pdf",
       buffer: await makePlainPdf(2),

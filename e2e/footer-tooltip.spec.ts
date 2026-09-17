@@ -12,7 +12,7 @@ test.describe("フッターのアイコン説明（Tooltip）", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "s.pdf",
       mimeType: "application/pdf",
       buffer: await makePdf(2),

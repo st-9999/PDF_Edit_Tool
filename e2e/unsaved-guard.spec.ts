@@ -9,7 +9,7 @@ async function makePdf(pageCount: number): Promise<Buffer> {
 
 async function openPdf(page: import("@playwright/test").Page, pages: number) {
   await page.goto("/");
-  await page.setInputFiles('input[type="file"]', {
+  await page.setInputFiles('input[type="file"]:not([multiple])', {
     name: "s.pdf",
     mimeType: "application/pdf",
     buffer: await makePdf(pages),

@@ -56,7 +56,7 @@ function findOverlaps(rects: Awaited<ReturnType<typeof tileRects>>) {
 test.describe("A3 横ページの一覧表示", () => {
   test("一覧のサムネイルが隣と重ならない", async ({ page }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "a3-landscape.pdf",
       mimeType: "application/pdf",
       buffer: await a3LandscapePdf(9),
@@ -77,7 +77,7 @@ test.describe("A3 横ページの一覧表示", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "a3-landscape.pdf",
       mimeType: "application/pdf",
       buffer: await a3LandscapePdf(2),
@@ -107,7 +107,7 @@ test.describe("サムネイル選択時の上部バー", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "a3-landscape.pdf",
       mimeType: "application/pdf",
       buffer: await a3LandscapePdf(5),
@@ -142,7 +142,7 @@ test.describe("サムネイル選択時の上部バー", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "a3-landscape.pdf",
       mimeType: "application/pdf",
       buffer: await a3LandscapePdf(2),

@@ -24,7 +24,7 @@ test.describe("連続表示のスクロールで現在ページが更新され�
   }) => {
     const buffer = await makeSamplePdf(10);
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "sample.pdf",
       mimeType: "application/pdf",
       buffer,

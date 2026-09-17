@@ -13,7 +13,7 @@ test.describe("P3 編集機能（回転・削除・Undo）", () => {
   }) => {
     const buffer = await makePdf(5);
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "s.pdf",
       mimeType: "application/pdf",
       buffer,

@@ -19,7 +19,7 @@ test.describe("P4 保存層（Firefox フォールバック）", () => {
 
     const buffer = await makePdf(3);
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "original.pdf",
       mimeType: "application/pdf",
       buffer,

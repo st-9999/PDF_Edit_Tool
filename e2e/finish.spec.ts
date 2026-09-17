@@ -11,7 +11,7 @@ async function makePdf(pageCount: number): Promise<Buffer> {
 test.describe("P8 仕上げ", () => {
   test("破損PDFはエラートーストを出して空状態に戻る", async ({ page }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "broken.pdf",
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.7 これは壊れたデータ not a real pdf"),
@@ -31,7 +31,7 @@ test.describe("P8 仕上げ", () => {
     });
 
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "flow.pdf",
       mimeType: "application/pdf",
       buffer: await makePdf(5),

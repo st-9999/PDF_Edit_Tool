@@ -25,7 +25,7 @@ async function mixedPdf(): Promise<Buffer> {
 test.describe("サイズ混在 PDF の表示", () => {
   test("幅の異なるページも各ページが中央寄せで表示される", async ({ page }) => {
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "mixed.pdf",
       mimeType: "application/pdf",
       buffer: await mixedPdf(),

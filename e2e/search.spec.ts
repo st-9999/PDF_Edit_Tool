@@ -15,7 +15,7 @@ test.describe("P5 テキスト検索・選択", () => {
   test("テキスト選択・検索ハイライト・前後移動", async ({ page }) => {
     const buffer = await makeTextPdf(["Annual report 2026", "report summary"]);
     await page.goto("/");
-    await page.setInputFiles('input[type="file"]', {
+    await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "doc.pdf",
       mimeType: "application/pdf",
       buffer,

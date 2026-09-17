@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { FilePlus2Icon, UploadIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -30,17 +30,100 @@ function isPdfFile(file: File): boolean {
   );
 }
 
-/** 初期（未読込）状態。ドラッグ&ドロップとファイル選択で PDF を受け取る。 */
-export function EmptyState() {
-  const setFile = useViewerStore((s) => s.setFile);
+/** ドラッグ&ドロップとクリックでファイルを受け取る枠（入口画面の 2 枠で共通）。 */
+function DropZone({
+  label,
+  icon,
+  title,
+  description,
+  buttonLabel,
+  multiple = false,
+  onFiles,
+}: {
+  label: string;
+  icon: ReactNode;
+  title: string;
+  description: string;
+  buttonLabel: string;
+  multiple?: boolean;
+  onFiles: (files: File[]) => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  // 結合モード: 複数 PDF を選んで順序を決め、結合してビュアーへ進む。
-  const [mergeMode, setMergeMode] = useState(false);
+  const openPicker = () => inputRef.current?.click();
 
-  const accept = useCallback(
-    (files: FileList | null) => {
-      const file = files?.[0];
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      onClick={openPicker}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openPicker();
+        }
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        onFiles(Array.from(e.dataTransfer.files ?? []));
+      }}
+      className={cn(
+        "flex h-full w-full cursor-pointer flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed px-6 py-16 text-center transition-colors",
+        dragging
+          ? "border-primary bg-primary/5"
+          : "border-zinc-300 dark:border-zinc-700",
+      )}
+    >
+      {icon}
+      <div className="space-y-1">
+        <p className="text-lg font-medium">{title}</p>
+        <p className="text-muted-foreground text-sm">{description}</p>
+      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={(e) => {
+          e.stopPropagation();
+          openPicker();
+        }}
+      >
+        {buttonLabel}
+      </Button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        multiple={multiple}
+        className="hidden"
+        onChange={(e) => {
+          onFiles(Array.from(e.target.files ?? []));
+          // 同じファイルを選び直しても change が発火するようにする
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * 初期（未読込）状態。単一 PDF を開く枠と、複数 PDF を結合する枠を同じ大きさで並べる。
+ */
+export function EmptyState() {
+  const setFile = useViewerStore((s) => s.setFile);
+  // 結合モード: 複数 PDF を選んで順序を決め、結合してビュアーへ進む。
+  // 値は結合用の枠で受け取ったファイル（結合画面の一覧の初期値）。null は入口画面。
+  const [mergeFiles, setMergeFiles] = useState<File[] | null>(null);
+
+  const openSingle = useCallback(
+    (files: File[]) => {
+      const file = files[0];
       if (!file) return;
       if (!isPdfFile(file)) {
         toast.error("PDF ファイルを選択してください");
@@ -51,25 +134,36 @@ export function EmptyState() {
     [setFile],
   );
 
-  const openPicker = () => inputRef.current?.click();
+  const startMerge = useCallback((files: File[]) => {
+    if (files.length === 0) return;
+    if (!files.some(isPdfFile)) {
+      toast.error("PDF ファイルを選択してください");
+      return;
+    }
+    // PDF 以外の除外と通知は結合画面側（MergeIntake.addFiles）で行う
+    setMergeFiles(files);
+  }, []);
 
-  if (mergeMode) {
+  if (mergeFiles) {
     return (
       <main className="relative flex flex-1 flex-col overflow-y-auto">
         <div className="absolute top-4 right-4 z-10">
           <ThemeToggle />
         </div>
-        <MergeIntake onBack={() => setMergeMode(false)} />
+        <MergeIntake
+          initialFiles={mergeFiles}
+          onBack={() => setMergeFiles(null)}
+        />
       </main>
     );
   }
 
   return (
-    <main className="relative flex flex-1 items-center justify-center p-8">
+    <main className="relative flex flex-1 flex-col items-center overflow-y-auto p-8">
       <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
-      <div className="flex w-full max-w-xl flex-col items-center gap-6">
+      <div className="my-auto flex w-full max-w-4xl flex-col items-center gap-6">
         {/* タイトルと簡単な説明 */}
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-bold tracking-tight">
@@ -81,66 +175,36 @@ export function EmptyState() {
           </p>
         </div>
 
-        {/* 単一 PDF のドラッグ&ドロップ / ファイル選択 */}
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label="PDFの読み込み"
-          onClick={openPicker}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              openPicker();
+        {/* 単一 PDF を開く枠と、複数 PDF を結合する枠（同じ大きさで横並び） */}
+        <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2">
+          <DropZone
+            label="PDFの読み込み"
+            icon={
+              <UploadIcon
+                className="text-muted-foreground size-10"
+                aria-hidden
+              />
             }
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            accept(e.dataTransfer.files);
-          }}
-          className={cn(
-            "flex w-full cursor-pointer flex-col items-center gap-4 rounded-xl border-2 border-dashed p-16 text-center transition-colors",
-            dragging
-              ? "border-primary bg-primary/5"
-              : "border-zinc-300 dark:border-zinc-700",
-          )}
-        >
-          <UploadIcon className="text-muted-foreground size-10" aria-hidden />
-          <div className="space-y-1">
-            <p className="text-lg font-medium">PDF をドラッグ &amp; ドロップ</p>
-            <p className="text-muted-foreground text-sm">
-              またはクリックしてファイルを選択
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={(e) => {
-              e.stopPropagation();
-              openPicker();
-            }}
-          >
-            ファイルを選択
-          </Button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="application/pdf,.pdf"
-            className="hidden"
-            onChange={(e) => accept(e.target.files)}
+            title="PDF をドラッグ & ドロップ"
+            description="またはクリックしてファイルを選択"
+            buttonLabel="ファイルを選択"
+            onFiles={openSingle}
+          />
+          <DropZone
+            label="結合する複数 PDF の読み込み"
+            multiple
+            icon={
+              <FilePlus2Icon
+                className="text-muted-foreground size-10"
+                aria-hidden
+              />
+            }
+            title="複数 PDF を結合"
+            description="結合する場合はこちらにまとめてドラッグ & ドロップ"
+            buttonLabel="複数ファイルを選択"
+            onFiles={startMerge}
           />
         </div>
-
-        {/* 複数 PDF の結合（枠外・やや目立たせる） */}
-        <Button type="button" size="lg" onClick={() => setMergeMode(true)}>
-          <FilePlus2Icon aria-hidden />
-          複数 PDF を結合
-        </Button>
 
         <div className="space-y-1 text-center">
           <p className="text-muted-foreground text-xs">

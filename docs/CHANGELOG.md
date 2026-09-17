@@ -14,6 +14,7 @@
 
 ### Added
 
+- feat(home): エントリ画面に「**複数 PDF を結合**」の**ドロップ枠**を追加。従来は単一 PDF のドロップ枠の下に小さなボタンがあるだけで結合機能が見つけられにくかったため、単一 PDF の枠と**同じ大きさの枠を横並び**（`md` 未満は縦並び）で配置し、「結合する場合はこちらにまとめてドラッグ & ドロップ」と案内する。結合用の枠へドロップ、または「複数ファイルを選択」（`multiple`）で選ぶと、**そのファイルが一覧に入った状態で結合画面へ進む**（`MergeIntake` に `initialFiles` を追加）。PDF 以外だけを渡した場合はトーストを出して入口画面にとどまり、PDF と混在していれば結合画面で除外を通知する。2 枠はドロップ枠を共通コンポーネント（`DropZone`）化して実装。
 - feat(pdf): **暗号化 PDF の復号**（`src/lib/pdf/decrypt/`）を追加。PDF 標準セキュリティハンドラ（ISO 32000-1 7.6.3 / ISO 32000-2）の鍵導出と復号を自前実装し、`buildPdf` が元 PDF を読む直前に平文へ書き直す。これにより「pdf.js では開けるが pdf-lib で保存できない」文書（権限フラグ付き PDF）が編集・保存できるようになる。内訳は `md5.ts`（Web Crypto に無い MD5）/ `rc4.ts` / `aes.ts`（AES-128・256 の CBC。R6 の鍵導出がパディング無し CBC 暗号化を要求するため Web Crypto では表現できず自前実装）/ `standard-security.ts`（Algorithm 1/2/2.A/2.B/4/5 の鍵導出と検証）/ `scanner.ts`（間接オブジェクトの範囲特定）/ `index.ts`（文書の再構築）。対象は空のユーザーパスワードで開ける文書のみで、実パスワードが必要な文書は `PdfPasswordRequiredError`、未対応方式は `PdfUnsupportedEncryptionError` として日本語で通知する。
 - feat(ui): ブラウザタブのアイコン（ファビコン）を **PDF 文書モチーフの SVG** に変更。Next.js デフォルトの `src/app/favicon.ico` を削除し、`src/app/icon.svg`（赤い文書＋折り返し角＋白「PDF」）を追加。App Router が `type="image/svg+xml"` の `<link rel="icon">` を自動生成し、本番では basePath（`/PDF_Edit_Tool`）も自動付与される。
 - feat(bookmark): **報告書しおり自動作成（v3）** を追加。しおりタブ右上の「**自動作成**」ボタンから 3 ステップのダイアログ（設定→実行→結果）を開き、本文テキストから **章（第N章）/ 節（N.N）/ 項（N.N.N）** の見出しを検出して最大 3 階層のしおりツリーを自動生成する。検出ルールは **正規表現パターン**（既定の章/節/項に加えユーザーがカスタム追加可、有効/無効を切替）で、設定は `localStorage`（`pdf-edit:auto-bookmark-patterns`）に永続化。抽出は既存の pdf.js プロキシ（`getProxy`）を再利用し**現在の表示ページ列（結合 PDF も含む全体）**を表示順に解析、各 `TextItem` をフォントサイズ比例の動的許容差で行復元（`reconstructLines`）。**項→節→章**の順に適用し、**番号後退フィルタ（`SequenceTracker`）**で本文中の偽マッチや TOC リーダー線を除外、全角数字（第１章/１.１）にも対応。結果は**階層プレビュー＋ページ番号**で確認し、既存しおりがある場合は**上書き / 末尾に追加**を選択して適用（`outline-store.replaceTree`）。実行中はページ進捗バー＋**中止**（`AbortController`）、検出 0 件・画像のみ PDF はその旨を通知。生成後は編集モードへ入り、既存のしおりエディタでそのまま調整・保存（出力 /Outlines へ書き戻し）できる。
@@ -58,6 +59,7 @@
 
 ### Removed
 
+- feat(home): エントリ画面の「複数 PDF を結合」ボタン（枠外のボタン）を、上記の結合用ドロップ枠に置き換えて撤去。
 - feat(viewer): トップバーの「全選択」ボタン（ビュアー内テキストの全選択 `selectAllViewerText`）を廃止。テキストは引き続き手動で範囲選択・コピー可能。
 - refactor(merge): ビュアー画面ツールバーの「結合」ボタン（編集中の文書へ別 PDF を追加）を撤去し、結合の起点をエントリ画面に一本化。併せて未使用となった `useEditActions.merge` と `editor-store.mergePages` を削除（ページ操作の純関数 `applyOperation` の `merge` ケースは保持）。
 

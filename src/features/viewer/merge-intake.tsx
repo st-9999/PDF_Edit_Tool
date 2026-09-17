@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -47,6 +47,47 @@ interface MergeItem {
   file: File;
   numPages: number | null;
   state: LoadState;
+}
+
+/** 受け取ったファイルを PDF のみの一覧項目へ変換し、除外した件数を返す。 */
+function toMergeItems(files: ArrayLike<File>): {
+  items: MergeItem[];
+  rejected: number;
+} {
+  const all = Array.from(files);
+  const pdfs = all.filter(isPdfFile);
+  return {
+    items: pdfs.map((file) => ({
+      id: createId("merge"),
+      file,
+      numPages: null,
+      state: "loading",
+    })),
+    rejected: all.length - pdfs.length,
+  };
+}
+
+/**
+ * PDF のページ数を読み取る。解析できなければ null。
+ * proxy は数値取得後すぐ破棄し、リソースを保持しない。
+ */
+async function readPageCount(file: File): Promise<number | null> {
+  try {
+    const proxy = await loadPdfDocument(await file.arrayBuffer());
+    const numPages = proxy.numPages;
+    void proxy.destroy();
+    return numPages;
+  } catch {
+    return null;
+  }
+}
+
+function notifyRejected(rejected: number) {
+  if (rejected > 0) {
+    toast.error(
+      `PDF 以外の ${rejected} 件を除外しました（PDF のみ結合できます）`,
+    );
+  }
 }
 
 /** 並べ替え可能な 1 行。ドラッグハンドル＋上下ボタンで順序を変更できる。 */
@@ -154,59 +195,55 @@ function SortableRow({
 /**
  * 複数 PDF の結合インテーク画面。
  * 複数選択 → 順序の確認・修正 → 結合してビュアーへ、の流れを担う。
+ * `initialFiles` はエントリ画面の結合用の枠で受け取ったファイルで、一覧の初期値になる。
  */
-export function MergeIntake({ onBack }: { onBack: () => void }) {
+export function MergeIntake({
+  onBack,
+  initialFiles,
+}: {
+  onBack: () => void;
+  initialFiles?: readonly File[];
+}) {
   const setFiles = useViewerStore((s) => s.setFiles);
-  const [items, setItems] = useState<MergeItem[]>([]);
+  // エントリ画面から受け取ったファイルは一覧の初期値にする（ページ数取得はマウント後）。
+  const [initial] = useState(() => toMergeItems(initialFiles ?? []));
+  const [items, setItems] = useState<MergeItem[]>(initial.items);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 追加された各ファイルのページ数を非同期取得する。
-  // proxy は数値取得後すぐ破棄し、リソースを保持しない。
-  const loadPageCount = useCallback(async (id: string, file: File) => {
-    try {
-      const buffer = await file.arrayBuffer();
-      const proxy = await loadPdfDocument(buffer);
-      const numPages = proxy.numPages;
-      void proxy.destroy();
+  // 追加された各ファイルのページ数を非同期取得し、一覧へ反映する。
+  const loadPageCount = useCallback((id: string, file: File) => {
+    void readPageCount(file).then((numPages) =>
       setItems((prev) =>
         prev.map((it) =>
-          it.id === id ? { ...it, numPages, state: "ready" } : it,
+          it.id === id
+            ? { ...it, numPages, state: numPages === null ? "error" : "ready" }
+            : it,
         ),
-      );
-    } catch {
-      setItems((prev) =>
-        prev.map((it) =>
-          it.id === id ? { ...it, numPages: null, state: "error" } : it,
-        ),
-      );
-    }
+      ),
+    );
   }, []);
 
   const addFiles = useCallback(
     (fileList: FileList | null) => {
-      const files = Array.from(fileList ?? []);
-      if (files.length === 0) return;
-      const pdfs = files.filter(isPdfFile);
-      const rejected = files.length - pdfs.length;
-      if (rejected > 0) {
-        toast.error(
-          `PDF 以外の ${rejected} 件を除外しました（PDF のみ結合できます）`,
-        );
-      }
-      if (pdfs.length === 0) return;
-
-      const newItems: MergeItem[] = pdfs.map((file) => ({
-        id: createId("merge"),
-        file,
-        numPages: null,
-        state: "loading",
-      }));
+      const { items: newItems, rejected } = toMergeItems(fileList ?? []);
+      notifyRejected(rejected);
+      if (newItems.length === 0) return;
       setItems((prev) => [...prev, ...newItems]);
-      for (const it of newItems) void loadPageCount(it.id, it.file);
+      for (const it of newItems) loadPageCount(it.id, it.file);
     },
     [loadPageCount],
   );
+
+  // 初期項目のページ数取得と除外通知はマウント時に一度だけ行う
+  // （StrictMode の effect 二重実行でも重複させない）。
+  const initialHandled = useRef(false);
+  useEffect(() => {
+    if (initialHandled.current) return;
+    initialHandled.current = true;
+    notifyRejected(initial.rejected);
+    for (const it of initial.items) loadPageCount(it.id, it.file);
+  }, [initial, loadPageCount]);
 
   const openPicker = () => inputRef.current?.click();
 
