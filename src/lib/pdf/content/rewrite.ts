@@ -356,6 +356,63 @@ interface PlannedReplacement {
   resolved: ResolvedGlyph[];
 }
 
+/**
+ * 1 つの描画命令の中で置き換える部分。範囲が複数の命令にまたがる場合、
+ * 先頭の命令の部分に新しい文字列を入れ、2 つ目以降の命令の部分は削除する。
+ */
+interface Portion {
+  plan: PlannedReplacement;
+  opIndex: number;
+  /** この命令の中の範囲（グリフ index、start 以上 end 未満）。 */
+  start: number;
+  end: number;
+  glyphs: PageGlyph[];
+  /** 先頭の部分（新しい文字列・揃え・クリップ判定を担う）か。 */
+  primary: boolean;
+}
+
+/** ベースライン方向の単位ベクトル（ユーザー空間）。 */
+function baselineDirection(g: PageGlyph): [number, number] {
+  const len = Math.hypot(g.matrix[0], g.matrix[1]) || 1;
+  return [g.matrix[0] / len, g.matrix[1] / len];
+}
+
+/** 範囲外の許容差（文字サイズに対する比）。 */
+const SAME_LINE_TOLERANCE = 0.25;
+const SAME_SIZE_TOLERANCE = 0.01;
+
+/**
+ * 複数の命令にまたがる範囲をまとめて書き換えられるか。
+ * 同じフォント・同じ文字サイズ・同じ水平倍率で、同じ行に読み順どおり並んでいること。
+ */
+function canMergeAcrossOperations(glyphs: PageGlyph[]): boolean {
+  const first = glyphs[0]!;
+  const [dx, dy] = baselineDirection(first);
+  const fontSizeUser =
+    Math.hypot(first.matrix[2], first.matrix[3]) || first.fontSize;
+  let previousAlong = -Infinity;
+  for (const g of glyphs) {
+    if (g.fontResource !== first.fontResource) return false;
+    if (
+      Math.abs(g.fontSize - first.fontSize) >
+        first.fontSize * SAME_SIZE_TOLERANCE ||
+      Math.abs(g.horizontalScale - first.horizontalScale) > SAME_SIZE_TOLERANCE
+    ) {
+      return false;
+    }
+    const [gx, gy] = baselineDirection(g);
+    if (Math.abs(gx - dx) > 1e-3 || Math.abs(gy - dy) > 1e-3) return false;
+    const rx = g.x - first.x;
+    const ry = g.y - first.y;
+    const along = rx * dx + ry * dy;
+    const across = -rx * dy + ry * dx;
+    if (Math.abs(across) > fontSizeUser * SAME_LINE_TOLERANCE) return false;
+    if (along < previousAlong - 1e-6) return false;
+    previousAlong = along;
+  }
+  return true;
+}
+
 function validate(
   page: PageText,
   replacements: TextReplacement[],
@@ -384,13 +441,10 @@ function validate(
 
     const glyphs = page.glyphs.slice(r.start, r.end);
     const first = glyphs[0]!;
-    if (
-      glyphs.some(
-        (g) =>
-          g.source.opIndex !== first.source.opIndex ||
-          g.source.operandIndex !== first.source.operandIndex,
-      )
-    ) {
+    const spansOperations = glyphs.some(
+      (g) => g.source.opIndex !== first.source.opIndex,
+    );
+    if (spansOperations && !canMergeAcrossOperations(glyphs)) {
       failures.push({ kind: "spans-operations", replacement: index });
       return;
     }
@@ -495,24 +549,45 @@ export function rewritePageContent(
     { clip: ClipRecord; from: Rect; to: Rect }
   >();
 
-  const byOp = new Map<number, PlannedReplacement[]>();
+  // 置換を描画命令ごとの部分に分ける
+  const byOp = new Map<number, Portion[]>();
   for (const p of planned) {
-    const opIndex = p.glyphs[0]!.source.opIndex;
-    byOp.set(opIndex, [...(byOp.get(opIndex) ?? []), p]);
+    let portionStart = p.replacement.start;
+    for (let i = p.replacement.start; i <= p.replacement.end; i += 1) {
+      const g = page.glyphs[i];
+      const startGlyph = page.glyphs[portionStart]!;
+      if (
+        i === p.replacement.end ||
+        g!.source.opIndex !== startGlyph.source.opIndex
+      ) {
+        const opIndex = startGlyph.source.opIndex;
+        const portion: Portion = {
+          plan: p,
+          opIndex,
+          start: portionStart,
+          end: i,
+          glyphs: page.glyphs.slice(portionStart, i),
+          primary: portionStart === p.replacement.start,
+        };
+        byOp.set(opIndex, [...(byOp.get(opIndex) ?? []), portion]);
+        portionStart = i;
+      }
+    }
   }
 
   for (const [opIndex, list] of byOp) {
     const op = ops[opIndex]!;
-    const font = list[0]!.font;
+    const font = list[0]!.plan.font;
     const opGlyphs = page.glyphs.filter((g) => g.source.opIndex === opIndex);
     let units = unitsOf(op, font, opGlyphs[0]!.index);
 
     // 後ろの範囲から置き換えると、前の範囲の単位位置がずれない
-    for (const p of [...list].sort(
-      (a, b) => b.replacement.start - a.replacement.start,
-    )) {
-      const { start, end, align } = p.replacement;
-      const first = p.glyphs[0]!;
+    for (const portion of [...list].sort((a, b) => b.start - a.start)) {
+      const p = portion.plan;
+      const { start, end } = portion;
+      const align = portion.primary ? p.replacement.align : "left";
+      const resolved = portion.primary ? p.resolved : [];
+      const first = portion.glyphs[0]!;
       const from = units.findIndex(
         (u) => u.kind === "glyph" && u.glyphIndex === start,
       );
@@ -540,7 +615,7 @@ export function rewritePageContent(
         }
       }
       // 新: 新しいコードの送り
-      const newAdvances = p.resolved.map((r) =>
+      const newAdvances = resolved.map((r) =>
         textAdvance(r.width, r.isWordSpace, first),
       );
       const newSpan = newAdvances.reduce((s, a) => s + a, 0);
@@ -548,12 +623,25 @@ export function rewritePageContent(
       const toTj = (textUnits: number) =>
         (textUnits * 1000) / (first.fontSize * first.horizontalScale);
 
+      // 揃えの基準は置換範囲全体の幅。命令をまたぐ場合は、先頭の文字の原点から
+      // 最後の文字の送り終点までのベースライン方向の距離をテキスト空間の単位に直して使う。
+      let wholeDelta = delta;
+      if (portion.primary && p.glyphs.length > portion.glyphs.length) {
+        const last = p.glyphs[p.glyphs.length - 1]!;
+        const [dx, dy] = baselineDirection(first);
+        const lastEnd =
+          (last.x - first.x) * dx + (last.y - first.y) * dy + last.advance;
+        const userPerText =
+          Math.hypot(first.matrix[0], first.matrix[1]) /
+          (first.fontSize * first.horizontalScale);
+        wholeDelta = newSpan - lastEnd / userPerText;
+      }
       const shift =
-        align === "left" ? 0 : align === "right" ? delta : delta / 2;
+        align === "left" ? 0 : align === "right" ? wholeDelta : wholeDelta / 2;
       const replacementUnits: Unit[] = [];
       if (Math.abs(shift) > EPS)
         replacementUnits.push({ kind: "number", value: toTj(shift) });
-      for (const r of p.resolved) {
+      for (const r of resolved) {
         replacementUnits.push({
           kind: "glyph",
           bytes: codeBytes(r.code, r.codeLength),
@@ -563,7 +651,7 @@ export function rewritePageContent(
       }
       const fallbackChars = [
         ...new Set(
-          p.resolved.filter((r) => r.source === "fallback").map((r) => r.char),
+          resolved.filter((r) => r.source === "fallback").map((r) => r.char),
         ),
       ];
       if (fallbackChars.length > 0) {
@@ -583,13 +671,13 @@ export function rewritePageContent(
       ];
 
       // クリップ: 新しいグリフの範囲（ベースライン方向）が元の文字より外へ伸びた分だけ広げる
-      const clips = clipsAt.get(opIndex) ?? [];
+      const clips = portion.primary ? (clipsAt.get(opIndex) ?? []) : [];
       if (clips.length === 0) continue;
       const trm = first.matrix;
       const em = first.fontSize * first.horizontalScale;
       const newQuads: number[][] = [];
       let offset = -shift;
-      p.resolved.forEach((r, i) => {
+      resolved.forEach((r, i) => {
         const u = offset / em;
         const w = r.width / 1000;
         const asc = r.ascent / 1000;

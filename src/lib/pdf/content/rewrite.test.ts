@@ -378,9 +378,9 @@ describe("replacePageText（同一フォントでの本物の書き換え）", (
       });
     });
 
-    it("命令をまたぐ範囲は失敗する", async () => {
+    it("別の行の命令にまたがる範囲は失敗する（同じ行ならまとめて書き換える: rewrite-multi-op.test.ts）", async () => {
       const bytes = await buildPdf(
-        ["BT /F2 12 Tf 72 700 Td (AB) Tj (CD) Tj ET"],
+        ["BT /F2 12 Tf 72 700 Td (AB) Tj 0 -20 Td (CD) Tj ET"],
         [612, 792],
       );
       const result = await expectUnchanged(bytes, (p) => [
