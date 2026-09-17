@@ -39,7 +39,7 @@ async function samplePdf(baseFont?: string): Promise<Buffer> {
   return Buffer.from(await doc.save());
 }
 
-async function openSample(page: Page, pdf?: Buffer) {
+async function openSample(page: Page, pdf?: Buffer, visibleText = "81.9") {
   // 保存はダウンロード経路にする（ヘッドレスで保存ダイアログを避ける）
   await page.addInitScript(() => {
     // @ts-expect-error テスト用に能力を削除
@@ -52,7 +52,7 @@ async function openSample(page: Page, pdf?: Buffer) {
     buffer: pdf ?? (await samplePdf()),
   });
   await expect(page.getByText("1 ページ")).toBeVisible();
-  await expect(textLayerSpan(page, "81.9")).toBeVisible();
+  await expect(textLayerSpan(page, visibleText)).toBeVisible();
 }
 
 test.describe("文字の書き換え", () => {
@@ -195,6 +195,63 @@ test.describe("文字の書き換え", () => {
     await input.press("Escape");
     await expect(dialog(page)).toBeHidden();
     await expect(textLayerSpan(page, "Total")).toBeVisible();
+  });
+
+  test("字間を空けた見出しは、案内に従ってドラッグでまとめて選び、一括で書き換えられる", async ({
+    page,
+  }) => {
+    const pdf = Buffer.from(
+      await buildPdf(["BT /F2 36 Tf 150 600 Td (A B C) Tj ET"], [612, 792]),
+    );
+    await openSample(page, pdf, "A B C");
+    await enterRewriteMode(page);
+    const box = (await textLayerSpan(page, "A B C").boundingBox())!;
+    const y = box.y + box.height / 2;
+    const atA = box.x + box.width * 0.05;
+    const atC = box.x + box.width * 0.95;
+
+    // カーソルを乗せると、クリックとドラッグの使い分けを案内する
+    const hint = page.locator("[data-text-edit-hint]");
+    await expect(async () => {
+      await page.mouse.move(atA, y);
+      await expect(hint).toHaveText(
+        "クリックで選択 ／ ドラッグでまとめて選択",
+        {
+          timeout: 1000,
+        },
+      );
+    }).toPass();
+
+    // 1 文字だけをクリックで選ぶと、隣の文字とまとめる方法を案内する
+    await page.mouse.click(atA, y);
+    await expect(dialog(page)).toBeVisible();
+    const input = dialog(page).getByRole("textbox", { name: "新しい文字" });
+    await expect(input).toHaveValue("A");
+    await expect(page.locator("[data-text-edit-neighbor-hint]")).toContainText(
+      "ドラッグで範囲を選択",
+    );
+    await input.press("Escape");
+    await expect(dialog(page)).toBeHidden();
+
+    // ドラッグ中は範囲を強調し、選んでいる文字と文字数を表示する
+    await page.mouse.move(atA, y);
+    await page.mouse.down();
+    await page.mouse.move(atC, y, { steps: 8 });
+    await expect(
+      page.locator('[data-text-edit-candidate="drag"]'),
+    ).toBeVisible();
+    await expect(hint).toHaveText("「A B C」を選択中（3 文字）");
+    await page.mouse.up();
+
+    await expect(input).toHaveValue("A B C");
+    await expect(page.locator("[data-text-edit-neighbor-hint]")).toHaveCount(0);
+    await expect(page.locator("[data-text-edit-candidate]")).toHaveCount(0);
+    await input.fill("X Y Z");
+    await expect(dialog(page).getByRole("status")).toHaveText(
+      "元の書体のまま書き換えます",
+    );
+    await input.press("Enter");
+    await expect(textLayerSpan(page, "X Y Z")).toBeVisible();
   });
 
   test("書き換えモードを OFF にすると選択層が消え、通常の文字選択に戻る", async ({

@@ -92,6 +92,44 @@ export function runAt(runs: TextRun[], glyphIndex: number): TextRun | null {
   return runs.find((r) => glyphIndex >= r.start && glyphIndex < r.end) ?? null;
 }
 
+/** 隣とみなす間隔の上限（文字サイズに対する比）。字間を空けた見出しの空白 1 つ分は含み、表のセル間は含まない。 */
+const NEIGHBOR_GAP_RATIO = 1;
+
+/** `prev` の終わりから `next` の始まりまでが、隣とみなせるほど近いか（同じ行・同じ文字サイズ）。 */
+function isNeighbor(prev: PageGlyph, next: PageGlyph): boolean {
+  const size = fontSizeUser(prev);
+  if (Math.abs(fontSizeUser(next) - size) > size * SAME_SIZE_RATIO) {
+    return false;
+  }
+  if (!sameLine(prev, next)) return false;
+  const gap = relative(prev, next).along - prev.advance;
+  return gap >= -size * RUN_BACKWARD_RATIO && gap <= size * NEIGHBOR_GAP_RATIO;
+}
+
+/**
+ * 選んだ範囲の前後すぐ近くに、同じ行の別のまとまりがあるか。
+ * 字間を空けた見出し（「土 工 計 算 書」）の 1 文字だけをクリックで選んだときに、
+ * ドラッグでまとめて選べることを案内するために使う。
+ */
+export function hasNeighborRun(
+  glyphs: PageGlyph[],
+  runs: TextRun[],
+  range: { start: number; end: number },
+): boolean {
+  const first = glyphs[range.start];
+  const last = glyphs[range.end - 1];
+  if (!first || !last) return false;
+  return runs.some((run) => {
+    if (run.end <= range.start) {
+      return isNeighbor(glyphs[run.end - 1]!, first);
+    }
+    if (run.start >= range.end) {
+      return isNeighbor(last, glyphs[run.start]!);
+    }
+    return false;
+  });
+}
+
 /**
  * ドラッグで選んだ 2 つのグリフの間の範囲。向きは問わない。
  * 間のグリフがすべて同じ行に無ければ null。

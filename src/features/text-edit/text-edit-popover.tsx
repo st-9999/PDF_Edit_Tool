@@ -7,6 +7,7 @@ import {
   AlignRightIcon,
   AlertTriangleIcon,
   CircleXIcon,
+  MousePointer2Icon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,7 @@ export function TextEditPopover({
   rect,
   pageWidth,
   pageHeight,
+  showNeighborHint = false,
 }: {
   pageId: string;
   data: EditablePage;
@@ -74,6 +76,8 @@ export function TextEditPopover({
   rect: ScreenRect;
   pageWidth: number;
   pageHeight: number;
+  /** 選んだ範囲のすぐ隣に同じ行の文字があるとき、ドラッグでまとめて選べることを案内する。 */
+  showNeighborHint?: boolean;
 }) {
   const original = data.glyphs
     .slice(selection.start, selection.end)
@@ -169,6 +173,22 @@ export function TextEditPopover({
       <p className="text-muted-foreground truncate text-xs">
         元の文字: <span className="text-foreground">{original}</span>
       </p>
+      {showNeighborHint && (
+        <p
+          data-text-edit-neighbor-hint
+          className="text-foreground flex items-start gap-1.5 rounded-md bg-blue-500/10 px-2 py-1.5 text-xs"
+        >
+          <MousePointer2Icon
+            className="mt-px size-3.5 shrink-0 text-blue-600 dark:text-blue-400"
+            aria-hidden
+          />
+          <span>
+            隣の文字とまとめて書き換えるには、閉じてから
+            <strong className="font-semibold">ドラッグで範囲を選択</strong>
+            してください
+          </span>
+        </p>
+      )}
       <Input
         ref={inputRef}
         aria-label="新しい文字"

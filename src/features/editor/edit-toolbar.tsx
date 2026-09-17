@@ -139,7 +139,11 @@ export function EditToolbar() {
       </Toggle>
       {textEditActive && (
         <span className="text-muted-foreground ml-2 text-xs">
-          書き換えたい文字をクリック（ドラッグで範囲を選択）。Esc で閉じる
+          書き換えたい文字をクリック。
+          <strong className="text-foreground font-semibold">
+            ドラッグで複数の文字をまとめて選択
+          </strong>
+          できます。Esc で閉じる
         </span>
       )}
 

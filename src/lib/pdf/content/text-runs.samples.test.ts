@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import { extractPageText } from "./page-text";
-import { findTextRuns } from "./text-runs";
+import { findTextRuns, hasNeighborRun } from "./text-runs";
 
 // Reference/ はリポジトリ管理外のため、存在する環境でのみ実ファイルで検証する。
 const DIR = "Reference/テキスト書き換えサンプルpdf";
@@ -38,6 +38,29 @@ describe.skipIf(![SPEC, QUANTITY].every((p) => existsSync(p)))(
       ]) {
         expect(runs).toContain(cell);
       }
+    }, 60_000);
+  },
+);
+
+describe.skipIf(!existsSync(QUANTITY))(
+  "hasNeighborRun（実サンプル PDF）",
+  () => {
+    it("数量計算書: 字間を空けた見出し「土 工 計 算 書」の 1 文字には隣がある", async () => {
+      const doc = await PDFDocument.load(
+        new Uint8Array(readFileSync(QUANTITY)),
+      );
+      const glyphs = extractPageText(doc, 0).glyphs;
+      const runs = findTextRuns(glyphs);
+      const text = glyphs.map((g) => g.text ?? "?").join("");
+      const at = text.indexOf("土 工 計 算 書");
+      expect(at).toBeGreaterThanOrEqual(0);
+      const first = runs.find((r) => r.start === at)!;
+      expect(first.text).toBe("土");
+      expect(hasNeighborRun(glyphs, runs, first)).toBe(true);
+      // 見出し全体を選べば隣は無い（前後の文字とは離れている）
+      expect(hasNeighborRun(glyphs, runs, { start: at, end: at + 9 })).toBe(
+        false,
+      );
     }, 60_000);
   },
 );

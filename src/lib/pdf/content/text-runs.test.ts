@@ -3,7 +3,13 @@ import { describe, it, expect } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import { extractPageText } from "./page-text";
 import { buildPdf } from "./pdf-fixtures.test-helper";
-import { findTextRuns, rangeBetween, runAt, suggestAlign } from "./text-runs";
+import {
+  findTextRuns,
+  hasNeighborRun,
+  rangeBetween,
+  runAt,
+  suggestAlign,
+} from "./text-runs";
 
 async function glyphsOf(content: string) {
   const doc = await PDFDocument.load(await buildPdf([content], [842, 595]));
@@ -83,6 +89,59 @@ describe("rangeBetween（ドラッグで選んだ 2 つのグリフの間の範�
       "BT /F2 12 Tf 72 500 Td (ab) Tj 0 -20 Td (cd) Tj ET",
     );
     expect(rangeBetween(glyphs, 0, 3)).toBeNull();
+  });
+});
+
+describe("hasNeighborRun（選んだ範囲のすぐ隣に、同じ行の別のまとまりがあるか）", () => {
+  async function runsOf(content: string) {
+    const glyphs = await glyphsOf(content);
+    const runs = findTextRuns(glyphs);
+    const range = (text: string) => {
+      const run = runs.find((r) => r.text === text);
+      if (!run) throw new Error(`まとまり「${text}」がありません`);
+      return { start: run.start, end: run.end };
+    };
+    return { glyphs, runs, range };
+  }
+
+  it("字間を空けた見出し（1 文字ずつ空白で区切る）では、前後どちらかに隣があれば true", async () => {
+    const { glyphs, runs, range } = await runsOf(
+      "BT /F2 24 Tf 100 500 Td (A B C) Tj ET",
+    );
+    expect(runs.map((r) => r.text)).toEqual(["A", "B", "C"]);
+    expect(hasNeighborRun(glyphs, runs, range("A"))).toBe(true);
+    expect(hasNeighborRun(glyphs, runs, range("B"))).toBe(true);
+    expect(hasNeighborRun(glyphs, runs, range("C"))).toBe(true);
+  });
+
+  it("範囲がまとまり全体を含んでいれば、その中の文字は隣とみなさない", async () => {
+    const { glyphs, runs } = await runsOf(
+      "BT /F2 24 Tf 100 500 Td (A B C) Tj ET",
+    );
+    expect(hasNeighborRun(glyphs, runs, { start: 0, end: 5 })).toBe(false);
+  });
+
+  it("表のセルのように文字サイズ以上に離れていれば false", async () => {
+    const { glyphs, runs, range } = await runsOf(
+      [
+        "0.75 0 0 -0.75 0 595.32 cm",
+        "BT /F1 11.9995 Tf 1 0 0 -1 331.68 748.32 Tm",
+        "[<3EDC>-10<3ED5>-6<46B7>-0.0625<3EDD>-2320<3ED6><46B7>10<3ED4>] TJ ET",
+      ].join(" "),
+    );
+    expect(hasNeighborRun(glyphs, runs, range("81.9"))).toBe(false);
+    expect(hasNeighborRun(glyphs, runs, range("2.0"))).toBe(false);
+  });
+
+  it("別の行・別の文字サイズの文字は隣とみなさない", async () => {
+    const { glyphs, runs, range } = await runsOf(
+      [
+        "BT /F2 24 Tf 100 500 Td (A) Tj ET",
+        "BT /F2 24 Tf 100 475 Td (B) Tj ET",
+        "BT /F2 8 Tf 115 500 Td (c) Tj ET",
+      ].join(" "),
+    );
+    expect(hasNeighborRun(glyphs, runs, range("A"))).toBe(false);
   });
 });
 

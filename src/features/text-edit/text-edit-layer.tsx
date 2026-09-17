@@ -9,13 +9,25 @@ import {
   selectionRect,
   type PointMapper,
 } from "@/lib/pdf/content/hit-test";
-import { rangeBetween, runAt } from "@/lib/pdf/content/text-runs";
+import {
+  hasNeighborRun,
+  rangeBetween,
+  runAt,
+} from "@/lib/pdf/content/text-runs";
+import { cn } from "@/lib/utils";
 import { useTextEditStore } from "@/store/text-edit-store";
 import { TextEditPopover } from "./text-edit-popover";
 import { useEditablePage } from "./use-editable-page";
 
 /** クリックとドラッグを区別する移動量（px）。 */
 const DRAG_THRESHOLD = 3;
+/** 案内の吹き出しの高さの目安（px）。範囲の上に置けなければ下に置く。 */
+const HINT_HEIGHT = 24;
+/** 範囲と案内の吹き出しの間隔（px）。 */
+const HINT_GAP = 4;
+
+/** 空白を除いた文字数。 */
+const visibleLength = (text: string) => [...text.replace(/\s/gu, "")].length;
 
 /**
  * 書き換えモードでページの上に重ねる層。
@@ -37,6 +49,8 @@ export function TextEditLayer({
   const [hover, setHover] = useState<{ start: number; end: number } | null>(
     null,
   );
+  /** ドラッグで範囲を選んでいる最中か（表示を切り替える）。 */
+  const [dragging, setDragging] = useState(false);
   const drag = useRef<{
     anchor: number;
     x: number;
@@ -68,8 +82,12 @@ export function TextEditLayer({
     const index = glyphAt(data.glyphs, point, toScreen);
     const d = drag.current;
     if (d) {
-      if (Math.hypot(point[0] - d.x, point[1] - d.y) > DRAG_THRESHOLD) {
+      if (
+        !d.moved &&
+        Math.hypot(point[0] - d.x, point[1] - d.y) > DRAG_THRESHOLD
+      ) {
         d.moved = true;
+        setDragging(true);
       }
       if (d.moved && index !== null) {
         setHover(rangeBetween(data.glyphs, d.anchor, index));
@@ -94,6 +112,7 @@ export function TextEditLayer({
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
     drag.current = null;
+    setDragging(false);
     if (!data || !d) return;
     const index = glyphAt(data.glyphs, pointFrom(e), toScreen) ?? d.anchor;
     const range =
@@ -123,6 +142,15 @@ export function TextEditLayer({
     data && hover && !selection
       ? selectionRect(data.glyphs, hover.start, hover.end, toScreen)
       : null;
+  const hoverText =
+    data && hover
+      ? data.glyphs
+          .slice(hover.start, hover.end)
+          .map((g) => g.text ?? "")
+          .join("")
+      : "";
+  const showNeighborHint =
+    !!data && !!selection && hasNeighborRun(data.glyphs, data.runs, selection);
   const selectedRect =
     data && selection
       ? selectionRect(data.glyphs, selection.start, selection.end, toScreen)
@@ -145,22 +173,50 @@ export function TextEditLayer({
       }}
     >
       {hoverRect && (
-        <div
-          aria-hidden
-          className="border-primary/60 bg-primary/10 pointer-events-none absolute rounded-sm border"
-          style={{
-            left: hoverRect.left - 2,
-            top: hoverRect.top - 2,
-            width: hoverRect.width + 4,
-            height: hoverRect.height + 4,
-          }}
-        />
+        <>
+          <div
+            data-text-edit-candidate={dragging ? "drag" : "hover"}
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute rounded-sm border-blue-600 dark:border-blue-400",
+              dragging
+                ? "border-2 bg-blue-500/25 ring-4 ring-blue-500/25"
+                : "border bg-blue-500/10",
+            )}
+            style={{
+              left: hoverRect.left - 2,
+              top: hoverRect.top - 2,
+              width: hoverRect.width + 4,
+              height: hoverRect.height + 4,
+            }}
+          />
+          <div
+            data-text-edit-hint
+            className={cn(
+              "pointer-events-none absolute z-10 max-w-80 truncate rounded-md px-2 py-0.5 text-xs whitespace-nowrap shadow-sm",
+              dragging
+                ? "bg-blue-600 font-medium text-white"
+                : "bg-foreground/85 text-background",
+            )}
+            style={{
+              left: Math.max(0, hoverRect.left - 2),
+              top:
+                hoverRect.top - HINT_HEIGHT - HINT_GAP >= 0
+                  ? hoverRect.top - HINT_HEIGHT - HINT_GAP
+                  : hoverRect.top + hoverRect.height + HINT_GAP,
+            }}
+          >
+            {dragging
+              ? `「${hoverText}」を選択中（${visibleLength(hoverText)} 文字）`
+              : "クリックで選択 ／ ドラッグでまとめて選択"}
+          </div>
+        </>
       )}
       {selectedRect && (
         <div
           data-text-edit-selection
           aria-hidden
-          className="border-primary bg-primary/15 pointer-events-none absolute rounded-sm border-2"
+          className="pointer-events-none absolute rounded-sm border-2 border-blue-600 bg-blue-500/20 dark:border-blue-400"
           style={{
             left: selectedRect.left - 2,
             top: selectedRect.top - 2,
@@ -178,6 +234,7 @@ export function TextEditLayer({
           rect={selectedRect}
           pageWidth={viewport.width}
           pageHeight={viewport.height}
+          showNeighborHint={showNeighborHint}
         />
       )}
     </div>
