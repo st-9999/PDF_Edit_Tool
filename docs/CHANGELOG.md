@@ -14,6 +14,8 @@
 
 ### Added
 
+- feat(text-rewrite): テキスト書き換えの土台となる **PDF 内の文字データの解析**（T1）を追加（`src/lib/pdf/content/`）。ページのコンテンツストリームを字句解析・命令列化し（元バイト列上の範囲つき）、テキスト状態（`Tf` `Tc` `Tw` `Tz` `TL` `Ts` `Tr`）・行移動（`Td` `TD` `T*` `'` `"`）・`Tm`・`cm`／`q`／`Q` を解釈して、グリフごとに**文字・原点・送り幅・四隅・元データ上の位置（命令・TJ 要素・バイト位置）**を求める。フォントは Type0（`Identity-H`）と単純フォント（ToUnicode／WinAnsi／`Differences`）に対応し、ToUnicode CMap を逆引き可能な形で解析する。pdf.js の抽出結果（文字列・各項目の先頭と末尾の位置）との一致を、生成 PDF と実サンプル（Excel 出力・Microsoft Print to PDF 出力、計 20 ページ）で検証。画面にはまだ組み込んでいない。
+
 - feat(home): エントリ画面に「**複数 PDF を結合**」の**ドロップ枠**を追加。従来は単一 PDF のドロップ枠の下に小さなボタンがあるだけで結合機能が見つけられにくかったため、単一 PDF の枠と**同じ大きさの枠を横並び**（`md` 未満は縦並び）で配置し、「結合する場合はこちらにまとめてドラッグ & ドロップ」と案内する。結合用の枠へドロップ、または「複数ファイルを選択」（`multiple`）で選ぶと、**そのファイルが一覧に入った状態で結合画面へ進む**（`MergeIntake` に `initialFiles` を追加）。PDF 以外だけを渡した場合はトーストを出して入口画面にとどまり、PDF と混在していれば結合画面で除外を通知する。2 枠はドロップ枠を共通コンポーネント（`DropZone`）化して実装。
 - feat(pdf): **暗号化 PDF の復号**（`src/lib/pdf/decrypt/`）を追加。PDF 標準セキュリティハンドラ（ISO 32000-1 7.6.3 / ISO 32000-2）の鍵導出と復号を自前実装し、`buildPdf` が元 PDF を読む直前に平文へ書き直す。これにより「pdf.js では開けるが pdf-lib で保存できない」文書（権限フラグ付き PDF）が編集・保存できるようになる。内訳は `md5.ts`（Web Crypto に無い MD5）/ `rc4.ts` / `aes.ts`（AES-128・256 の CBC。R6 の鍵導出がパディング無し CBC 暗号化を要求するため Web Crypto では表現できず自前実装）/ `standard-security.ts`（Algorithm 1/2/2.A/2.B/4/5 の鍵導出と検証）/ `scanner.ts`（間接オブジェクトの範囲特定）/ `index.ts`（文書の再構築）。対象は空のユーザーパスワードで開ける文書のみで、実パスワードが必要な文書は `PdfPasswordRequiredError`、未対応方式は `PdfUnsupportedEncryptionError` として日本語で通知する。
 - feat(ui): ブラウザタブのアイコン（ファビコン）を **PDF 文書モチーフの SVG** に変更。Next.js デフォルトの `src/app/favicon.ico` を削除し、`src/app/icon.svg`（赤い文書＋折り返し角＋白「PDF」）を追加。App Router が `type="image/svg+xml"` の `<link rel="icon">` を自動生成し、本番では basePath（`/PDF_Edit_Tool`）も自動付与される。
