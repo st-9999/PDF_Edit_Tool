@@ -10,8 +10,8 @@ import {
 import type { PageRef } from "@/lib/editor/operations";
 import { runBuild } from "@/lib/pdf/build-runner";
 import {
-  loadFallbackFont,
-  needsFallbackFont,
+  fallbackStylesOfPages,
+  loadFallbackFonts,
 } from "@/lib/pdf/fallback-font-source";
 import { collectEditableOutline } from "@/lib/outline/collect";
 import { toBuildNodes } from "@/lib/outline/edit";
@@ -66,15 +66,17 @@ export function useSave() {
     return toBuildNodes(editable);
   };
 
-  // テキストの書き換えを含む場合だけ、元のフォントに無い文字を描く同梱フォントを渡す
-  const fallbackFontFor = async (pages: PageRef[]) =>
-    needsFallbackFont(pages) ? await loadFallbackFont() : undefined;
+  // 書き換えが同梱フォントを使う場合だけ、その書体のフォントを読み込んで渡す
+  const fallbackFontsFor = async (pages: PageRef[]) => {
+    const styles = fallbackStylesOfPages(pages);
+    return styles.length > 0 ? await loadFallbackFonts(styles) : undefined;
+  };
 
   // 現在のドキュメントを Worker で生成（進捗オーバーレイ＋キャンセル付き）
   const buildCurrent = async () => {
     const outline = await collectOutline();
     const pages = useEditorStore.getState().pages;
-    const fallbackFont = await fallbackFontFor(pages);
+    const fallbackFonts = await fallbackFontsFor(pages);
     const controller = new AbortController();
     useProgressStore
       .getState()
@@ -83,7 +85,7 @@ export function useSave() {
       return await runBuild(getAllBytes(), pages, {
         signal: controller.signal,
         outline,
-        fallbackFont,
+        fallbackFonts,
         onProgress: (done, total) =>
           useProgressStore.getState().progress(done, total),
       });
@@ -150,7 +152,7 @@ export function useSave() {
     }
     try {
       const parts = await splitPdf(getAllBytes(), pages, boundaries, {
-        fallbackFont: await fallbackFontFor(pages),
+        fallbackFonts: await fallbackFontsFor(pages),
       });
       const fileName = useViewerStore.getState().fileName;
       let saved = 0;
@@ -179,7 +181,7 @@ export function useSave() {
         getAllBytes(),
         pages,
         selection.selected,
-        { fallbackFont: await fallbackFontFor(pages) },
+        { fallbackFonts: await fallbackFontsFor(pages) },
       );
       const target = await strategy.saveAs(
         bytes,

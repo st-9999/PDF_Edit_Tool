@@ -155,6 +155,7 @@
   - [x] T4c 書き換えたページの表示（ビューア・サムネイル・一覧整理・検索）（`edited-page-cache.ts`・`usePageSource`）
   - [x] T4d 画面: 書き換えモード、範囲選択、編集ボックス（揃え・書体が変わる表示）、同梱フォントの遅延読み込み（`features/text-edit/`、`text-edit-store`、`hit-test.ts`、E2E `text-rewrite.spec.ts`）
   - [x] T4e E2E と仕上げ（README・SPEC §3.5・作業記録）
+- [x] 明朝体の同梱フォント（Noto Serif JP）: 元のフォントの名前・Flags で明朝体かを判定し、同じ書体の同梱フォントで補う。書き換えごとに使う書体を記録し、表示・保存では必要な書体のフォントだけを読み込む（`font-style.ts`、`TextEdit.fallbackStyles`。TEXT_REWRITE §9）
 - [ ] 画像編集（追加・差し替え・削除）— 後回し
 
 ---

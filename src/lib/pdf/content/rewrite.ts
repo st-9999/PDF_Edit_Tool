@@ -1,5 +1,6 @@
 import { PDFName, type PDFDocument } from "pdf-lib";
 import type { FontModel, FontUnsupportedReason } from "./font";
+import type { FontStyle } from "./font-style";
 import {
   GlyphResolver,
   type GlyphResolverOptions,
@@ -30,7 +31,13 @@ export type RewriteFailure =
       replacement: number;
       reason: FontUnsupportedReason;
     }
-  | { kind: "missing-glyphs"; replacement: number; chars: string[] };
+  | {
+      kind: "missing-glyphs";
+      replacement: number;
+      chars: string[];
+      /** 同梱フォントで補うなら使う書体（元のフォントの書体）。 */
+      style: FontStyle;
+    };
 
 export type RewriteWarning =
   | {
@@ -43,6 +50,8 @@ export type RewriteWarning =
       kind: "fallback-font";
       replacement: number;
       chars: string[];
+      /** 使った同梱フォントの書体。 */
+      style: FontStyle;
     };
 
 /** 1 文字を描くフォントとコードを決める関数（描けなければ null）。 */
@@ -472,6 +481,7 @@ function validate(
         kind: "missing-glyphs",
         replacement: index,
         chars: missing,
+        style: font.style,
       });
       return;
     }
@@ -659,6 +669,7 @@ export function rewritePageContent(
           kind: "fallback-font",
           replacement: p.index,
           chars: fallbackChars,
+          style: p.font.style,
         });
       }
       const after = delta - shift;

@@ -12,7 +12,8 @@ const DIR = "Reference/テキスト書き換えサンプルpdf";
 const SPEC = `${DIR}/01_仕様書.pdf`;
 const QUANTITY = `${DIR}/数量計算書.pdf`;
 /** 同梱フォント（リポジトリに含まれる）。 */
-const NOTO = "public/fonts/NotoSansJP-Regular.ttf";
+const NOTO_SANS = "public/fonts/NotoSansJP-Regular.ttf";
+const NOTO_SERIF = "public/fonts/NotoSerifJP-Regular.ttf";
 
 const textOf = (glyphs: PageGlyph[]) =>
   glyphs.map((g) => g.text ?? "?").join("");
@@ -36,7 +37,12 @@ async function rewriteAt(
     doc,
     0,
     [{ start, end: start + oldLength, text, align }],
-    { fallbackFont: new Uint8Array(readFileSync(NOTO)) },
+    {
+      fallbackFonts: {
+        sans: new Uint8Array(readFileSync(NOTO_SANS)),
+        serif: new Uint8Array(readFileSync(NOTO_SERIF)),
+      },
+    },
   );
   const saved = await doc.save();
   const after = extractPageText(await PDFDocument.load(saved), 0);
@@ -75,103 +81,116 @@ async function expectPdfjsAgrees(saved: Uint8Array, after: PageText) {
   return oracle;
 }
 
-describe.skipIf(![SPEC, QUANTITY, NOTO].every((p) => existsSync(p)))(
-  "replacePageText（実サンプル PDF・元のフォントに無い文字の補完）",
-  () => {
-    it("仕様書: 「令和8年度」の 8 を 4 に（MS 明朝の cmap にある字形を ToUnicode に追記して同じフォントで描く）", async () => {
-      const { before, after, result, saved, start } = await rewriteAt(
-        SPEC,
-        "令和8年度",
-        2,
-        1,
-        "4",
-        "left",
-      );
-      expect(result).toEqual({ ok: true, clipAdjustments: 0, warnings: [] });
-      expect(textOf(after.glyphs)).toContain("令和4年度");
-      expect(after.glyphs[start]!.fontResource).toBe(
-        before.glyphs[start]!.fontResource,
-      );
-      expectOthersUnchanged(before, after, start, 1, 1);
-      await expectPdfjsAgrees(saved, after);
-    }, 60_000);
+describe.skipIf(
+  ![SPEC, QUANTITY, NOTO_SANS, NOTO_SERIF].every((p) => existsSync(p)),
+)("replacePageText（実サンプル PDF・元のフォントに無い文字の補完）", () => {
+  it("仕様書: 「令和8年度」の 8 を 4 に（MS 明朝の cmap にある字形を ToUnicode に追記して同じフォントで描く）", async () => {
+    const { before, after, result, saved, start } = await rewriteAt(
+      SPEC,
+      "令和8年度",
+      2,
+      1,
+      "4",
+      "left",
+    );
+    expect(result).toEqual({ ok: true, clipAdjustments: 0, warnings: [] });
+    expect(textOf(after.glyphs)).toContain("令和4年度");
+    expect(after.glyphs[start]!.fontResource).toBe(
+      before.glyphs[start]!.fontResource,
+    );
+    expectOthersUnchanged(before, after, start, 1, 1);
+    await expectPdfjsAgrees(saved, after);
+  }, 60_000);
 
-    it("仕様書: 「令和8年度」の 8 を 9 に（同じ MS 明朝の別サブセットのフォントに切り替えて描く）", async () => {
-      const { before, after, result, saved, start } = await rewriteAt(
-        SPEC,
-        "令和8年度",
-        2,
-        1,
-        "9",
-        "left",
-      );
-      expect(result).toEqual({ ok: true, clipAdjustments: 0, warnings: [] });
-      expect(textOf(after.glyphs)).toContain("令和9年度");
-      const original = before.fonts.get(before.glyphs[start]!.fontResource)!;
-      const used = after.fonts.get(after.glyphs[start]!.fontResource)!;
-      expect(used.resourceName).not.toBe(original.resourceName);
-      expect(used.typefaceKey).toBe(original.typefaceKey);
-      expectOthersUnchanged(before, after, start, 1, 1);
-      await expectPdfjsAgrees(saved, after);
-    }, 60_000);
+  it("仕様書: 「令和8年度」の 8 を 9 に（同じ MS 明朝の別サブセットのフォントに切り替えて描く）", async () => {
+    const { before, after, result, saved, start } = await rewriteAt(
+      SPEC,
+      "令和8年度",
+      2,
+      1,
+      "9",
+      "left",
+    );
+    expect(result).toEqual({ ok: true, clipAdjustments: 0, warnings: [] });
+    expect(textOf(after.glyphs)).toContain("令和9年度");
+    const original = before.fonts.get(before.glyphs[start]!.fontResource)!;
+    const used = after.fonts.get(after.glyphs[start]!.fontResource)!;
+    expect(used.resourceName).not.toBe(original.resourceName);
+    expect(used.typefaceKey).toBe(original.typefaceKey);
+    expectOthersUnchanged(before, after, start, 1, 1);
+    await expectPdfjsAgrees(saved, after);
+  }, 60_000);
 
-    it("仕様書: 単純 TrueType の「508」を「507」に（7 は同じ書体の別フォントで描く）", async () => {
-      const { before, after, result, saved, start } = await rewriteAt(
-        SPEC,
-        "508-010",
-        0,
-        3,
-        "507",
-        "left",
-      );
-      expect(result).toEqual({ ok: true, clipAdjustments: 0, warnings: [] });
-      expect(textOf(after.glyphs)).toContain("507-010");
-      expectOthersUnchanged(before, after, start, 3, 3);
-      await expectPdfjsAgrees(saved, after);
-    }, 60_000);
+  it("仕様書: 単純 TrueType の「508」を「507」に（7 は同じ書体の別フォントで描く）", async () => {
+    const { before, after, result, saved, start } = await rewriteAt(
+      SPEC,
+      "508-010",
+      0,
+      3,
+      "507",
+      "left",
+    );
+    expect(result).toEqual({ ok: true, clipAdjustments: 0, warnings: [] });
+    expect(textOf(after.glyphs)).toContain("507-010");
+    expectOthersUnchanged(before, after, start, 3, 3);
+    await expectPdfjsAgrees(saved, after);
+  }, 60_000);
 
-    it("仕様書: 文書内に無い「鷗」は同梱フォントで描き、警告を返す", async () => {
-      const { before, after, result, saved, start } = await rewriteAt(
-        SPEC,
-        "令和8年度",
-        0,
-        5,
-        "令和鷗年度",
-        "left",
-      );
-      expect(result).toEqual({
-        ok: true,
-        clipAdjustments: 0,
-        warnings: [{ kind: "fallback-font", replacement: 0, chars: ["鷗"] }],
-      });
-      const used = after.fonts.get(after.glyphs[start + 2]!.fontResource)!;
-      expect(used.typefaceKey?.startsWith("Noto Sans JP|")).toBe(true);
-      expectOthersUnchanged(before, after, start, 5, 5);
-      const oracle = await expectPdfjsAgrees(saved, after);
-      expect(oracle.expectedText).toContain("令和鷗年度");
-      // 同梱フォントは使った字形だけを埋め込む（元の PDF からの増加は 50KB 未満）
-      expect(saved.length - readFileSync(SPEC).length).toBeLessThan(50_000);
-    }, 60_000);
+  it("仕様書: 文書内に無い「鷗」は、元の MS 明朝に合わせて明朝体の同梱フォントで描き、警告を返す", async () => {
+    const { before, after, result, saved, start } = await rewriteAt(
+      SPEC,
+      "令和8年度",
+      0,
+      5,
+      "令和鷗年度",
+      "left",
+    );
+    expect(result).toEqual({
+      ok: true,
+      clipAdjustments: 0,
+      warnings: [
+        {
+          kind: "fallback-font",
+          replacement: 0,
+          chars: ["鷗"],
+          style: "serif",
+        },
+      ],
+    });
+    const used = after.fonts.get(after.glyphs[start + 2]!.fontResource)!;
+    expect(used.typefaceKey?.startsWith("Noto Serif JP|")).toBe(true);
+    expectOthersUnchanged(before, after, start, 5, 5);
+    const oracle = await expectPdfjsAgrees(saved, after);
+    expect(oracle.expectedText).toContain("令和鷗年度");
+    // 同梱フォントは使った字形だけを埋め込む（元の PDF からの増加は 50KB 未満）
+    expect(saved.length - readFileSync(SPEC).length).toBeLessThan(50_000);
+  }, 60_000);
 
-    it("数量計算書: 「81.9」を「1,234.5」に（「,」だけ同梱フォント、右揃え・クリップ拡張）", async () => {
-      const { before, after, result, saved, start } = await rewriteAt(
-        QUANTITY,
-        "81.9",
-        0,
-        4,
-        "1,234.5",
-        "right",
-      );
-      expect(result).toEqual({
-        ok: true,
-        clipAdjustments: 1,
-        warnings: [{ kind: "fallback-font", replacement: 0, chars: [","] }],
-      });
-      expect(textOf(after.glyphs.slice(start, start + 7))).toBe("1,234.5");
-      expectOthersUnchanged(before, after, start, 4, 7);
-      const oracle = await expectPdfjsAgrees(saved, after);
-      expect(oracle.expectedText).toContain("1,234.5");
-      expect(oracle.expectedText).not.toContain("81.9");
-    }, 60_000);
-  },
-);
+  it("数量計算書: 「81.9」を「1,234.5」に（「,」だけ明朝体の同梱フォント、右揃え・クリップ拡張）", async () => {
+    const { before, after, result, saved, start } = await rewriteAt(
+      QUANTITY,
+      "81.9",
+      0,
+      4,
+      "1,234.5",
+      "right",
+    );
+    expect(result).toEqual({
+      ok: true,
+      clipAdjustments: 1,
+      warnings: [
+        { kind: "fallback-font", replacement: 0, chars: [","], style: "serif" },
+      ],
+    });
+    expect(textOf(after.glyphs.slice(start, start + 7))).toBe("1,234.5");
+    expect(
+      after.fonts
+        .get(after.glyphs[start + 1]!.fontResource)!
+        .typefaceKey?.startsWith("Noto Serif JP|"),
+    ).toBe(true);
+    expectOthersUnchanged(before, after, start, 4, 7);
+    const oracle = await expectPdfjsAgrees(saved, after);
+    expect(oracle.expectedText).toContain("1,234.5");
+    expect(oracle.expectedText).not.toContain("81.9");
+  }, 60_000);
+});

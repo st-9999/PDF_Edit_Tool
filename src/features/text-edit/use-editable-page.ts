@@ -5,6 +5,10 @@ import type { PDFDocument } from "pdf-lib";
 import type { PageRef } from "@/lib/editor/operations";
 import type { PageGlyph } from "@/lib/pdf/content/text-layout";
 import type { TextRun } from "@/lib/pdf/content/text-runs";
+import {
+  fallbackStylesOfEdits,
+  loadFallbackFonts,
+} from "@/lib/pdf/fallback-font-source";
 import { usePdfSources } from "@/features/viewer/pdf-sources-context";
 
 /**
@@ -47,27 +51,15 @@ async function loadEditablePage(
       import("@/lib/pdf/content/page-text"),
       import("@/lib/pdf/content/text-runs"),
     ]);
-  let doc: PDFDocument;
-  try {
-    doc = await loadDocumentWithEdits(
-      bytes,
-      page.sourceIndex,
-      page.textEdits ?? [],
-    );
-  } catch (err) {
-    // 同梱フォントが必要な書き換えを含む場合は、フォントを読み込んで作り直す
-    const { loadFallbackFont } = await import("@/lib/pdf/fallback-font-source");
-    const failures = (err as { failures?: { kind: string }[] }).failures;
-    if (!failures?.some((f) => f.kind === "missing-glyphs")) throw err;
-    doc = await loadDocumentWithEdits(
-      bytes,
-      page.sourceIndex,
-      page.textEdits ?? [],
-      {
-        fallbackFont: await loadFallbackFont(),
-      },
-    );
-  }
+  // 同梱フォントを使う書き換えを含む場合は、その書体のフォントだけを読み込む
+  const edits = page.textEdits ?? [];
+  const styles = fallbackStylesOfEdits(edits);
+  const doc: PDFDocument = await loadDocumentWithEdits(
+    bytes,
+    page.sourceIndex,
+    edits,
+    styles.length > 0 ? { fallbackFonts: await loadFallbackFonts(styles) } : {},
+  );
   const glyphs = extractPageText(doc, page.sourceIndex).glyphs;
   return {
     doc,

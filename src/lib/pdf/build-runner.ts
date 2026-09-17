@@ -6,14 +6,15 @@ import {
   type SourceBytes,
 } from "@/lib/editor/build";
 import type { PageRef } from "@/lib/editor/operations";
+import type { FallbackFonts } from "@/lib/pdf/content/font-style";
 
 interface RunOptions {
   onProgress?: (done: number, total: number) => void;
   signal?: AbortSignal;
   /** 元ドキュメントのしおり。出力へ再マッピングして書き戻す。 */
   outline?: BuildOutlineNode[];
-  /** テキストの書き換えで使う同梱フォント。 */
-  fallbackFont?: Uint8Array;
+  /** テキストの書き換えで使う書体ごとの同梱フォント。 */
+  fallbackFonts?: FallbackFonts;
 }
 
 interface WorkerDone {
@@ -47,7 +48,7 @@ class WorkerUnavailableError extends Error {
 function runInWorker(
   sources: SourceBytes,
   pages: PageRef[],
-  { onProgress, signal, outline, fallbackFont }: RunOptions,
+  { onProgress, signal, outline, fallbackFonts }: RunOptions,
 ): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -95,7 +96,7 @@ function runInWorker(
       reject(new WorkerUnavailableError());
     };
 
-    worker.postMessage({ sources, pages, outline, fallbackFont });
+    worker.postMessage({ sources, pages, outline, fallbackFonts });
   });
 }
 
@@ -123,6 +124,6 @@ export async function runBuild(
     onProgress: options.onProgress,
     signal: options.signal,
     outline: options.outline,
-    fallbackFont: options.fallbackFont,
+    fallbackFonts: options.fallbackFonts,
   });
 }

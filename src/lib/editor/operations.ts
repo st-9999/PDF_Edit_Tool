@@ -1,4 +1,5 @@
 import { createId } from "@/lib/id";
+import type { FontStyle } from "@/lib/pdf/content/font-style";
 import type { TextReplacement } from "@/lib/pdf/content/rewrite";
 
 /**
@@ -7,6 +8,11 @@ import type { TextReplacement } from "@/lib/pdf/content/rewrite";
  */
 export interface TextEdit {
   replacements: TextReplacement[];
+  /**
+   * 元のフォントに無い文字を描くのに使う同梱フォントの書体（確定前の確認で決まる）。
+   * 表示・保存では、ここに挙がった書体のフォントだけを読み込んで書き換えを再現する。
+   */
+  fallbackStyles?: FontStyle[];
 }
 
 /**

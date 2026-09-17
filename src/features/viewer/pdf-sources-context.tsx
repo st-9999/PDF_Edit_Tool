@@ -14,7 +14,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { toast } from "sonner";
 import { loadPdfDocument } from "@/lib/pdf/pdfjs";
 import { EditedPageCache } from "@/lib/pdf/edited-page-cache";
-import { loadFallbackFont } from "@/lib/pdf/fallback-font-source";
+import { loadFallbackFonts } from "@/lib/pdf/fallback-font-source";
 import type { PageRef } from "@/lib/editor/operations";
 import { createId } from "@/lib/id";
 
@@ -68,7 +68,7 @@ export function PdfSourcesProvider({ children }: { children: ReactNode }) {
           return renderEditedPage(bytes, pageIndex, edits, options);
         },
         load: (bytes) => loadPdfDocument(toArrayBuffer(bytes)),
-        loadFallbackFont,
+        loadFallbackFonts,
       }),
   );
   const [editedVersion, setEditedVersion] = useState(0);

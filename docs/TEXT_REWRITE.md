@@ -15,7 +15,7 @@ PDF しか手元に無い資料で、**一部の数字や文言を変更する**
 | 項目                 | 決定                                                                                                                                                    |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 方式                 | 本物の書き換え                                                                                                                                          |
-| 元フォントに無い文字 | **(A)** その文字だけ同梱フォント（Noto Sans JP Regular、`public/fonts/`）を埋め込んで描く。文字データとしての書き換えは維持し、書体が変わる旨を警告する |
+| 元フォントに無い文字 | **(A)** その文字だけ同梱フォント（Noto Sans JP Regular、`public/fonts/`）を埋め込んで描く。文字データとしての書き換えは維持し、書体が変わる旨を警告する（2026-09-17 追記: 明朝体の Noto Serif JP も同梱し、元の書体に合わせて選ぶ。§9） |
 | 画像編集             | 後回し（本件の範囲外）                                                                                                                                  |
 
 ## 2. T0 調査結果（サンプル PDF 2 件）
@@ -189,7 +189,7 @@ PDF しか手元に無い資料で、**一部の数字や文言を変更する**
 ### 7.5 T3 時点の対象外
 
 - 同じ書体の別フォントからは ToUnicode で描ける文字だけを使う（その別フォントの cmap 経由の文字は使わない）。
-- 同梱フォントは 1 書体（ゴシック体）のみ。明朝体の資料では書体が変わる。
+- 同梱フォントは 1 書体（ゴシック体）のみ。明朝体の資料では書体が変わる。→ §9 で明朝体を追加。
 - 複数の命令にまたがる範囲（`spans-operations`）は引き続き未対応（T4 で検討）。
 
 ## 8. T4 設計（画面への組み込み）
@@ -239,3 +239,39 @@ PDF しか手元に無い資料で、**一部の数字や文言を変更する**
 - **位置**: ページ下端に近ければ選択範囲の上に出す。`scrollIntoView` は祖先のスクロール領域まで動かす（以前の上部バー消失の原因）ため使わず、`[data-viewer-scroll]` の中だけを必要な分スクロールし、入力欄は `focus({ preventScroll: true })`。
 - **確認**: E2E `text-rewrite.spec.ts`（クリック選択→書き換え→表示・未保存・Undo/Redo・保存した PDF の文字、同梱フォントの警告と確定、描けない文字で確定不可と Esc、モード OFF）。実サンプル（数量計算書）でも画面操作で「81.9」→「1,234.5」を確認した。
 - **E2E の安定化**: 入口画面でのファイル投入はハイドレーション待ち（`e2e/helpers.ts` の `waitForHydration`）を入れる。ファイルを投入する全 spec に適用済み（`openEntryPage`）。
+
+## 9. 明朝体の同梱フォント（2026-09-17）
+
+T3 時点では同梱フォントがゴシック体だけで、MS 明朝の資料（サンプル 2 件とも）で補った文字がゴシック体になっていた。明朝体の Noto Serif JP を追加し、元のフォントの書体に合わせて選ぶ。
+
+### 9.1 書体の判定（`font-style.ts`・`FontModel.style`）
+
+- `fontStyleOf({ flags, names })` が `sans`（ゴシック体）か `serif`（明朝体）を返す。
+  1. 名前（ベースフォント名 → 埋め込み TrueType のファミリー名の順）にゴシック系の語（Gothic・ゴシック・Sans・Kaku・Meiryo・Arial など）があれば `sans`。「Microsoft Sans Serif」のように両方を含む名前があるため、ゴシック系を先に調べる。
+  2. 明朝系の語（Mincho・明朝・Serif・HiraMin・Ming・Song・Times・Century など）があれば `serif`。
+  3. 名前で決まらなければ FontDescriptor の Flags の Serif（bit 2）。
+  4. 手掛かりが無ければ `sans`。
+- 名前を優先する理由: サンプルの仕様書の `MS-Mincho` は Flags が 32（Serif なし）。一方、Excel 出力の `CIDFont+F1` は名前から判断できないが Flags が 6（Serif あり）で、ファミリー名も「MS Mincho」「MS PMincho」だった。
+
+### 9.2 補完の 4 段目の変更（`glyph-resolver.ts`）
+
+- `GlyphResolverOptions.fallbackFonts: { sans?, serif? }`（`FallbackFonts`）に変更。4 段目は**元のフォントと同じ書体の同梱フォントだけ**を使い、もう一方の書体しか渡されていなければ描かない（`missing-glyphs`）。渡したフォントの組み合わせによって結果が変わらないようにするため（表示と保存が必ず一致する）。
+- 同梱フォントのリソースは書体ごとに 1 つ（`FallbackFontEmbedder` は文書とフォントデータの組ごと）。同じページで明朝体・ゴシック体の両方を使ってもよい。
+- `missing-glyphs` の失敗と `fallback-font` の警告に `style`（必要な書体／使った書体）を追加。
+
+### 9.3 必要な書体だけを読み込む
+
+- `TextEdit.fallbackStyles` に、その書き換えで使う同梱フォントの書体を記録する。確定時に、確定前の確認結果の `fallback-font` 警告から決める（`fallbackStylesOfResult`）。
+- 表示（`EditedPageCache`・`useEditablePage`）と保存・抽出・分割（`use-save`）は、履歴の `fallbackStyles` に挙がった書体のフォントだけを読み込む（`fallbackStylesOfEdits`・`fallbackStylesOfPages`）。以前の「まず使わずに作り、`missing-glyphs` なら読み込んで作り直す」処理はやめた。書き換えを含む保存でも、同梱フォントを使っていなければフォントを読み込まない。
+- 編集ボックスの確認は、まずフォントなしで確認し、`missing-glyphs` があればその失敗が示す書体のフォントだけを読み込んで再確認する。
+- `createFallbackFontLoader` は書体ごとに 1 度だけ取得し、失敗したら次回に取り直す。
+
+### 9.4 同梱フォントの出典
+
+- `public/fonts/NotoSerifJP-Regular.ttf`: Noto Serif JP Regular（静的 TrueType・`glyf` 形式、17,099 グリフ、7.7MB）。npm パッケージ `@expo-google-fonts/noto-serif-jp@0.4.3` の `400Regular/NotoSerifJP_400Regular.ttf` を取り出して配置（依存関係には追加していない）。GID を保った部分埋め込みは `glyf` 形式が前提のため、CFF 形式（`.otf`）ではなくこちらを使う。
+- `public/fonts/NotoSerifJP-OFL.txt`: 同パッケージの `LICENSE_FONT`（SIL Open Font License 1.1）。
+
+### 9.5 確認
+
+- 実サンプル: 仕様書の「令和8年度」→「令和鷗年度」、数量計算書の「81.9」→「1,234.5」で、補った文字（「鷗」「,」）が Noto Serif JP で埋め込まれることを確認（`rewrite-fonts.samples.test.ts`）。MuPDF で描画し、「鷗」が周りの MS 明朝となじむ明朝体で表示されることを目で確認した。PDF の増加は 50KB 未満のまま。
+- E2E: フォント名を明朝体にした PDF で、編集ボックスに「明朝体（Noto Serif JP）で描きます」と表示され、保存した PDF の補った文字が Noto Serif JP で、読み込んだ同梱フォントが明朝体だけであることを確認（`text-rewrite.spec.ts`）。

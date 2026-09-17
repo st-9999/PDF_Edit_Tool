@@ -9,6 +9,7 @@ import {
 import { writeToUnicodeCMap } from "./cmap";
 import { FallbackFontEmbedder } from "./fallback-font";
 import { loadFontModel, type FontModel } from "./font";
+import type { FallbackFonts, FontStyle } from "./font-style";
 import type { PageText } from "./page-text";
 import { getArray, getDict, resolve } from "./pdf-objects";
 
@@ -21,7 +22,8 @@ import { getArray, getDict, resolve } from "./pdf-objects";
  *    → ToUnicode と W に対応を追記して、元のフォントのまま描く
  * 3. `same-typeface`: 同じ書体の別フォント（文書内の別サブセット）が描ける
  *    → そのフォントをページのリソースに加え、Tf を切り替えて描く
- * 4. `fallback`: 同梱フォントで描く（書体が変わる）
+ * 4. `fallback`: 元のフォントと同じ書体（明朝体／ゴシック体）の同梱フォントで描く（書体が変わる）。
+ *    違う書体の同梱フォントしか無ければ描かない（渡したフォントの組み合わせで結果が変わらないように）。
  *
  * `resolve` は文書を変更しない。書き換え全体が成功したときだけ `commit` で追記を反映する。
  */
@@ -48,8 +50,8 @@ export interface ResolvedGlyph {
 }
 
 export interface GlyphResolverOptions {
-  /** 元の PDF のフォントで描けない文字に使う TrueType フォント（例: Noto Sans JP）。 */
-  fallbackFont?: Uint8Array;
+  /** 元の PDF のフォントで描けない文字に使う、書体ごとの TrueType フォント（Noto Sans JP・Noto Serif JP）。 */
+  fallbackFonts?: FallbackFonts;
 }
 
 interface DocumentFont {
@@ -86,9 +88,9 @@ export class GlyphResolver {
   >();
   /** ページのリソースに追加するフォント（名前 → 参照）。 */
   private readonly resourceAdditions = new Map<string, PDFRef | PDFDict>();
-  /** 同梱フォントで使うコード → 文字と、そのリソース名。 */
-  private readonly fallbackCodes = new Map<number, string>();
-  private fallbackName: string | null = null;
+  /** 書体ごとに、同梱フォントで使うコード → 文字と、そのリソース名。 */
+  private readonly fallbackCodes = new Map<FontStyle, Map<number, string>>();
+  private readonly fallbackNames = new Map<FontStyle, string>();
 
   constructor(
     private readonly doc: PDFDocument,
@@ -153,18 +155,18 @@ export class GlyphResolver {
       }
     }
 
-    // 4. 同梱フォント
-    if (this.options.fallbackFont) {
-      const embedder = FallbackFontEmbedder.for(
-        this.doc,
-        this.options.fallbackFont,
-      );
+    // 4. 同じ書体の同梱フォント
+    const fallbackBytes = this.options.fallbackFonts?.[font.style];
+    if (fallbackBytes) {
+      const embedder = FallbackFontEmbedder.for(this.doc, fallbackBytes);
       const glyph = embedder.lookup(char);
       if (glyph) {
-        this.fallbackCodes.set(glyph.code, char);
+        const codes = this.fallbackCodes.get(font.style) ?? new Map();
+        codes.set(glyph.code, char);
+        this.fallbackCodes.set(font.style, codes);
         return {
           char,
-          resource: this.fallbackResourceName(),
+          resource: this.fallbackResourceName(font.style, embedder),
           code: glyph.code,
           codeLength: 2,
           width: glyph.width,
@@ -215,12 +217,12 @@ export class GlyphResolver {
       fonts.set(PDFName.of(name), value);
     }
 
-    if (this.fallbackName && this.options.fallbackFont) {
-      const ref = FallbackFontEmbedder.for(
-        this.doc,
-        this.options.fallbackFont,
-      ).commit(this.fallbackCodes);
-      fonts.set(PDFName.of(this.fallbackName), ref);
+    for (const [style, name] of this.fallbackNames) {
+      const bytes = this.options.fallbackFonts![style]!;
+      const ref = FallbackFontEmbedder.for(this.doc, bytes).commit(
+        this.fallbackCodes.get(style)!,
+      );
+      fonts.set(PDFName.of(name), ref);
     }
   }
 
@@ -311,23 +313,23 @@ export class GlyphResolver {
     return name;
   }
 
-  private fallbackResourceName(): string {
-    if (this.fallbackName) return this.fallbackName;
+  private fallbackResourceName(
+    style: FontStyle,
+    embedder: FallbackFontEmbedder,
+  ): string {
+    const current = this.fallbackNames.get(style);
+    if (current) return current;
     // 同じ文書で既に組み込み済みなら、ページ上の既存の名前を再利用する
-    const existing = FallbackFontEmbedder.for(
-      this.doc,
-      this.options.fallbackFont!,
-    ).fontRef;
+    let name: string | null = null;
+    const existing = embedder.fontRef;
     if (existing) {
       for (const [key, v] of this.pageFonts?.entries() ?? []) {
-        if (sameObject(v, existing)) {
-          this.fallbackName = key.decodeText();
-          return this.fallbackName;
-        }
+        if (sameObject(v, existing)) name = key.decodeText();
       }
     }
-    this.fallbackName = this.newName();
-    return this.fallbackName;
+    name ??= this.newName();
+    this.fallbackNames.set(style, name);
+    return name;
   }
 
   private newName(): string {

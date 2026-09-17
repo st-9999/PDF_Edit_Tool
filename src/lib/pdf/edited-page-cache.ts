@@ -1,11 +1,15 @@
 import type { TextEdit } from "@/lib/editor/operations";
-import type { RewriteFailure } from "@/lib/pdf/content/rewrite";
+import type { FallbackFonts } from "@/lib/pdf/content/font-style";
+import {
+  fallbackStylesOfEdits,
+  type FallbackFontLoader,
+} from "@/lib/pdf/fallback-font-source";
 
 /**
  * テキストを書き換えたページのプレビュー用 PDF（1 ページ）と、その読み込み結果（pdf.js のプロキシ）のキャッシュ。
  *
  * - キーは「元ソース・元ページ・書き換え履歴」。同じ内容なら作り直さず、同時の要求は 1 回にまとめる。
- * - 同梱フォント（5.5MB）はまず使わずに作り、元のフォントで描けない文字があったときだけ読み込んで作り直す。
+ * - 同梱フォント（数 MB）は、書き換え履歴が使う書体（`TextEdit.fallbackStyles`）のものだけを読み込む。
  * - 上限を超えたら最も長く使われていないものを破棄する（pdf.js のプロキシはメモリを持つため）。
  */
 
@@ -18,10 +22,10 @@ export interface EditedPageCacheDeps<P extends Destroyable> {
     sourceBytes: Uint8Array,
     pageIndex: number,
     edits: readonly TextEdit[],
-    options: { fallbackFont?: Uint8Array },
+    options: { fallbackFonts?: FallbackFonts },
   ) => Promise<Uint8Array>;
   load: (bytes: Uint8Array) => Promise<P>;
-  loadFallbackFont: () => Promise<Uint8Array>;
+  loadFallbackFonts: FallbackFontLoader;
   /** 保持する文書数の上限。 */
   capacity?: number;
 }
@@ -130,21 +134,12 @@ export class EditedPageCache<P extends Destroyable> {
     pageIndex: number,
     edits: readonly TextEdit[],
   ): Promise<Uint8Array> {
-    try {
-      return await this.deps.render(sourceBytes, pageIndex, edits, {});
-    } catch (err) {
-      // TextEditError（lib/editor/text-edit）を名前で判定する。型の import だけにして、
-      // pdf-lib を含むモジュールを書き換えが現れるまで読み込まないため。
-      const failures =
-        err instanceof Error && err.name === "TextEditError"
-          ? (err as Error & { failures?: RewriteFailure[] }).failures
-          : undefined;
-      const needsFallback =
-        failures?.some((f) => f.kind === "missing-glyphs") ?? false;
-      if (!needsFallback) throw err;
-      const fallbackFont = await this.deps.loadFallbackFont();
-      return this.deps.render(sourceBytes, pageIndex, edits, { fallbackFont });
+    const styles = fallbackStylesOfEdits(edits);
+    if (styles.length === 0) {
+      return this.deps.render(sourceBytes, pageIndex, edits, {});
     }
+    const fallbackFonts = await this.deps.loadFallbackFonts(styles);
+    return this.deps.render(sourceBytes, pageIndex, edits, { fallbackFonts });
   }
 
   private evict(): void {

@@ -6,6 +6,7 @@ import {
   type PDFContext,
 } from "pdf-lib";
 import { parseToUnicodeCMap, type ToUnicodeCMap } from "./cmap";
+import { fontStyleOf, type FontStyle } from "./font-style";
 import { parseTrueType, type TrueTypeFont } from "./truetype";
 import {
   getArray,
@@ -78,6 +79,8 @@ export interface FontModel {
    * 埋め込み TrueType が無ければ null。
    */
   typefaceKey: string | null;
+  /** 明朝体（serif）かゴシック体（sans）か。元のフォントに無い文字を描く同梱フォントの選択に使う。 */
+  style: FontStyle;
 }
 
 const DEFAULT_ASCENT = 880;
@@ -352,6 +355,10 @@ function loadType0(
       return { code, width: (advance * 1000) / program.unitsPerEm };
     },
     typefaceKey: typefaceKeyOf(program, postScriptName),
+    style: fontStyleOf({
+      flags: getNumber(ctx, descriptor, "Flags"),
+      names: [postScriptName, program?.familyName],
+    }),
   };
 }
 
@@ -434,6 +441,10 @@ function loadSimple(
     },
     encodeViaFontProgram: () => null,
     typefaceKey: typefaceKeyOf(program, stripSubsetTag(baseFont)),
+    style: fontStyleOf({
+      flags,
+      names: [stripSubsetTag(baseFont), program?.familyName],
+    }),
   };
 }
 

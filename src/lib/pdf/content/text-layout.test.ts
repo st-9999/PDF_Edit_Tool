@@ -25,6 +25,7 @@ function simpleFont(name: string, width = 500): FontModel {
     encode: (ch) => ch.charCodeAt(0),
     encodeViaFontProgram: () => null,
     typefaceKey: null,
+    style: "sans",
   };
 }
 

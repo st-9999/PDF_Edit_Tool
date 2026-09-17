@@ -8,6 +8,7 @@ import {
   type PDFContext,
 } from "pdf-lib";
 import { loadFontModel } from "./font";
+import { cidFontWithProgram } from "./pdf-fixtures.test-helper";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -281,5 +282,49 @@ describe("loadFontModel", () => {
     expect(font.baseFont).toBe("BCDEEE+MS-Mincho");
     expect(font.postScriptName).toBe("MS-Mincho");
     expect(font.resourceName).toBe("F1");
+  });
+});
+
+describe("FontModel.style（同梱フォントの書体を選ぶための書体）", () => {
+  it("Type0: ベースフォント名で判定する", async () => {
+    const ctx = await newContext();
+    const mincho = cidFontWithProgram(ctx, {
+      toUnicode: { 1: "1" },
+      baseFont: "BCDEEE+MS-Mincho",
+    });
+    const gothic = cidFontWithProgram(ctx, {
+      toUnicode: { 1: "1" },
+      baseFont: "AAAAAA+MS-Gothic",
+    });
+    expect(loadFontModel(ctx, "F1", mincho).style).toBe("serif");
+    expect(loadFontModel(ctx, "F2", gothic).style).toBe("sans");
+  });
+
+  it("Type0: ベースフォント名で決まらなければ、埋め込みフォントのファミリー名で判定する", async () => {
+    const ctx = await newContext();
+    const font = cidFontWithProgram(ctx, {
+      toUnicode: { 1: "1" },
+      outlines: [false, true],
+      baseFont: "CIDFont+F1",
+      program: { unicodeBmp: { 0x31: 1 }, familyName: "MS PMincho" },
+    });
+    expect(loadFontModel(ctx, "F1", font).style).toBe("serif");
+  });
+
+  it("単純フォント: 名前で決まらなければ FontDescriptor の Flags の Serif で判定する", async () => {
+    const ctx = await newContext();
+    const simple = (flags: number) =>
+      ctx.obj({
+        Type: "Font",
+        Subtype: "TrueType",
+        BaseFont: "ABCDEF+F2",
+        FirstChar: 32,
+        LastChar: 32,
+        Widths: [250],
+        Encoding: "WinAnsiEncoding",
+        FontDescriptor: ctx.obj({ Type: "FontDescriptor", Flags: flags }),
+      });
+    expect(loadFontModel(ctx, "F1", simple(34)).style).toBe("serif");
+    expect(loadFontModel(ctx, "F2", simple(32)).style).toBe("sans");
   });
 });

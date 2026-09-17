@@ -13,6 +13,53 @@
 
 ---
 
+## 2026-09-17 — 文字の書き換え: 明朝体の同梱フォント（Noto Serif JP）
+
+### 実施内容
+
+- 元の書体に無い文字を補う同梱フォントに、明朝体の Noto Serif JP Regular を追加した。サンプル 2 件はいずれも MS 明朝で、これまでは補った文字だけゴシック体になっていた。
+- 書体の判定（`font-style.ts`・`FontModel.style`）: フォント名（ベースフォント名 → 埋め込みフォントのファミリー名）のゴシック系・明朝系の語 → FontDescriptor の Flags の Serif の順。仕様書の `MS-Mincho` は Flags に Serif が無いため名前を優先する。
+- 補完の 4 段目（`glyph-resolver.ts`）は、元のフォントと同じ書体の同梱フォントだけを使う（違う書体しか無ければ描かない）。オプションを `fallbackFont` → `fallbackFonts: { sans?, serif? }` に変更し、失敗 `missing-glyphs`・警告 `fallback-font` に `style` を追加した。
+- 書き換えごとに使った書体を `TextEdit.fallbackStyles` に記録し、表示（`EditedPageCache`・`useEditablePage`）・保存・抽出・分割では、その書体のフォントだけを読み込むようにした（`fallbackStylesOfEdits` / `fallbackStylesOfPages` / `fallbackStylesOfResult`）。以前の「作って失敗したらフォントを読み込んで作り直す」処理は削除した。
+- 編集ボックスの表示を書体ごとにした（「明朝体（Noto Serif JP）で描きます」）。
+- `tsconfig.json` の `exclude` に `out` を追加した。静的エクスポートの出力に含まれる Worker のソース（`.ts`）が型チェックされ、今回の Worker のメッセージ型の変更で古い出力が原因となり `next build` が失敗したため。
+- 設計の記録は `docs/TEXT_REWRITE.md` §9。
+
+### 作成ファイル
+
+- `src/lib/pdf/content/font-style.ts`、`src/lib/pdf/content/font-style.test.ts`
+- `public/fonts/NotoSerifJP-Regular.ttf`（npm パッケージ `@expo-google-fonts/noto-serif-jp@0.4.3` から取り出し。依存関係には追加していない）、`public/fonts/NotoSerifJP-OFL.txt`
+
+### 変更ファイル
+
+- `src/lib/pdf/content/font.ts`・`glyph-resolver.ts`・`rewrite.ts`
+- `src/lib/pdf/fallback-font-source.ts`・`edited-page-cache.ts`・`build-runner.ts`、`src/workers/pdf-build.worker.ts`
+- `src/lib/editor/operations.ts`・`build.ts`
+- `src/features/text-edit/text-edit-popover.tsx`・`use-editable-page.ts`・`preview-status.ts`、`src/features/viewer/pdf-sources-context.tsx`、`src/features/save/use-save.ts`
+- テスト: `font.test.ts`・`rewrite-fonts.test.ts`・`rewrite-fonts.samples.test.ts`・`rewrite.test.ts`・`text-layout.test.ts`・`fallback-font-source.test.ts`・`edited-page-cache.test.ts`・`text-edit.test.ts`・`build.test.ts`・`preview-status.test.ts`、`e2e/text-rewrite.spec.ts`
+- `tsconfig.json`、`README.md`、`docs/SPEC.md`・`TEXT_REWRITE.md`・`TODO.md`・`CHANGELOG.md`・`SESSION_SUMMARY.md`
+
+### 計測結果
+
+- 単体・統合テスト: **516 通過**（前回 500。書体の判定、書体ごとの補完、必要な書体だけの読み込み、保存・抽出・分割、表示文言を追加）。実サンプルのテストで、仕様書の「鷗」と数量計算書の「,」が Noto Serif JP で埋め込まれ、PDF の増加が 50KB 未満であることを確認。
+- E2E: Chromium **33 / 33 通過**（明朝体の書き換えを 1 件追加。保存した PDF の補った文字が Noto Serif JP で、読み込んだ同梱フォントが明朝体だけであることを確認）。Firefox（`--workers=1`）で `text-rewrite.spec.ts` **5 / 5 通過**。
+- 目視: 仕様書の「令和8年度」→「令和鷗年度」を MuPDF で描画し、「鷗」が周りの MS 明朝となじむ明朝体で表示されることを確認。
+- `npx tsc --noEmit` / `npx eslint src e2e` エラーなし。`npm run build` 成功。初期 JS は 10 ファイル・gzip **211.2KB**（前回 211.3KB）。`out/` 20MB（同梱フォント 2 書体 13.2MB を含む）。
+
+### Risks/TODO
+
+- 明朝体かどうかは名前と Flags による推定。名前に手掛かりが無く Flags も不正確なフォントでは、ゴシック体になることがある（その場合も確定前に書体名を表示する）。
+- 同梱フォントは Regular のみ。太字の資料では補った文字だけ細く見える。
+- `out/` が 20MB になった（GitHub Pages の公開容量の上限 1GB には十分収まる）。明朝体を初めて使うときに 7.7MB を取得する。
+- 本コミットは未 push（プロジェクト規約により push は手動）。
+
+### 次ステップ
+
+- `text-selection.spec.ts` を Firefox でも意味のある形で通す。
+- E2E が無い機能（しおり編集・正規表現検索・しおりの自動作成）の E2E を追加する。
+
+---
+
 ## 2026-09-17 — Firefox での E2E の不安定さを修正（ハイドレーション待ち）
 
 ### 実施内容

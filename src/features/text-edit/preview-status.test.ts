@@ -33,7 +33,12 @@ describe("previewStatus（編集ボックスに出す状態）", () => {
           ok: true,
           clipAdjustments: 0,
           warnings: [
-            { kind: "fallback-font", replacement: 0, chars: [",", "鷗"] },
+            {
+              kind: "fallback-font",
+              replacement: 0,
+              chars: [",", "鷗"],
+              style: "sans",
+            },
           ],
         },
       }),
@@ -41,6 +46,43 @@ describe("previewStatus（編集ボックスに出す状態）", () => {
       kind: "warning",
       message:
         "「,」「鷗」は元の書体に無いため、ゴシック体（Noto Sans JP）で描きます",
+      canConfirm: true,
+    });
+  });
+
+  it("明朝体の同梱フォントで描く文字は、明朝体で描く旨を表示する（書体ごとに分けて表示）", () => {
+    const status = previewStatus({
+      original: "81.9",
+      text: "1,234",
+      result: {
+        ok: true,
+        clipAdjustments: 0,
+        warnings: [
+          {
+            kind: "fallback-font",
+            replacement: 0,
+            chars: [","],
+            style: "serif",
+          },
+          {
+            kind: "fallback-font",
+            replacement: 1,
+            chars: ["鷗"],
+            style: "sans",
+          },
+          {
+            kind: "fallback-font",
+            replacement: 2,
+            chars: [",", "髙"],
+            style: "serif",
+          },
+        ],
+      },
+    });
+    expect(status).toEqual({
+      kind: "warning",
+      message:
+        "「,」「髙」は元の書体に無いため、明朝体（Noto Serif JP）で描きます。「鷗」は元の書体に無いため、ゴシック体（Noto Sans JP）で描きます",
       canConfirm: true,
     });
   });
@@ -67,7 +109,14 @@ describe("previewStatus（編集ボックスに出す状態）", () => {
         text: "漢",
         result: {
           ok: false,
-          failures: [{ kind: "missing-glyphs", replacement: 0, chars: ["漢"] }],
+          failures: [
+            {
+              kind: "missing-glyphs",
+              replacement: 0,
+              chars: ["漢"],
+              style: "serif",
+            },
+          ],
         },
       }),
     ).toEqual({

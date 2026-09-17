@@ -151,7 +151,7 @@ describe("renderEditedPage（書き換え後のページだけを 1 ページの
       [612, 792],
     );
     const bytes = await renderEditedPage(source, 0, [edit(0, 1, "鷗")], {
-      fallbackFont: FALLBACK,
+      fallbackFonts: { sans: FALLBACK },
     });
     expect(textOf(await PDFDocument.load(bytes))).toBe("鷗2");
   });
@@ -168,12 +168,14 @@ describe("previewTextEdit（確定前の確認。文書は変更しない）", (
     const content = readPageContent(doc, 0).bytes;
     const objects = doc.context.enumerateIndirectObjects().length;
     const result = previewTextEdit(doc, 0, edit(0, 2, "鷗1"), {
-      fallbackFont: FALLBACK,
+      fallbackFonts: { sans: FALLBACK },
     });
     expect(result).toEqual({
       ok: true,
       clipAdjustments: 0,
-      warnings: [{ kind: "fallback-font", replacement: 0, chars: ["鷗"] }],
+      warnings: [
+        { kind: "fallback-font", replacement: 0, chars: ["鷗"], style: "sans" },
+      ],
     });
     expect(readPageContent(doc, 0).bytes).toEqual(content);
     expect(doc.context.enumerateIndirectObjects().length).toBe(objects);
@@ -187,10 +189,19 @@ describe("previewTextEdit（確定前の確認。文書は変更しない）", (
       ),
     );
     expect(
-      previewTextEdit(doc, 0, edit(0, 1, "漢"), { fallbackFont: FALLBACK }),
+      previewTextEdit(doc, 0, edit(0, 1, "漢"), {
+        fallbackFonts: { sans: FALLBACK },
+      }),
     ).toEqual({
       ok: false,
-      failures: [{ kind: "missing-glyphs", replacement: 0, chars: ["漢"] }],
+      failures: [
+        {
+          kind: "missing-glyphs",
+          replacement: 0,
+          chars: ["漢"],
+          style: "sans",
+        },
+      ],
     });
   });
 });

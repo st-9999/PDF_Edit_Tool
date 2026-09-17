@@ -12,6 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { RewriteResult, TextAlign } from "@/lib/pdf/content/rewrite";
 import { suggestAlign } from "@/lib/pdf/content/text-runs";
+import {
+  fallbackStylesOfResult,
+  loadFallbackFonts,
+} from "@/lib/pdf/fallback-font-source";
 import type { ScreenRect } from "@/lib/pdf/content/hit-test";
 import { cn } from "@/lib/utils";
 import { useEditorStore } from "@/store/editor-store";
@@ -92,29 +96,24 @@ export function TextEditPopover({
     inputRef.current?.select();
   }, []);
 
-  // 入力が止まったら確定前の確認を行う（元のフォントに無い文字があれば同梱フォントを読み込んで再確認）
+  // 入力が止まったら確定前の確認を行う（元のフォントに無い文字があれば、元の書体に近い同梱フォントを読み込んで再確認）
   useEffect(() => {
     if (text === original) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      const [{ previewTextEdit }, { loadFallbackFont }] = await Promise.all([
-        import("@/lib/editor/text-edit"),
-        import("@/lib/pdf/fallback-font-source"),
-      ]);
+      const { previewTextEdit } = await import("@/lib/editor/text-edit");
       const edit = {
         replacements: [
           { start: selection.start, end: selection.end, text, align },
         ],
       };
       let result = previewTextEdit(data.doc, data.pageIndex, edit);
-      if (
-        !result.ok &&
-        result.failures.some((f) => f.kind === "missing-glyphs")
-      ) {
+      const styles = fallbackStylesOfResult(result);
+      if (!result.ok && styles.length > 0) {
         try {
-          const fallbackFont = await loadFallbackFont();
+          const fallbackFonts = await loadFallbackFonts(styles);
           result = previewTextEdit(data.doc, data.pageIndex, edit, {
-            fallbackFont,
+            fallbackFonts,
           });
         } catch {
           // フォントを読めなければ、描けない文字として表示する
@@ -135,11 +134,14 @@ export function TextEditPopover({
   const status = previewStatus({ original, text, result });
 
   const confirm = () => {
-    if (!status.canConfirm) return;
+    if (!status.canConfirm || !result) return;
+    // 同梱フォントを使った書体を記録し、表示・保存ではそのフォントだけを読み込む
+    const fallbackStyles = fallbackStylesOfResult(result);
     useEditorStore.getState().editText(pageId, {
       replacements: [
         { start: selection.start, end: selection.end, text, align },
       ],
+      ...(fallbackStyles.length > 0 ? { fallbackStyles } : {}),
     });
     clearSelection();
   };

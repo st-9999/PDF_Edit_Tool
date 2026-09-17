@@ -17,6 +17,7 @@ import {
 } from "./build";
 import { buildPdf as buildFixturePdf } from "@/lib/pdf/content/pdf-fixtures.test-helper";
 import { extractPageText } from "@/lib/pdf/content/page-text";
+import { buildTestTrueType } from "@/lib/pdf/content/truetype.test-helper";
 import type { PageRef } from "./operations";
 
 /** 各ページ幅を一意にして「元のどのページか」を出力側から識別できるソースを作る。 */
@@ -283,6 +284,30 @@ describe("buildPdf: テキストの書き換え", () => {
     expect(await textsOf(extracted)).toEqual(["55"]);
     const parts = await splitPdf(await sources(), pages, [2]);
     expect(await Promise.all(parts.map(textsOf))).toEqual([["55"], ["34"]]);
+  });
+
+  it("元のフォントに無い文字は、渡した同梱フォントで描いて保存する（抽出・分割も同じ）", async () => {
+    const fallbackFonts = {
+      sans: buildTestTrueType({
+        outlines: [true, true],
+        unicodeBmp: { 0x9dd7: 1 },
+        advanceWidths: [1000, 1000],
+        familyName: "Noto Sans JP",
+      }),
+    };
+    const pages = [withEdit(mk("A", 0, 0, "a1"), "鷗"), mk("B", 0)];
+    expect(
+      await textsOf(await buildPdf(await sources(), pages, { fallbackFonts })),
+    ).toEqual(["鷗", "34"]);
+    expect(
+      await textsOf(
+        await extractPages(await sources(), pages, ["a1"], { fallbackFonts }),
+      ),
+    ).toEqual(["鷗"]);
+    const parts = await splitPdf(await sources(), pages, [2], {
+      fallbackFonts,
+    });
+    expect(await Promise.all(parts.map(textsOf))).toEqual([["鷗"], ["34"]]);
   });
 
   it("適用できない書き換えがあれば、日本語のメッセージで失敗する", async () => {

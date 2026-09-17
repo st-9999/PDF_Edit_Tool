@@ -373,7 +373,12 @@ describe("replacePageText（同一フォントでの本物の書き換え）", (
       expect(result).toEqual({
         ok: false,
         failures: [
-          { kind: "missing-glyphs", replacement: 0, chars: ["7", "6"] },
+          {
+            kind: "missing-glyphs",
+            replacement: 0,
+            chars: ["7", "6"],
+            style: "sans",
+          },
         ],
       });
     });

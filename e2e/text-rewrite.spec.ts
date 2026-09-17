@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { test, expect, type Page } from "@playwright/test";
-import { PDFDocument } from "pdf-lib";
+import { PDFDict, PDFDocument, PDFName } from "pdf-lib";
 import { buildPdf } from "../src/lib/pdf/content/pdf-fixtures.test-helper";
 import { extractPageText } from "../src/lib/pdf/content/page-text";
 import { openEntryPage } from "./helpers";
@@ -8,8 +8,9 @@ import { openEntryPage } from "./helpers";
 /**
  * 「Total」「81.9」「yen」を別々の位置に置いた 1 ページの PDF。
  * フォントは埋め込みなしの単純 TrueType（WinAnsi）で、ブラウザでも代替フォントで表示される。
+ * `baseFont` を指定するとフォント名を差し替える（書体の判定は名前で行われる）。
  */
-async function samplePdf(): Promise<Buffer> {
+async function samplePdf(baseFont?: string): Promise<Buffer> {
   const bytes = await buildPdf(
     [
       [
@@ -20,10 +21,19 @@ async function samplePdf(): Promise<Buffer> {
     ],
     [612, 792],
   );
-  return Buffer.from(bytes);
+  if (!baseFont) return Buffer.from(bytes);
+  const doc = await PDFDocument.load(bytes);
+  const fonts = doc
+    .getPage(0)
+    .node.Resources()!
+    .lookup(PDFName.of("Font"), PDFDict);
+  fonts
+    .lookup(PDFName.of("F2"), PDFDict)
+    .set(PDFName.of("BaseFont"), PDFName.of(baseFont));
+  return Buffer.from(await doc.save());
 }
 
-async function openSample(page: Page) {
+async function openSample(page: Page, pdf?: Buffer) {
   // 保存はダウンロード経路にする（ヘッドレスで保存ダイアログを避ける）
   await page.addInitScript(() => {
     // @ts-expect-error テスト用に能力を削除
@@ -33,7 +43,7 @@ async function openSample(page: Page) {
   await page.setInputFiles('input[type="file"]:not([multiple])', {
     name: "sample.pdf",
     mimeType: "application/pdf",
-    buffer: await samplePdf(),
+    buffer: pdf ?? (await samplePdf()),
   });
   await expect(page.getByText("1 ページ")).toBeVisible();
   await expect(textLayerSpan(page, "81.9")).toBeVisible();
@@ -131,6 +141,46 @@ test.describe("文字の書き換え", () => {
     );
     await dialog(page).getByRole("button", { name: "確定" }).click();
     await expect(textLayerSpan(page, "円")).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("明朝体の文字には明朝体の同梱フォントだけを読み込んで使い、保存した PDF にも反映される", async ({
+    page,
+  }) => {
+    const fontRequests: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/fonts/")) fontRequests.push(request.url());
+    });
+    await openSample(page, await samplePdf("TestMincho"));
+    await enterRewriteMode(page);
+    await expect(async () => {
+      await clickText(page, "yen");
+      await expect(dialog(page)).toBeVisible({ timeout: 1000 });
+    }).toPass();
+
+    await dialog(page).getByRole("textbox", { name: "新しい文字" }).fill("円");
+    await expect(dialog(page).getByRole("status")).toContainText(
+      "「円」は元の書体に無いため、明朝体（Noto Serif JP）で描きます",
+      { timeout: 30_000 },
+    );
+    await dialog(page).getByRole("button", { name: "確定" }).click();
+    await expect(textLayerSpan(page, "円")).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole("button", { name: "保存" }).click();
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("menuitem", { name: "名前を付けて保存" }).click();
+    const saved = await PDFDocument.load(
+      readFileSync((await (await downloadPromise).path())!),
+    );
+    const savedPage = extractPageText(saved, 0);
+    const yen = savedPage.glyphs.find((g) => g.text === "円");
+    expect(
+      savedPage.fonts.get(yen!.fontResource)?.typefaceKey?.split("|")[0],
+    ).toBe("Noto Serif JP");
+
+    expect(fontRequests.some((url) => url.includes("NotoSerifJP"))).toBe(true);
+    expect(fontRequests.filter((url) => url.includes("NotoSansJP"))).toEqual(
+      [],
+    );
   });
 
   test("描けない文字は理由を表示して確定できず、Esc で閉じる", async ({

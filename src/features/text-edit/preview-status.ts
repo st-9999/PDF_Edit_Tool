@@ -1,5 +1,12 @@
+import type { FontStyle } from "@/lib/pdf/content/font-style";
 import type { RewriteResult } from "@/lib/pdf/content/rewrite";
 import { describeRewriteFailures } from "@/lib/editor/rewrite-messages";
+
+/** 同梱フォントの書体の表示名。 */
+const FALLBACK_FONT_LABELS: Record<FontStyle, string> = {
+  serif: "明朝体（Noto Serif JP）",
+  sans: "ゴシック体（Noto Sans JP）",
+};
 
 export interface PreviewStatus {
   /**
@@ -36,16 +43,17 @@ export function previewStatus({
     };
   }
   const messages: string[] = [];
-  const fallbackChars = [
-    ...new Set(
-      result.warnings.flatMap((w) =>
-        w.kind === "fallback-font" ? w.chars : [],
-      ),
-    ),
-  ];
-  if (fallbackChars.length > 0) {
+  // 同梱フォントで描く文字を、書体ごとに（最初に現れた書体の順で）まとめる
+  const fallbackChars = new Map<FontStyle, Set<string>>();
+  for (const w of result.warnings) {
+    if (w.kind !== "fallback-font") continue;
+    const chars = fallbackChars.get(w.style) ?? new Set<string>();
+    for (const ch of w.chars) chars.add(ch);
+    fallbackChars.set(w.style, chars);
+  }
+  for (const [style, chars] of fallbackChars) {
     messages.push(
-      `「${fallbackChars.join("」「")}」は元の書体に無いため、ゴシック体（Noto Sans JP）で描きます`,
+      `「${[...chars].join("」「")}」は元の書体に無いため、${FALLBACK_FONT_LABELS[style]}で描きます`,
     );
   }
   if (result.warnings.some((w) => w.kind === "clip-not-adjusted")) {

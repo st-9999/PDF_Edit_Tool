@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { TextEditError, type TextEdit } from "@/lib/editor/text-edit";
+import type { TextEdit } from "@/lib/editor/text-edit";
+import type { FallbackFonts, FontStyle } from "@/lib/pdf/content/font-style";
 import { EditedPageCache } from "./edited-page-cache";
 
-const edit = (text: string): TextEdit => ({
+const edit = (text: string, fallbackStyles?: FontStyle[]): TextEdit => ({
   replacements: [{ start: 0, end: 1, text, align: "left" }],
+  ...(fallbackStyles ? { fallbackStyles } : {}),
 });
 
 interface FakeProxy {
@@ -19,8 +21,9 @@ function setup(
       bytes: Uint8Array,
       pageIndex: number,
       edits: readonly TextEdit[],
-      options: { fallbackFont?: Uint8Array },
+      options: { fallbackFonts?: FallbackFonts },
     ) => Promise<Uint8Array>;
+    loadFallbackFonts?: (styles: Iterable<FontStyle>) => Promise<FallbackFonts>;
   } = {},
 ) {
   const render = vi.fn(
@@ -34,14 +37,23 @@ function setup(
       destroy: vi.fn(),
     }),
   );
-  const loadFallbackFont = vi.fn(async () => Uint8Array.of(0xff));
+  const loadFallbackFonts = vi.fn(
+    opts.loadFallbackFonts ??
+      (async (styles: Iterable<FontStyle>) =>
+        Object.fromEntries(
+          [...styles].map((style) => [
+            style,
+            Uint8Array.of(style === "serif" ? 0xfe : 0xff),
+          ]),
+        ) as FallbackFonts),
+  );
   const cache = new EditedPageCache<FakeProxy>({
     render,
     load,
-    loadFallbackFont,
+    loadFallbackFonts,
     capacity: opts.capacity,
   });
-  return { cache, render, load, loadFallbackFont };
+  return { cache, render, load, loadFallbackFonts };
 }
 
 const SOURCE = Uint8Array.of(1, 2, 3);
@@ -73,29 +85,52 @@ describe("EditedPageCache（書き換えたページのプレビュー用 PDF �
     expect(load).toHaveBeenCalledTimes(1);
   });
 
-  it("元のフォントで描けない文字があるときだけ、同梱フォントを読み込んで作り直す", async () => {
-    const { cache, render, loadFallbackFont } = setup({
-      render: async (_b, _i, _e, options) => {
-        if (!options.fallbackFont) {
-          throw new TextEditError("描けない", [
-            { kind: "missing-glyphs", replacement: 0, chars: ["鷗"] },
-          ]);
-        }
-        return Uint8Array.of(7);
-      },
-    });
-    const key = EditedPageCache.keyOf("src", 0, [edit("鷗")]);
-    const proxy = await cache.ensure(key, SOURCE, 0, [edit("鷗")]);
-    expect(Array.from(proxy.bytes)).toEqual([7]);
-    expect(loadFallbackFont).toHaveBeenCalledTimes(1);
-    expect(render).toHaveBeenLastCalledWith(SOURCE, 0, [edit("鷗")], {
-      fallbackFont: Uint8Array.of(0xff),
+  it("書き換え履歴が同梱フォントを使うときだけ、その書体のフォントを読み込んで作る", async () => {
+    const { cache, render, loadFallbackFonts } = setup();
+    const plain = [edit("9")];
+    await cache.ensure(
+      EditedPageCache.keyOf("src", 0, plain),
+      SOURCE,
+      0,
+      plain,
+    );
+    expect(loadFallbackFonts).not.toHaveBeenCalled();
+    expect(render).toHaveBeenLastCalledWith(SOURCE, 0, plain, {});
+
+    const withFonts = [edit("9"), edit("鷗", ["serif"])];
+    await cache.ensure(
+      EditedPageCache.keyOf("src", 0, withFonts),
+      SOURCE,
+      0,
+      withFonts,
+    );
+    expect(loadFallbackFonts).toHaveBeenCalledTimes(1);
+    expect([...loadFallbackFonts.mock.calls[0]![0]]).toEqual(["serif"]);
+    expect(render).toHaveBeenLastCalledWith(SOURCE, 0, withFonts, {
+      fallbackFonts: { serif: Uint8Array.of(0xfe) },
     });
   });
 
-  it("同梱フォントでも解決しない失敗や、その他の失敗は記録して失敗を返す（次の要求では再試行する）", async () => {
+  it("同梱フォントを読み込めなければ、作成の失敗として記録する", async () => {
+    const { cache, render } = setup({
+      loadFallbackFonts: async () => {
+        throw new Error("書き換え用のフォントを読み込めませんでした");
+      },
+    });
+    const edits = [edit("鷗", ["sans"])];
+    const key = EditedPageCache.keyOf("src", 0, edits);
+    await expect(cache.ensure(key, SOURCE, 0, edits)).rejects.toThrow(
+      "書き換え用のフォントを読み込めませんでした",
+    );
+    expect(cache.failed(key)?.message).toBe(
+      "書き換え用のフォントを読み込めませんでした",
+    );
+    expect(render).not.toHaveBeenCalled();
+  });
+
+  it("作成に失敗したら記録して失敗を返す（次の要求では再試行する）", async () => {
     let attempts = 0;
-    const { cache, loadFallbackFont } = setup({
+    const { cache, loadFallbackFonts } = setup({
       render: async () => {
         attempts += 1;
         if (attempts === 1) throw new Error("壊れた PDF");
@@ -107,7 +142,7 @@ describe("EditedPageCache（書き換えたページのプレビュー用 PDF �
       "壊れた PDF",
     );
     expect(cache.failed(key)?.message).toBe("壊れた PDF");
-    expect(loadFallbackFont).not.toHaveBeenCalled();
+    expect(loadFallbackFonts).not.toHaveBeenCalled();
 
     await cache.ensure(key, SOURCE, 0, [edit("9")]);
     expect(cache.failed(key)).toBeUndefined();

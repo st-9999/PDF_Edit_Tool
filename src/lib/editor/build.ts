@@ -10,6 +10,7 @@ import {
 } from "pdf-lib";
 import { decryptPdfIfNeeded } from "@/lib/pdf/decrypt";
 import { normalizeRotation, type PageRef } from "./operations";
+import type { FallbackFonts } from "@/lib/pdf/content/font-style";
 import { loadDocumentWithEdits } from "./text-edit";
 
 /** sourceId → 元 PDF のバイト列。 */
@@ -127,8 +128,8 @@ export interface BuildOptions {
   signal?: AbortSignal;
   /** 元ドキュメントのしおり（アウトライン）。指定時は出力へ再マッピングして書き戻す。 */
   outline?: BuildOutlineNode[];
-  /** テキストの書き換えで、元のフォントに無い文字を描く同梱フォント（TrueType）。 */
-  fallbackFont?: Uint8Array;
+  /** テキストの書き換えで、元のフォントに無い文字を描く書体ごとの同梱フォント（TrueType）。 */
+  fallbackFonts?: FallbackFonts;
 }
 
 /**
@@ -163,7 +164,7 @@ export async function buildPdf(
         throw new Error(`ソース "${page.sourceId}" のバイト列が見つかりません`);
       }
       doc = loadDocumentWithEdits(bytes, page.sourceIndex, page.textEdits, {
-        fallbackFont: options.fallbackFont,
+        fallbackFonts: options.fallbackFonts,
       });
       edited.set(key, doc);
     }
@@ -193,7 +194,7 @@ export async function extractPages(
   sources: SourceBytes,
   pages: PageRef[],
   ids: Iterable<string>,
-  options: Pick<BuildOptions, "fallbackFont"> = {},
+  options: Pick<BuildOptions, "fallbackFonts"> = {},
 ): Promise<Uint8Array> {
   const idSet = new Set(ids);
   const subset = pages.filter((p) => idSet.has(p.id));
@@ -212,7 +213,7 @@ export async function splitPdf(
   sources: SourceBytes,
   pages: PageRef[],
   boundaries: number[],
-  options: Pick<BuildOptions, "fallbackFont"> = {},
+  options: Pick<BuildOptions, "fallbackFonts"> = {},
 ): Promise<Uint8Array[]> {
   const len = pages.length;
   const cuts = [

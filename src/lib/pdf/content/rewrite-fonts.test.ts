@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { PDFDict, PDFDocument, PDFName, PDFRef } from "pdf-lib";
 import { loadFontModel } from "./font";
+import type { FallbackFonts } from "./font-style";
 import { extractPageText, readPageContent, type PageText } from "./page-text";
 import { cidFontWithProgram, enc } from "./pdf-fixtures.test-helper";
 import { getArray, getDict, getStream, streamBytes } from "./pdf-objects";
@@ -14,7 +15,7 @@ import { buildTestTrueType } from "./truetype.test-helper";
 const textOf = (glyphs: PageGlyph[]) =>
   glyphs.map((g) => g.text ?? "?").join("");
 
-/** 同梱フォント相当（「鷗」GID 1・「7」GID 2 を持つ）。 */
+/** 同梱の明朝体相当（「鷗」GID 1・「7」GID 2 を持つ）。 */
 const FALLBACK = buildTestTrueType({
   outlines: [true, true, true],
   unicodeBmp: { 0x9dd7: 1, 0x37: 2 },
@@ -22,6 +23,15 @@ const FALLBACK = buildTestTrueType({
   unitsPerEm: 1000,
   ascender: 1160,
   descender: -288,
+  familyName: "Noto Serif JP",
+});
+
+/** 同梱のゴシック体相当（「鷗」GID 1 を持つ）。 */
+const FALLBACK_SANS = buildTestTrueType({
+  outlines: [true, true],
+  unicodeBmp: { 0x9dd7: 1 },
+  advanceWidths: [1000, 1000],
+  unitsPerEm: 1000,
   familyName: "Noto Sans JP",
 });
 
@@ -92,7 +102,7 @@ async function rewrite(
   needle: string,
   text: string,
   align: TextAlign,
-  fallbackFont?: Uint8Array,
+  fallbackFonts?: FallbackFonts,
 ) {
   const doc = await PDFDocument.load(bytes);
   const before = extractPageText(doc, 0);
@@ -102,7 +112,7 @@ async function rewrite(
     doc,
     0,
     [{ start: at, end: at + needle.length, text, align }],
-    { fallbackFont },
+    { fallbackFonts },
   );
   const saved = await doc.save();
   const reloaded = await PDFDocument.load(saved);
@@ -196,12 +206,19 @@ describe("replacePageText（元のフォントに無い文字の補完）", () =
       "2",
       "鷗",
       "left",
-      FALLBACK,
+      { serif: FALLBACK },
     );
     expect(result).toEqual({
       ok: true,
       clipAdjustments: 0,
-      warnings: [{ kind: "fallback-font", replacement: 0, chars: ["鷗"] }],
+      warnings: [
+        {
+          kind: "fallback-font",
+          replacement: 0,
+          chars: ["鷗"],
+          style: "serif",
+        },
+      ],
     });
     expect(textOf(after.glyphs)).toBe("1鷗1");
     const name = after.glyphs[1]!.fontResource;
@@ -211,7 +228,7 @@ describe("replacePageText（元のフォントに無い文字の補完）", () =
       PDFDict,
     );
     const model = loadFontModel(ctx, name, dict);
-    expect(model.typefaceKey?.startsWith("Noto Sans JP|")).toBe(true);
+    expect(model.typefaceKey?.startsWith("Noto Serif JP|")).toBe(true);
     // 埋め込まれた字形は使った GID（と .notdef）だけ
     const cid = ctx.lookup(
       getArray(ctx, dict, "DescendantFonts")!.get(0),
@@ -229,12 +246,111 @@ describe("replacePageText（元のフォントに無い文字の補完）", () =
     ]);
   });
 
-  it("同梱フォントが指定されていなければ、描けない文字として失敗する", async () => {
+  it("同梱フォントが指定されていなければ、描けない文字として失敗する（必要な書体を返す）", async () => {
     const { result } = await rewrite(await buildDoc(LINE), "2", "鷗", "left");
     expect(result).toEqual({
       ok: false,
-      failures: [{ kind: "missing-glyphs", replacement: 0, chars: ["鷗"] }],
+      failures: [
+        {
+          kind: "missing-glyphs",
+          replacement: 0,
+          chars: ["鷗"],
+          style: "serif",
+        },
+      ],
     });
+  });
+
+  it("元のフォントと違う書体の同梱フォントでは描かない（明朝体の文字にゴシック体だけを渡すと失敗する）", async () => {
+    const { result } = await rewrite(await buildDoc(LINE), "2", "鷗", "left", {
+      sans: FALLBACK_SANS,
+    });
+    expect(result).toEqual({
+      ok: false,
+      failures: [
+        {
+          kind: "missing-glyphs",
+          replacement: 0,
+          chars: ["鷗"],
+          style: "serif",
+        },
+      ],
+    });
+  });
+
+  it("同じページの明朝体とゴシック体の文字を、それぞれ同じ書体の同梱フォントで描く", async () => {
+    const doc = await PDFDocument.create();
+    const ctx = doc.context;
+    const gothic = cidFontWithProgram(ctx, {
+      toUnicode: { 1: "1", 2: "2" },
+      outlines: [false, true, true],
+      widths: { 1: 500, 2: 500 },
+      baseFont: "AAAAAB+MS-Gothic",
+      program: {
+        unicodeBmp: { 0x31: 1, 0x32: 2 },
+        advanceWidths: [0, 500, 500],
+        familyName: "MS Gothic",
+      },
+    });
+    const page = doc.addPage([612, 792]);
+    page.node.set(
+      PDFName.of("Resources"),
+      ctx.obj({
+        Font: ctx.obj({
+          F1: ctx.register(fontA(ctx)),
+          F2: ctx.register(gothic),
+        }),
+      }),
+    );
+    page.node.set(
+      PDFName.of("Contents"),
+      ctx.register(
+        ctx.flateStream(
+          enc(
+            "BT /F1 10 Tf 1 0 0 1 100 700 Tm <0001> Tj ET BT /F2 10 Tf 1 0 0 1 100 680 Tm <0002> Tj ET",
+          ),
+        ),
+      ),
+    );
+    const loaded = await PDFDocument.load(await doc.save());
+    const result = replacePageText(
+      loaded,
+      0,
+      [
+        { start: 0, end: 1, text: "鷗", align: "left" },
+        { start: 1, end: 2, text: "鷗", align: "left" },
+      ],
+      { fallbackFonts: { serif: FALLBACK, sans: FALLBACK_SANS } },
+    );
+    expect(result).toEqual({
+      ok: true,
+      clipAdjustments: 0,
+      warnings: [
+        {
+          kind: "fallback-font",
+          replacement: 0,
+          chars: ["鷗"],
+          style: "serif",
+        },
+        { kind: "fallback-font", replacement: 1, chars: ["鷗"], style: "sans" },
+      ],
+    });
+    const reloaded = await PDFDocument.load(await loaded.save());
+    const after = extractPageText(reloaded, 0);
+    expect(textOf(after.glyphs)).toBe("鷗鷗");
+    const familyOf = (resource: string) =>
+      loadFontModel(
+        reloaded.context,
+        resource,
+        reloaded.context.lookup(
+          pageFonts(reloaded, 0).get(PDFName.of(resource)),
+          PDFDict,
+        ),
+      ).typefaceKey?.split("|")[0];
+    expect(after.glyphs.map((g) => familyOf(g.fontResource))).toEqual([
+      "Noto Serif JP",
+      "Noto Sans JP",
+    ]);
   });
 
   it("元のフォントで描ける文字は同梱フォントより優先する（cmap 経由でも）", async () => {
@@ -243,7 +359,7 @@ describe("replacePageText（元のフォントに無い文字の補完）", () =
       "2",
       "7",
       "left",
-      FALLBACK,
+      { serif: FALLBACK },
     );
     expect(result.ok && result.warnings).toEqual([]);
     expect(tfOperands(after)).toEqual(["F1", "F1"]);
@@ -255,7 +371,7 @@ describe("replacePageText（元のフォントに無い文字の補完）", () =
       "12",
       "7鷗9",
       "left",
-      FALLBACK,
+      { serif: FALLBACK },
     );
     expect(result.ok).toBe(true);
     expect(textOf(after.glyphs)).toBe("7鷗91");
@@ -281,7 +397,7 @@ describe("replacePageText（元のフォントに無い文字の補完）", () =
         0,
         [{ start: 1, end: 2, text: "鷗", align: "left" }],
         {
-          fallbackFont: FALLBACK,
+          fallbackFonts: { serif: FALLBACK },
         },
       ).ok,
     ).toBe(true);
@@ -293,7 +409,7 @@ describe("replacePageText（元のフォントに無い文字の補完）", () =
         0,
         [{ start: 2, end: 3, text: "鷗", align: "left" }],
         {
-          fallbackFont: FALLBACK,
+          fallbackFonts: { serif: FALLBACK },
         },
       ).ok,
     ).toBe(true);
@@ -324,11 +440,18 @@ describe("replacePageText（元のフォントに無い文字の補完）", () =
         { start: 1, end: 2, text: "9鷗", align: "left" }, // 別フォント＋同梱フォント
         { start: 2, end: 3, text: "漢", align: "left" }, // どこにも無い
       ],
-      { fallbackFont: FALLBACK },
+      { fallbackFonts: { serif: FALLBACK } },
     );
     expect(result).toEqual({
       ok: false,
-      failures: [{ kind: "missing-glyphs", replacement: 2, chars: ["漢"] }],
+      failures: [
+        {
+          kind: "missing-glyphs",
+          replacement: 2,
+          chars: ["漢"],
+          style: "serif",
+        },
+      ],
     });
     expect(readPageContent(doc, 0).bytes).toEqual(content);
     expect(
