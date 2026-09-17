@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 async function makePdf(pageCount: number): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -8,7 +9,7 @@ async function makePdf(pageCount: number): Promise<Buffer> {
 }
 
 async function openPdf(page: import("@playwright/test").Page, pages: number) {
-  await page.goto("/");
+  await openEntryPage(page);
   await page.setInputFiles('input[type="file"]:not([multiple])', {
     name: "s.pdf",
     mimeType: "application/pdf",

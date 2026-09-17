@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 /** ページ番号入りの既知ページ数 PDF を生成する。 */
 async function makeSamplePdf(pageCount: number): Promise<Buffer> {
@@ -25,7 +26,7 @@ test.describe("ビューア基盤（実 PDF を読み込み）", () => {
   }) => {
     const buffer = await makeSamplePdf(5);
 
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "sample.pdf",
       mimeType: "application/pdf",

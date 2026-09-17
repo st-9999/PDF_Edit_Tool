@@ -238,4 +238,4 @@ PDF しか手元に無い資料で、**一部の数字や文言を変更する**
 - **編集ボックス**（`TextEditPopover`）: 元の文字、新しい文字（Enter で確定、Esc で閉じる。IME 変換中の Enter は無視）、揃え（`suggestAlign` が初期値）、状態、キャンセル／確定。入力が 150ms 止まったら `previewTextEdit` で確認し、`missing-glyphs` なら同梱フォントを読み込んで再確認する。状態の文言は `previewStatus`（変更なし／確認中／元の書体のまま／書体が変わる・クリップを広げられない（確定可）／書き換えられない理由（確定不可））。
 - **位置**: ページ下端に近ければ選択範囲の上に出す。`scrollIntoView` は祖先のスクロール領域まで動かす（以前の上部バー消失の原因）ため使わず、`[data-viewer-scroll]` の中だけを必要な分スクロールし、入力欄は `focus({ preventScroll: true })`。
 - **確認**: E2E `text-rewrite.spec.ts`（クリック選択→書き換え→表示・未保存・Undo/Redo・保存した PDF の文字、同梱フォントの警告と確定、描けない文字で確定不可と Esc、モード OFF）。実サンプル（数量計算書）でも画面操作で「81.9」→「1,234.5」を確認した。
-- **E2E の安定化**: 入口画面でのファイル投入はハイドレーション待ち（`e2e/helpers.ts` の `waitForHydration`）を入れる。書き換え・結合の spec に適用済み。他の既存 spec は未適用（Firefox で不安定な原因）。
+- **E2E の安定化**: 入口画面でのファイル投入はハイドレーション待ち（`e2e/helpers.ts` の `waitForHydration`）を入れる。ファイルを投入する全 spec に適用済み（`openEntryPage`）。

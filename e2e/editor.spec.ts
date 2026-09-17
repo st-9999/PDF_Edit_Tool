@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 async function makePdf(pageCount: number): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -10,7 +11,7 @@ async function makePdf(pageCount: number): Promise<Buffer> {
 test.describe("P2 編集コア（選択・Undo/Redo 配線）", () => {
   test("複数選択モードの切替と Undo/Redo の初期無効", async ({ page }) => {
     const buffer = await makePdf(5);
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "s.pdf",
       mimeType: "application/pdf",

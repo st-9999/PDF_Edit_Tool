@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 async function makeTextPdf(): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -25,7 +26,7 @@ test.describe("テキスト選択・コピー", () => {
   test("選択コピーは改行付きで本文と一致し、余分な文字（?等）を含まない", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "t.pdf",
       mimeType: "application/pdf",

@@ -9,6 +9,7 @@ import {
   PDFNumber,
   PDFRef,
 } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 /** しおり付き 3 ページ PDF を生成: Chapter 1(→1p, 子 Section 1.1→2p) / Chapter 2(→3p)。 */
 async function makeBookmarkedPdf(): Promise<Buffer> {
@@ -92,7 +93,7 @@ test.describe("しおり付き PDF の保存", () => {
       delete window.showSaveFilePicker;
     });
 
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "booked.pdf",
       mimeType: "application/pdf",

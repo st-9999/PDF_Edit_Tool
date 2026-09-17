@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 async function makePdf(pageCount: number): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -18,7 +19,7 @@ test.describe("P4 保存層（Firefox フォールバック）", () => {
     });
 
     const buffer = await makePdf(3);
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "original.pdf",
       mimeType: "application/pdf",

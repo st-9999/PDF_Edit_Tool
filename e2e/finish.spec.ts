@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 async function makePdf(pageCount: number): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -10,7 +11,7 @@ async function makePdf(pageCount: number): Promise<Buffer> {
 
 test.describe("P8 仕上げ", () => {
   test("破損PDFはエラートーストを出して空状態に戻る", async ({ page }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "broken.pdf",
       mimeType: "application/pdf",
@@ -30,7 +31,7 @@ test.describe("P8 仕上げ", () => {
       delete window.showSaveFilePicker;
     });
 
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "flow.pdf",
       mimeType: "application/pdf",

@@ -13,6 +13,43 @@
 
 ---
 
+## 2026-09-17 — Firefox での E2E の不安定さを修正（ハイドレーション待ち）
+
+### 実施内容
+
+- 原因（前セッションで特定済み）: 入口画面の「PDFの読み込み」枠やファイル入力は SSR の HTML に先に現れるため、`page.goto("/")` の直後に `setInputFiles` すると、React のハイドレーション前で変更イベントが取りこぼされる。Firefox で顕在化し、全体実行（`--workers=1`）で毎回別のテストが 4〜8 件、「N ページ」などの表示待ちでタイムアウトしていた。
+- `e2e/helpers.ts` に `openEntryPage(page)`（`goto("/")` ＋読み込み枠の `waitForHydration`）を追加し、`goto` の直後にファイルを投入している全 spec（16 ファイル・21 か所）で置き換えた。`text-rewrite.spec.ts` の個別の待ちもこれに統一した。`merge.spec.ts` は結合枠を対象にした既存の待ちのまま（対象の要素が違うため）。
+- テストの意味を弱める変更（タイムアウトの延長・リトライ）はしていない。
+
+### 作成ファイル
+
+- なし
+
+### 変更ファイル
+
+- `e2e/helpers.ts`（`openEntryPage` を追加）
+- `e2e/bookmark-save.spec.ts`、`bookmark.spec.ts`、`edit.spec.ts`、`editor.spec.ts`、`finish.spec.ts`、`footer-tooltip.spec.ts`、`landscape-organize.spec.ts`、`mixed-size.spec.ts`、`organize.spec.ts`、`save.spec.ts`、`scroll-page.spec.ts`、`search.spec.ts`、`text-rewrite.spec.ts`、`text-selection.spec.ts`、`unsaved-guard.spec.ts`、`viewer.spec.ts`
+- `docs/CHANGELOG.md`、`docs/SESSION_SUMMARY.md`、`docs/TEXT_REWRITE.md`
+
+### 計測結果
+
+- **Firefox（`--workers=1`）: 31 通過 / 1 失敗（32 件）**。失敗は `text-selection.spec.ts` の 1 件のみで、`browser.newContext: Unknown permission: clipboard-read`（Firefox が `clipboard-read` 権限に未対応。既知の環境依存）。修正前は同条件で毎回 4〜8 件失敗していた。
+- **Firefox（`--workers=1 --repeat-each=2`）: 62 通過 / 2 失敗（64 件）**。失敗は同じ `clipboard-read` の 2 件のみ。
+- **Chromium: 32 / 32 通過**。
+- `npx tsc --noEmit` / `npx eslint e2e` エラーなし。
+
+### Risks/TODO
+
+- `text-selection.spec.ts` は Firefox で `clipboard-read` 権限を付与できないため失敗する（本修正の対象外）。Firefox ではクリップボード検証を別の方法にするか、Chromium 限定にするかの判断が必要。
+- 並列実行（`--workers` 既定）での Firefox の安定性は未確認（CI は `workers: 1`）。
+- 本コミットは未 push（プロジェクト規約により push は手動）。
+
+### 次ステップ
+
+- `text-selection.spec.ts` の Firefox での扱いを決める。
+
+---
+
 ## 2026-09-17 — テキスト書き換え T4: 画面への組み込み（T4a〜T4e）
 
 ### 実施内容

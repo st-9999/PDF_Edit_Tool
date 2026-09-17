@@ -1,4 +1,4 @@
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /**
  * 要素に React のイベントハンドラが付く（ハイドレーションが終わる）まで待つ。
@@ -17,4 +17,13 @@ export async function waitForHydration(locator: Locator) {
         check();
       }),
   );
+}
+
+/**
+ * 入口画面を開き、PDF の読み込み枠が操作を受け付けるようになるまで待つ。
+ * この後に `setInputFiles` でファイルを渡すと、取りこぼされずに読み込まれる。
+ */
+export async function openEntryPage(page: Page) {
+  await page.goto("/");
+  await waitForHydration(page.getByRole("button", { name: "PDFの読み込み" }));
 }

@@ -3,7 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
 import { buildPdf } from "../src/lib/pdf/content/pdf-fixtures.test-helper";
 import { extractPageText } from "../src/lib/pdf/content/page-text";
-import { waitForHydration } from "./helpers";
+import { openEntryPage } from "./helpers";
 
 /**
  * 「Total」「81.9」「yen」を別々の位置に置いた 1 ページの PDF。
@@ -29,8 +29,7 @@ async function openSample(page: Page) {
     // @ts-expect-error テスト用に能力を削除
     delete window.showSaveFilePicker;
   });
-  await page.goto("/");
-  await waitForHydration(page.getByRole("button", { name: "PDFの読み込み" }));
+  await openEntryPage(page);
   await page.setInputFiles('input[type="file"]:not([multiple])', {
     name: "sample.pdf",
     mimeType: "application/pdf",

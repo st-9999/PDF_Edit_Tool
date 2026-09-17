@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 async function makePdf(pageCount: number): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -11,7 +12,7 @@ test.describe("フッターのアイコン説明（Tooltip）", () => {
   test("ズーム/表示形式アイコンにホバーすると説明が表示される", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "s.pdf",
       mimeType: "application/pdf",

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument, rgb } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 /** 幅の異なるページを混在させた PDF を生成する。 */
 async function mixedPdf(): Promise<Buffer> {
@@ -24,7 +25,7 @@ async function mixedPdf(): Promise<Buffer> {
 
 test.describe("サイズ混在 PDF の表示", () => {
   test("幅の異なるページも各ページが中央寄せで表示される", async ({ page }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "mixed.pdf",
       mimeType: "application/pdf",

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument, PDFName, PDFString } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 async function makePlainPdf(pageCount: number): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -54,7 +55,7 @@ test.describe("P6 しおり表示", () => {
   test("アウトラインをツリー表示し、クリックで該当ページへジャンプ", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "outline.pdf",
       mimeType: "application/pdf",
@@ -73,7 +74,7 @@ test.describe("P6 しおり表示", () => {
   });
 
   test("アウトライン無しは空状態を表示", async ({ page }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "plain.pdf",
       mimeType: "application/pdf",

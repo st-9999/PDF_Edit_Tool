@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument, rgb } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 /** A3 横（1191x842pt）のページだけの PDF を生成する。 */
 async function a3LandscapePdf(pageCount: number): Promise<Buffer> {
@@ -55,7 +56,7 @@ function findOverlaps(rects: Awaited<ReturnType<typeof tileRects>>) {
 
 test.describe("A3 横ページの一覧表示", () => {
   test("一覧のサムネイルが隣と重ならない", async ({ page }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "a3-landscape.pdf",
       mimeType: "application/pdf",
@@ -76,7 +77,7 @@ test.describe("A3 横ページの一覧表示", () => {
   test("横長ページのサムネイル実寸がサムネ基準幅を超えない", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "a3-landscape.pdf",
       mimeType: "application/pdf",
@@ -106,7 +107,7 @@ test.describe("サムネイル選択時の上部バー", () => {
   test("左ペインからページを選んでも上部バーと編集ツールバーが消えない", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "a3-landscape.pdf",
       mimeType: "application/pdf",
@@ -141,7 +142,7 @@ test.describe("サムネイル選択時の上部バー", () => {
   test("pdf.js の計測用 canvas がレイアウトを押し広げない", async ({
     page,
   }) => {
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "a3-landscape.pdf",
       mimeType: "application/pdf",

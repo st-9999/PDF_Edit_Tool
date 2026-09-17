@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 async function makePdf(pageCount: number): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -12,7 +13,7 @@ test.describe("P3 編集機能（回転・削除・Undo）", () => {
     page,
   }) => {
     const buffer = await makePdf(5);
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "s.pdf",
       mimeType: "application/pdf",

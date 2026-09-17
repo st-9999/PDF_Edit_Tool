@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument, StandardFonts } from "pdf-lib";
+import { openEntryPage } from "./helpers";
 
 async function makeTextPdf(lines: string[]): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -14,7 +15,7 @@ async function makeTextPdf(lines: string[]): Promise<Buffer> {
 test.describe("P5 テキスト検索・選択", () => {
   test("テキスト選択・検索ハイライト・前後移動", async ({ page }) => {
     const buffer = await makeTextPdf(["Annual report 2026", "report summary"]);
-    await page.goto("/");
+    await openEntryPage(page);
     await page.setInputFiles('input[type="file"]:not([multiple])', {
       name: "doc.pdf",
       mimeType: "application/pdf",
